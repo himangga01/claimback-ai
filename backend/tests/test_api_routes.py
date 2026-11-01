@@ -8,7 +8,7 @@ client = TestClient(app)
 def test_root_and_health():
     res = client.get("/")
     assert res.status_code == 200
-    assert res.json()["status"] == "online"
+    assert "ClaimBack" in res.text
 
     res_h = client.get("/health")
     assert res_h.status_code == 200
