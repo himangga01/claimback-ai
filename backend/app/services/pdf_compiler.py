@@ -1,5 +1,5 @@
 import os
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from typing import Dict, Any, Optional
 from pypdf import PdfReader, PdfWriter
@@ -27,7 +27,6 @@ if os.path.exists(NANUM_REGULAR):
     KO_FONT = "NanumGothic"
     KO_FONT_BOLD = "NanumGothic-Bold"
 else:
-    # 시스템 폰트 폴백
     sys_font = "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc"
     if os.path.exists(sys_font):
         pdfmetrics.registerFont(TTFont("ZenHei", sys_font, subfontIndex=0))
@@ -58,6 +57,9 @@ class CaliforniaSC100Compiler:
         if not os.path.exists(cls.TEMPLATE_PATH):
             raise FileNotFoundError(f"Template not found at {cls.TEMPLATE_PATH}")
 
+        if loan_fact.currency != CurrencyEnum.USD:
+            raise ValueError("California Form SC-100은 USD 통화 기반 사건에만 발급 가능합니다.")
+
         reader = PdfReader(cls.TEMPLATE_PATH)
         writer = PdfWriter()
         writer.append(reader)
@@ -77,7 +79,7 @@ class CaliforniaSC100Compiler:
 
         calc_explanation = (
             f"Principal Balance: ${principal_amt_str} USD. "
-            f"Accrued Statutory Interest (10% p.a.): ${interest_amt_str} USD. "
+            f"Accrued Statutory Interest (10% p.a. from day after due date): ${interest_amt_str} USD. "
             f"Total Amount Claimed: ${claim_amt_str} USD."
         )
 
@@ -116,34 +118,23 @@ class CaliforniaSC100Compiler:
             "SC-100[0].Page3[0].List3[0].Lic[0].FillField1[0]": calc_explanation,
             "SC-100[0].Page3[0].List6[0].item6[0].ZipCode1[0]": d.zip_code or "",
 
-            # -------------------------------------------------------------
-            # 필수 체크박스 완벽 주입 (C-2 해결)
-            # -------------------------------------------------------------
-            # Item 4: Have you asked defendant to pay? (Yes: Checkbox50[0] = /1)
-            "SC-100[0].Page3[0].List4[0].Item4[0].Checkbox50[0]": "/1",
-            
-            # Item 5: Venue Basis (a(1) Defendant lives here: Checkbox5cb[0] = /1)
-            "SC-100[0].Page3[0].List5[0].Lia[0].Checkbox5cb[0]": "/1",
-
-            # Item 7: Attorney-Client fee dispute? (No: Checkbox60[1] = /2)
-            "SC-100[0].Page3[0].List7[0].item7[0].Checkbox60[1]": "/2",
-
-            # Item 8: Suing public entity? (No: Checkbox61[1] = /2)
-            "SC-100[0].Page3[0].List8[0].item8[0].Checkbox61[1]": "/2",
-
-            # Item 9: Filed > 12 claims in last 12 months? (No: Checkbox62[1] = /2)
-            "SC-100[0].Page4[0].List9[0].Item9[0].Checkbox62[1]": "/2",
-
-            # Item 10: Claim > $2,500?
+            # 필수 체크박스
+            "SC-100[0].Page3[0].List4[0].Item4[0].Checkbox50[0]": "/1",  # Item 4: Yes, demand was made
+            "SC-100[0].Page3[0].List5[0].Lia[0].Checkbox5cb[0]": "/1",  # Item 5: a(1) venue defendant lives
+            "SC-100[0].Page3[0].List7[0].item7[0].Checkbox60[1]": "/2",  # Item 7: No attorney fee dispute
+            "SC-100[0].Page3[0].List8[0].item8[0].Checkbox61[1]": "/2",  # Item 8: No public entity
+            "SC-100[0].Page4[0].List9[0].Item9[0].Checkbox62[1]": "/2",  # Item 9: No >12 claims
             "SC-100[0].Page4[0].List10[0].li10[0].Checkbox63[0]": "/1" if verification.total_claim_amount > Decimal("2500.00") else "/Off",
             "SC-100[0].Page4[0].List10[0].li10[0].Checkbox63[1]": "/2" if verification.total_claim_amount <= Decimal("2500.00") else "/Off",
+
+            # Item 11 선언 서명부 주입 (Round 2 지적 반영)
+            "SC-100[0].Page4[0].Sign[0].Date1[0]": date.today().strftime("%m/%d/%Y"),
+            "SC-100[0].Page4[0].Sign[0].PlaintiffName1[0]": p.name,
         }
 
-        # AcroForm 필드 업데이트
         for page_idx in range(len(writer.pages)):
             writer.update_page_form_field_values(writer.pages[page_idx], field_data)
 
-        # NeedAppearances 활성화 (뷰어 호환성 확보)
         writer.set_need_appearances_writer(True)
 
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
@@ -166,7 +157,7 @@ class KoreanLegalDocumentCompiler:
         output_path: str,
     ) -> str:
         """
-        우체국 전자내용증명 표준 규격 PDF 생성 (나눔고딕 한글 폰트 임베딩)
+        우체국 전자내용증명 표준 규격 PDF 생성 (나눔고딕 한글 폰트 임베딩 및 정렬 완비)
         """
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         doc = SimpleDocTemplate(
@@ -182,7 +173,7 @@ class KoreanLegalDocumentCompiler:
             fontName=KO_FONT_BOLD,
             fontSize=18,
             leading=24,
-            alignment=1,
+            alignment=1, # Center
             spaceAfter=20
         )
         body_style = ParagraphStyle(
@@ -197,6 +188,22 @@ class KoreanLegalDocumentCompiler:
             fontName=KO_FONT_BOLD,
             fontSize=10,
             leading=16,
+            spaceAfter=5
+        )
+        center_style = ParagraphStyle(
+            'ProofCenter',
+            fontName=KO_FONT,
+            fontSize=10,
+            leading=16,
+            alignment=1, # Center
+            spaceAfter=10
+        )
+        right_style = ParagraphStyle(
+            'ProofRight',
+            fontName=KO_FONT_BOLD,
+            fontSize=10,
+            leading=16,
+            alignment=2, # Right
             spaceAfter=5
         )
 
@@ -230,7 +237,6 @@ class KoreanLegalDocumentCompiler:
         elements.append(Paragraph(f"<b>[청구 금액 합계: 금 {total_str}]</b> (원금: {amt_str}, 현재 지연손해금: {interest_str})", bold_style))
         elements.append(Spacer(1, 10))
 
-        # 적법한 법리 문구 (C-1 해결: 소제기 전 연 5%, 소장 송달 후 연 12%)
         body_text = (
             f"1. 귀하의 무궁한 발전을 기원합니다.<br/><br/>"
             f"2. 발신인은 귀하에게 <b>{loan_fact.loan_date}</b>에 금 <b>{amt_str}</b>을 대여하였으며, "
@@ -247,9 +253,9 @@ class KoreanLegalDocumentCompiler:
         elements.append(Spacer(1, 25))
 
         today_str = date.today().strftime("%Y년 %m월 %d일")
-        elements.append(Paragraph(f"<div align='center'>{today_str}</div>", body_style))
+        elements.append(Paragraph(today_str, center_style))
         elements.append(Spacer(1, 10))
-        elements.append(Paragraph(f"<div align='right'><b>발신인: {p.name} (인/서명)</b></div>", bold_style))
+        elements.append(Paragraph(f"<b>발신인: {p.name} (인/서명)</b>", right_style))
 
         doc.build(elements)
         return output_path
@@ -262,9 +268,6 @@ class KoreanLegalDocumentCompiler:
     ) -> Dict[str, str]:
         """
         대한민국 법원 전자소송(ecourt.scourt.go.kr) 1:1 원클릭 복사용 텍스트 블록
-        - C-1: 청구취지와 이자 금액의 법리적 일치
-        - M-1: 지급명령용(호증 인용 제외)과 소액소장용(호증/입증취지 포함) 분리
-        - M-2: 스키마 사실에 기반한 정밀한 문안 생성
         """
         p = loan_fact.creditor
         d = loan_fact.debtor
@@ -283,23 +286,24 @@ class KoreanLegalDocumentCompiler:
             f"연락처: {d.phone or '연락처 불명'}"
         )
 
-        # 2. 청구 취지 (지급명령 표준: 법률상 2단계 분리)
+        # 2. 청구 취지 (지급명령 표준: 초일불산입 및 2단계 분리)
+        due_next = loan_fact.due_date + timedelta(days=1)
         rate_pre = "연 6%" if loan_fact.transaction_kind.value == "commercial" else "연 5%"
         claim_purpose = (
-            f"1. 채무자는 채권자에게 금 {amt_str}원 및 이에 대하여 {loan_fact.due_date}의 다음날부터 "
+            f"1. 채무자는 채권자에게 금 {amt_str}원 및 이에 대하여 {due_next}부터 "
             f"이 사건 지급명령정본 송달일까지는 {rate_pre}, "
             f"그 다음날부터 다 갚는 날까지는 연 12%의 각 비율로 계산한 돈을 지급하라.\n"
             f"2. 독촉절차비용은 채무자의 부담으로 한다.\n"
             f"라는 명령을 구함."
         )
 
-        # 3. 독촉 사실 문구 (M-2 해결: 스키마에 독촉일이 있는 경우에만 정확히 기재)
+        # 3. 독촉 사실 문구
         if loan_fact.demand_date:
             demand_clause = f"채권자는 {loan_fact.demand_date}경 채무자에게 최종 변제를 최고(독촉)하였으나, 채무자는 현재까지 이를 이행하지 않고 있습니다."
         else:
             demand_clause = "채무자는 현재까지 정당한 사유 없이 채무의 이행을 지체하고 있습니다."
 
-        # 4. 지급명령용 청구 원인 (M-1 해결: 지급명령 서식에 맞춰 호증 인용 생략)
+        # 4. 지급명령용 청구 원인 (호증 인용 제외)
         claim_cause_payment_order = (
             f"1. 당사자 관계\n"
             f"채권자는 채무자에게 금전을 대여한 자이며, 채무자는 이를 차용한 자입니다.\n\n"
@@ -312,7 +316,7 @@ class KoreanLegalDocumentCompiler:
             f"따라서 채권자는 위 대여원금 및 법정 지연손해금을 지급받기 위하여 본 신청에 이르렀습니다."
         )
 
-        # 5. 소액소장용 청구 원인 및 입증방법 (호증 및 입증취지 분리)
+        # 5. 소액소장용 청구 원인 및 입증방법
         evidence_citations = ", ".join([f"[{e.id} {e.title}]" for e in loan_fact.evidences])
         claim_cause_lawsuit = (
             f"{claim_cause_payment_order}\n\n"

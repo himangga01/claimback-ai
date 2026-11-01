@@ -442,3 +442,65 @@ def test_verify_file_bytes_sha256(tmp_path):
     assert verify_file_bytes_sha256(str(f), actual_hash) is True
     assert verify_file_bytes_sha256(str(f), "0000000000000000000000000000000000000000000000000000000000000000") is False
     assert verify_file_bytes_sha256("/non_existent_path.txt", actual_hash) is False
+
+def test_multi_year_interest_leap_year_crossing():
+    # 2024년(윤년 366일) ~ 2026년(평년 365일) 다년도 일할 이자 연도 경계 일수 누락 0일 검증
+    principal = Decimal("36500.00")
+    start = date(2024, 1, 1)
+    end = date(2026, 1, 1) # 2년 (366 + 365 = 731일)
+    interest = DeterministicLegalCalculator.calculate_statutory_interest_daily(
+        principal, start, end, Decimal("100.0")
+    )
+    # 2024년 36500 * 1.0 * (366/366) = 36500
+    # 2025년 36500 * 1.0 * (365/365) = 36500
+    # 총 합계 = 73000.00 (연도 경계에서 1일도 누락되지 않아야 함)
+    assert interest == Decimal("73000.00")
+
+
+def test_service_date_post_next_day_statutory_rate():
+    # 소촉법 제3조 제1항: 송달 당일은 종전 이율, 송달 '다음날'부터 12% 적용
+    fact = LoanFactSchema(
+        creditor=PartyInfo(name="정재훈"),
+        debtor=PartyInfo(name="김채무"),
+        currency=CurrencyEnum.KRW,
+        principal_amount=Decimal("10000000"),
+        loan_date=date(2026, 1, 1),
+        due_date=date(2026, 6, 30),
+        service_date=date(2026, 8, 31),
+    )
+    # 송달 당일(8/31)까지의 계산: 7/1 ~ 8/31 (62일간 민법 5%만 발생해야 함)
+    rem_p, acc_i, overp, log, breakdown = DeterministicLegalCalculator.apply_repayments_and_calculate_balance(
+        fact, calculation_date=date(2026, 8, 31)
+    )
+    assert breakdown["post_service_interest"] == Decimal("0.00")
+    assert breakdown["pre_service_interest"] > Decimal("0.00")
+
+
+def test_debt_fully_satisfied_blocks_claim():
+    # 원리금이 전액 변제된 경우 소액소송 청구 부적격 차단
+    fact = LoanFactSchema(
+        creditor=PartyInfo(name="정재훈"),
+        debtor=PartyInfo(name="김채무"),
+        currency=CurrencyEnum.KRW,
+        principal_amount=Decimal("1000000"),
+        loan_date=date(2026, 1, 1),
+        due_date=date(2026, 2, 1),
+        repayments=[
+            {"payment_date": "2026-02-02", "amount": "2000000"} # 초과 변제
+        ],
+        evidences=[
+            {"id": "갑 제1호증", "title": "이체증", "evidence_type": "transfer_receipt", "sha256_hash": "a"*64, "source_filename": "f.txt"},
+            {"id": "갑 제2호증", "title": "대화록", "evidence_type": "messenger_chat", "sha256_hash": "b"*64, "source_filename": "f2.txt"}
+        ]
+    )
+    draft = GeneratedClaimDraft(
+        jurisdiction="KR",
+        claim_amount_claimed=Decimal("1000000"),
+        statement_of_facts="[갑 제1호증] [갑 제2호증]",
+        cited_evidence_ids=["갑 제1호증", "갑 제2호증"],
+        calculation_summary="Summary"
+    )
+    res = VerificationGateService.verify_and_reconcile(fact, draft, target_date=date(2026, 3, 1))
+    assert res.is_valid is False
+    assert res.is_debt_fully_satisfied is True
+    assert any("이미 전액 변제 완료" in m for m in res.missing_requirements)
