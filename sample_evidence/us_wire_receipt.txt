@@ -1,0 +1,8 @@
+[WIRE TRANSFER RECEIPT - CHASE BANK]
+Date: January 10, 2026 10:15 AM PST
+Sender: Jaehoon Jeong (Account Ending in 7547)
+Beneficiary: Michael Scott (Account Ending in 0144, Chase Bank Los Angeles)
+Amount: $5,000.00 USD
+Memo: Personal bridge loan (Due April 10, 2026)
+Reference Number: CHASE-WIRE-20260110-88192
+Status: COMPLETED

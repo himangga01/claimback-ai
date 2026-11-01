@@ -1,0 +1,18 @@
+{
+  "korean_sample": {
+    "transfer_receipt": {
+      "file": "kr_transfer_receipt.txt",
+      "sha256": "f350d3ac80739e28ef11285b9ede3724687a748d3d8a3663042b28ed63b1a361"
+    },
+    "chat_log": {
+      "file": "kr_chat_log.txt",
+      "sha256": "01ee74d4a1780b06715d6fe0261aa669e71d564c5c22c50843df44fd9e4ed6c8"
+    }
+  },
+  "us_sample": {
+    "wire_receipt": {
+      "file": "us_wire_receipt.txt",
+      "sha256": "1fa16c7e324d3ead0152aa835c7f2d939ab39ba06e08b3a13706e7d94ec4bc64"
+    }
+  }
+}

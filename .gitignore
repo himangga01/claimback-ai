@@ -1,3 +1,4 @@
+backend/tests/output/
 __pycache__/
 *.pyc
 .env
