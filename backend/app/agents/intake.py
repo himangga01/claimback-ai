@@ -13,6 +13,7 @@ from app.agents.case_state import (
     EvidenceRecord,
     evidence_dir,
 )
+from app.agents import keyframes as keyframes_mod
 
 SAMPLE_DIR = REPO_ROOT / "sample_evidence" / "kr"
 
@@ -186,3 +187,74 @@ def preview_size(state: CaseState, record: EvidenceRecord) -> Optional[tuple]:
 def guess_media_type(filename: str) -> str:
     guessed, _ = mimetypes.guess_type(filename or "")
     return guessed or "application/octet-stream"
+# --- video keyframes (M4b item 4) ------------------------------------------------
+# Design 3-10: ffmpeg pulls KEYFRAME_FPS frames/second, near-duplicates are
+# filtered by keyframes.select_keyframes, and the reader reads the rest.
+# Stored next to the video (or under dest_dir) with a manifest so replays
+# reuse byte-identical frames. Registration/preview behavior above is
+# unchanged (video stays status "skipped" until INT-3 wires the reader).
+
+VIDEO_KEYFRAME_FPS = 2.0
+EXTRACTOR_VERSION = "select-v2"
+
+
+def keyframes_dir(video_path, ex_id, dest_dir=None):
+    """Directory holding one video's extracted keyframes + manifest."""
+    root = Path(str(dest_dir)) if dest_dir else Path(str(video_path)).parent
+    safe = "".join(c if (c.isalnum() or c in ("-", "_")) else "_"
+                   for c in str(ex_id or "EX"))
+    return root / f"{safe}_keyframes"
+
+
+def extract_video_keyframes(video_path, ex_id, dest_dir=None,
+                            fps=VIDEO_KEYFRAME_FPS):
+    """Extract 2fps frames for a video; cache by source sha256 (M4b item 4).
+
+    Returns [{frame_ts, filename, png, width, height, sha256}]. When the
+    manifest in the keyframes dir matches the current video bytes, stored
+    PNGs load instead of re-running ffmpeg (replay-stable).
+    """
+    import json as _json
+
+    src = Path(str(video_path))
+    data = src.read_bytes()
+    digest = sha256_bytes(data)
+    target = keyframes_dir(src, ex_id, dest_dir)
+    manifest = target / "manifest.json"
+    if manifest.exists():
+        try:
+            saved = _json.loads(manifest.read_text(encoding="utf-8"))
+            if saved.get("video_sha256") == digest and saved.get("extractor") == EXTRACTOR_VERSION:
+                entries = []
+                for row in saved.get("frames", []):
+                    png = (target / row["filename"]).read_bytes()
+                    entries.append({
+                        "frame_ts": float(row["frame_ts"]),
+                        "filename": row["filename"],
+                        "png": bytes(png),
+                        "width": int(row["width"]),
+                        "height": int(row["height"]),
+                        "sha256": sha256_bytes(png),
+                    })
+                if entries:
+                    return entries
+        except (OSError, ValueError, KeyError):
+            pass
+    frames = keyframes_mod.extract_frames(src, fps)
+    target.mkdir(parents=True, exist_ok=True)
+    rows = []
+    entries = []
+    for index, frame in enumerate(frames):
+        name = f"kf_{index:03d}_ts{frame['frame_ts']:.1f}.png"
+        (target / name).write_bytes(bytes(frame["png"]))
+        rows.append({"frame_ts": frame["frame_ts"], "filename": name,
+                     "width": frame["width"], "height": frame["height"],
+                     "sha256": sha256_bytes(frame["png"])})
+        entries.append({"frame_ts": float(frame["frame_ts"]), "filename": name,
+                        "png": bytes(frame["png"]), "width": frame["width"],
+                        "height": frame["height"],
+                        "sha256": sha256_bytes(frame["png"])})
+    manifest.write_text(_json.dumps(
+        {"video_sha256": digest, "fps": float(fps), "extractor": EXTRACTOR_VERSION, "frames": rows},
+        ensure_ascii=False, indent=2), encoding="utf-8")
+    return entries
