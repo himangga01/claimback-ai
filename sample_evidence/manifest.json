@@ -2,7 +2,7 @@
   "korean_sample": {
     "transfer_receipt": {
       "file": "kr_transfer_receipt.txt",
-      "sha256": "f350d3ac80739e28ef11285b9ede3724687a748d3d8a3663042b28ed63b1a361"
+      "sha256": "d70b3366d2832696e488d07b9b4ebcd4a12d94d833ec5dcc821ce39b8931568c"
     },
     "chat_log": {
       "file": "kr_chat_log.txt",
@@ -12,7 +12,7 @@
   "us_sample": {
     "wire_receipt": {
       "file": "us_wire_receipt.txt",
-      "sha256": "1fa16c7e324d3ead0152aa835c7f2d939ab39ba06e08b3a13706e7d94ec4bc64"
+      "sha256": "5dbb5c03b372ec55f35e217bf7a2f0813dbeeddf6b33b3b6f8b6284710f3a69d"
     }
   }
 }

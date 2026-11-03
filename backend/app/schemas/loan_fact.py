@@ -16,8 +16,8 @@ class TransactionKindEnum(str, Enum):
 
 
 class ContractFormEnum(str, Enum):
-    WRITTEN = "written"        # 서면/차용증 계약 (소멸시효: KR 10년, CA 4년)
-    ORAL = "oral"              # 구두/메신저 약속 (소멸시효: KR 10년, CA 2년)
+    WRITTEN = "written"        # 서면/차용증 계약
+    ORAL = "oral"              # 구두/메신저 약속
 
 
 class EvidenceTypeEnum(str, Enum):
@@ -142,9 +142,6 @@ class VerificationResult(BaseModel):
     
     overpayment_amount: Decimal = Field(default=Decimal("0.00"), description="과오납 변제 초과액")
     is_debt_fully_satisfied: bool = Field(default=False, description="원리금 전액 변제 완료 여부")
-
-    statute_of_limitations_date: Optional[date] = Field(None, description="소멸시효 완성 예정일")
-    is_statute_of_limitations_expired: bool = Field(default=False, description="소멸시효 완성(경과) 여부")
 
     citations_valid: bool = Field(..., description="증거 인용 유효성")
     missing_requirements: List[str] = Field(default_factory=list, description="결손된 요건사실 목록")

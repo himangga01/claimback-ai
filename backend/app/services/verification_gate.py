@@ -140,26 +140,6 @@ class DeterministicLegalCalculator:
             return i, i, Decimal("0.00")
 
     @classmethod
-    def calculate_statute_of_limitations(cls, loan_fact: LoanFactSchema) -> date:
-        """
-        소멸시효 완성 예정일 산출
-        - 한국 민사: 10년 (민법 제162조 제1항)
-        - 한국 상사: 5년 (상법 제64조)
-        - 미국 CA 서면 계약: 4년 (CCP § 337)
-        - 미국 CA 구두/메신저 계약: 2년 (CCP § 339)
-        """
-        d = loan_fact.due_date
-        if loan_fact.currency == CurrencyEnum.KRW:
-            years = 5 if loan_fact.transaction_kind == TransactionKindEnum.COMMERCIAL else 10
-        else:
-            years = 4 if loan_fact.contract_form == ContractFormEnum.WRITTEN else 2
-        
-        try:
-            return date(d.year + years, d.month, d.day)
-        except ValueError:
-            return date(d.year + years, d.month, d.day - 1)
-
-    @classmethod
     def apply_repayments_and_calculate_balance(
         cls,
         loan_fact: LoanFactSchema,
@@ -271,15 +251,7 @@ class VerificationGateService:
         is_valid = True
         status = VerificationStatusEnum.PASS
 
-        # 1. 소멸시효 검증 (C-4)
-        sol_date = DeterministicLegalCalculator.calculate_statute_of_limitations(loan_fact)
-        is_expired = today > sol_date
-        if is_expired:
-            missing_requirements.append(
-                f"채권의 법정 소멸시효({sol_date})가 완성되어 소액소송 청구가 불가합니다."
-            )
-
-        # 2. 통화 불일치 검증 (Currency Mismatch Guard - Round 2 지적)
+        # 1. 통화 불일치 검증 (Currency Mismatch Guard - Round 2 지적)
         for rep in loan_fact.repayments:
             if rep.currency is not None and rep.currency != loan_fact.currency:
                 missing_requirements.append(
@@ -292,7 +264,7 @@ class VerificationGateService:
                     f"증거 통화({ev.currency.value})가 대여 원금 통화({loan_fact.currency.value})와 상이합니다."
                 )
 
-        # 3. 실 파일 SHA-256 무결성 검증 (파이프라인 직접 연동 - Round 2 지적)
+        # 2. 실 파일 SHA-256 무결성 검증 (파이프라인 직접 연동 - Round 2 지적)
         if evidence_files_dir and os.path.exists(evidence_files_dir):
             for ev in loan_fact.evidences:
                 fpath = os.path.join(evidence_files_dir, ev.source_filename)
@@ -304,7 +276,7 @@ class VerificationGateService:
                     else:
                         audit_notes.append(f"증거 파일({ev.source_filename}) 실시간 SHA-256 무결성 검증 통과.")
 
-        # 4. 필수 요건사실 및 증거 존재 여부
+        # 3. 필수 요건사실 및 증거 존재 여부
         transfer_evidences = [
             e for e in loan_fact.evidences if e.evidence_type == EvidenceTypeEnum.TRANSFER_RECEIPT
         ]
@@ -323,17 +295,16 @@ class VerificationGateService:
                 f"변제기({loan_fact.due_date})가 아직 도래하지 않아 청구권이 발생하지 않았습니다."
             )
 
-        # 5. 원본 증거 OCR 수치 ↔ 스키마 수치 교차 검증 (C-3)
+        # 4. 원본 증거 OCR 수치 ↔ 스키마 수치 교차 검증 (C-3)
         if transfer_evidences:
             primary_transfer = transfer_evidences[0]
             if primary_transfer.extracted_amount is not None:
                 if primary_transfer.extracted_amount != loan_fact.principal_amount:
-                    tampering_reconciliations.append(
-                        f"이체증빙 추출액({primary_transfer.extracted_amount})과 스키마 원금({loan_fact.principal_amount}) 불일치 감지. 증빙 수치로 강제 정렬됩니다."
+                    missing_requirements.append(
+                        f"이체증빙 추출액({primary_transfer.extracted_amount})과 입력 원금({loan_fact.principal_amount})이 일치하지 않습니다. 확인할 칸: 대여 원금"
                     )
-                    status = VerificationStatusEnum.RECONCILED
 
-        # 6. 결정론적 법정이자 및 잔액 산출 (과오납 처리 포함)
+        # 5. 결정론적 법정이자 및 잔액 산출 (과오납 처리 포함)
         remaining_principal, calculated_interest, overpayment, calc_logs, breakdown = (
             DeterministicLegalCalculator.apply_repayments_and_calculate_balance(
                 loan_fact=loan_fact,
@@ -348,7 +319,7 @@ class VerificationGateService:
         if is_satisfied:
             missing_requirements.append("채무 원리금이 이미 전액 변제 완료되어 법적 청구 대상이 존재하지 않습니다.")
 
-        # 7. 관할별 법원 청구 한도 검증 (총청구액 기준 - Round 2 지적 완벽 해결)
+        # 6. 관할별 법원 청구 한도 검증 (총청구액 기준 - Round 2 지적 완벽 해결)
         if loan_fact.currency == CurrencyEnum.USD:
             if expected_total > Decimal("12500.00"):
                 missing_requirements.append(
@@ -359,7 +330,7 @@ class VerificationGateService:
                     "캘리포니아 법률(CCP § 116.230(b)(1))상 연간 $2,500 초과 소액소송은 2회까지만 허용됩니다."
                 )
 
-        # 8. 수치 위변조 / 할루시네이션 복원 게이트
+        # 7. 수치 위변조 / 할루시네이션 복원 게이트
         reconciled_amount = remaining_principal
         if claim_draft.claim_amount_claimed != expected_total and claim_draft.claim_amount_claimed != remaining_principal:
             tampering_reconciliations.append(
@@ -367,7 +338,7 @@ class VerificationGateService:
             )
             status = VerificationStatusEnum.RECONCILED
 
-        # 9. 증거 인용(Citation) 유효성 검증 (QA-1: 인용 0개 차단)
+        # 8. 증거 인용(Citation) 유효성 검증 (QA-1: 인용 0개 차단)
         valid_evidence_ids = {e.id for e in loan_fact.evidences}
         cited_ids = set(claim_draft.cited_evidence_ids)
         text_citations = set(re.findall(r"\[(갑 제\d+호증(?:의\d+)?|Exhibit [A-Z0-9]+)\]", claim_draft.statement_of_facts))
@@ -385,7 +356,7 @@ class VerificationGateService:
         else:
             citations_valid = (len(invalid_citations) == 0)
 
-        # 10. 최종 판정 도출
+        # 9. 최종 판정 도출
         if missing_requirements:
             is_valid = False
             status = VerificationStatusEnum.HUMAN_CHECK_REQUIRED
@@ -405,8 +376,6 @@ class VerificationGateService:
             total_claim_amount=expected_total,
             overpayment_amount=overpayment,
             is_debt_fully_satisfied=is_satisfied,
-            statute_of_limitations_date=sol_date,
-            is_statute_of_limitations_expired=is_expired,
             citations_valid=citations_valid,
             missing_requirements=missing_requirements,
             tampering_reconciliations=tampering_reconciliations,

@@ -31,20 +31,20 @@ from app.services.pdf_compiler import (
 def sample_korean_loan_fact():
     return LoanFactSchema(
         creditor=PartyInfo(
-            name="정재훈",
-            phone="010-4690-7547",
-            address="서울 송파구 거여동 거여1단지 106-1104",
+            name="홍길동(SAMPLE)",
+            phone="010-0000-0000",
+            address="서울특별시 샘플구 데모로 0",
             city="서울",
             state="서울",
-            zip_code="05753",
+            zip_code="00000",
         ),
         debtor=PartyInfo(
-            name="김채무",
-            phone="010-1234-5678",
-            address="경기 성남시 중원구 금광동 100",
-            city="성남",
+            name="김채무(SAMPLE)",
+            phone="010-0000-0000",
+            address="경기도 샘플시 데모동 0",
+            city="샘플시",
             state="경기",
-            zip_code="13180",
+            zip_code="00000",
         ),
         currency=CurrencyEnum.KRW,
         transaction_kind=TransactionKindEnum.CIVIL,
@@ -54,19 +54,19 @@ def sample_korean_loan_fact():
         evidences=[
             EvidenceItem(
                 id="갑 제1호증",
-                title="토스뱅크 계좌이체확인증",
+                title="샘플은행 계좌이체확인증",
                 evidence_type=EvidenceTypeEnum.TRANSFER_RECEIPT,
                 sha256_hash="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-                source_filename="toss_transfer_receipt.pdf",
+                source_filename="sample_transfer_receipt.pdf",
                 extracted_amount=Decimal("10000000"),
                 extracted_date=date(2026, 1, 1),
             ),
             EvidenceItem(
                 id="갑 제2호증",
-                title="카카오톡 대화록(변제 약속)",
+                title="샘플톡 대화록(변제 약속)",
                 evidence_type=EvidenceTypeEnum.MESSENGER_CHAT,
                 sha256_hash="a591a6d40bf420404a011733cfb7b190d62c65bf0bcda32b57b277d9ad9f146e",
-                source_filename="kakaotalk_chat.mp4",
+                source_filename="sampletalk_chat.mp4",
                 extracted_date=date(2026, 6, 25),
             ),
         ],
@@ -77,12 +77,12 @@ def sample_korean_loan_fact():
 def sample_us_loan_fact():
     return LoanFactSchema(
         creditor=PartyInfo(
-            name="Jaehoon Jeong",
-            phone="010-4690-7547",
-            address="106-1104, Geoyeo 1-danji Apt, Songpa-gu",
-            city="Seoul",
-            state="KR",
-            zip_code="05753",
+            name="SAMPLE Creditor",
+            phone="010-0000-0000",
+            address="0 Sample Street, Sample City",
+            city="Sample City",
+            state="CA",
+            zip_code="00000",
         ),
         debtor=PartyInfo(
             name="Michael Scott",
@@ -109,10 +109,10 @@ def sample_us_loan_fact():
             ),
             EvidenceItem(
                 id="Exhibit B",
-                title="iMessage Promissory Admission",
+                title="SampleTalk Promissory Admission",
                 evidence_type=EvidenceTypeEnum.MESSENGER_CHAT,
                 sha256_hash="2222222222222222222222222222222222222222222222222222222222222222",
-                source_filename="imessage_chat.png",
+                source_filename="sampletalk_chat.png",
                 extracted_date=date(2026, 4, 1),
             ),
         ],
@@ -179,6 +179,26 @@ def test_verification_tampering_reconciliation(sample_korean_loan_fact):
     assert len(result.tampering_reconciliations) == 1
 
 
+def test_transfer_amount_mismatch_requires_human_check(sample_korean_loan_fact):
+    # 이체증빙 추출액과 입력 원금이 다르면 서류를 만들지 않고 보류(HOLD)한다 (F2)
+    sample_korean_loan_fact.principal_amount = Decimal("15000000")
+    draft = GeneratedClaimDraft(
+        jurisdiction="KR",
+        claim_amount_claimed=Decimal("15000000"),
+        statement_of_facts="[갑 제1호증] [갑 제2호증]",
+        cited_evidence_ids=["갑 제1호증", "갑 제2호증"],
+        calculation_summary="원금 15,000,000원 주장",
+    )
+    result = VerificationGateService.verify_and_reconcile(
+        loan_fact=sample_korean_loan_fact,
+        claim_draft=draft,
+        target_date=date(2026, 6, 30),
+    )
+    assert result.status == VerificationStatusEnum.HUMAN_CHECK_REQUIRED
+    assert result.is_valid is False
+    assert any("일치하지 않습니다" in m for m in result.missing_requirements)
+
+
 def test_korean_civil_interest_segments_pre_and_post_service(sample_korean_loan_fact):
     # 변제기 2026-06-30. 소장 송달일 2026-08-31. 최종 계산일 2026-10-31
     sample_korean_loan_fact.service_date = date(2026, 8, 31)
@@ -233,45 +253,7 @@ def test_overpayment_preserved_and_flagged(sample_korean_loan_fact):
 
 
 # ---------------------------------------------------------------------------
-# 3. Statute of Limitations Tests (C-4)
-# ---------------------------------------------------------------------------
-
-def test_statute_of_limitations_calculation(sample_korean_loan_fact, sample_us_loan_fact):
-    # KR 민사: 10년 (2026-06-30 -> 2036-06-30)
-    sol_kr = DeterministicLegalCalculator.calculate_statute_of_limitations(sample_korean_loan_fact)
-    assert sol_kr == date(2036, 6, 30)
-
-    # US CA 서면: 4년 (2026-04-10 -> 2030-04-10)
-    sol_us_written = DeterministicLegalCalculator.calculate_statute_of_limitations(sample_us_loan_fact)
-    assert sol_us_written == date(2030, 4, 10)
-
-    # US CA 구두: 2년 (2026-04-10 -> 2028-04-10)
-    sample_us_loan_fact.contract_form = ContractFormEnum.ORAL
-    sol_us_oral = DeterministicLegalCalculator.calculate_statute_of_limitations(sample_us_loan_fact)
-    assert sol_us_oral == date(2028, 4, 10)
-
-
-def test_verification_blocks_expired_statute_of_limitations(sample_korean_loan_fact):
-    draft = GeneratedClaimDraft(
-        jurisdiction="KR",
-        claim_amount_claimed=Decimal("10000000"),
-        statement_of_facts="[갑 제1호증] 및 [갑 제2호증]",
-        cited_evidence_ids=["갑 제1호증", "갑 제2호증"],
-        calculation_summary="원금",
-    )
-    # 2037년(시효 10년 경과) 시점 검증
-    result = VerificationGateService.verify_and_reconcile(
-        loan_fact=sample_korean_loan_fact,
-        claim_draft=draft,
-        target_date=date(2037, 1, 1),
-    )
-    assert result.is_statute_of_limitations_expired is True
-    assert result.is_valid is False
-    assert any("소멸시효" in m for m in result.missing_requirements)
-
-
-# ---------------------------------------------------------------------------
-# 4. Zero-Citation & Citation Enforcement Tests (QA-1)
+# 3. Zero-Citation & Citation Enforcement Tests (QA-1)
 # ---------------------------------------------------------------------------
 
 def test_zero_citation_draft_blocked_as_invalid(sample_korean_loan_fact):
@@ -295,7 +277,7 @@ def test_zero_citation_draft_blocked_as_invalid(sample_korean_loan_fact):
 
 
 # ---------------------------------------------------------------------------
-# 5. California Small Claims Form SC-100 Field & Checkbox Tests (C-2)
+# 4. California Small Claims Form SC-100 Field & Checkbox Tests (C-2)
 # ---------------------------------------------------------------------------
 
 def test_sc100_amount_limit_validation(sample_us_loan_fact):
@@ -359,7 +341,7 @@ def test_california_sc100_pdf_checkboxes_and_fields_verified(sample_us_loan_fact
     fields = reader.get_fields()
 
     # 텍스트 필드 검증
-    assert fields["SC-100[0].Page2[0].List1[0].Item1[0].PlaintiffName1[0]"].get("/V") == "Jaehoon Jeong"
+    assert fields["SC-100[0].Page2[0].List1[0].Item1[0].PlaintiffName1[0]"].get("/V") == "SAMPLE Creditor"
     assert fields["SC-100[0].Page2[0].List3[0].PlaintiffClaimAmount1[0]"].get("/V") == "5,000.00"
 
     # 필수 체크박스 검증 (Item 4 Demand=Yes, Item 5 Venue=a(1), Item 7=No, Item 8=No, Item 9=No, Item 10 >2500=Yes)
@@ -372,7 +354,7 @@ def test_california_sc100_pdf_checkboxes_and_fields_verified(sample_us_loan_fact
 
 
 # ---------------------------------------------------------------------------
-# 6. Korean Content Proof Hangul Font & e-Court Packet Tests (QA-2, 🛡️-2)
+# 5. Korean Content Proof Hangul Font & e-Court Packet Tests (QA-2, 🛡️-2)
 # ---------------------------------------------------------------------------
 
 def test_korean_content_proof_hangul_font_extracted_cleanly(sample_korean_loan_fact, tmp_path):
@@ -400,8 +382,8 @@ def test_korean_content_proof_hangul_font_extracted_cleanly(sample_korean_loan_f
     # 한글 글리프가 '■'이 아니라 실제 온전한 한글 텍스트로 추출되는지 검증!
     assert "■" not in text
     assert "내 용 증 명 서" in text
-    assert "정재훈" in text
-    assert "김채무" in text
+    assert "홍길동(SAMPLE)" in text
+    assert "김채무(SAMPLE)" in text
     assert "대여금 반환 청구" in text
 
 
@@ -430,7 +412,7 @@ def test_korean_ecourt_packet_splits_payment_order_and_lawsuit(sample_korean_loa
 
 
 # ---------------------------------------------------------------------------
-# 7. Real File SHA-256 Byte Verification Utility Test (🛡️-3)
+# 6. Real File SHA-256 Byte Verification Utility Test (🛡️-3)
 # ---------------------------------------------------------------------------
 
 def test_verify_file_bytes_sha256(tmp_path):
@@ -460,8 +442,8 @@ def test_multi_year_interest_leap_year_crossing():
 def test_service_date_post_next_day_statutory_rate():
     # 소촉법 제3조 제1항: 송달 당일은 종전 이율, 송달 '다음날'부터 12% 적용
     fact = LoanFactSchema(
-        creditor=PartyInfo(name="정재훈"),
-        debtor=PartyInfo(name="김채무"),
+        creditor=PartyInfo(name="홍길동(SAMPLE)"),
+        debtor=PartyInfo(name="김채무(SAMPLE)"),
         currency=CurrencyEnum.KRW,
         principal_amount=Decimal("10000000"),
         loan_date=date(2026, 1, 1),
@@ -479,8 +461,8 @@ def test_service_date_post_next_day_statutory_rate():
 def test_debt_fully_satisfied_blocks_claim():
     # 원리금이 전액 변제된 경우 소액소송 청구 부적격 차단
     fact = LoanFactSchema(
-        creditor=PartyInfo(name="정재훈"),
-        debtor=PartyInfo(name="김채무"),
+        creditor=PartyInfo(name="홍길동(SAMPLE)"),
+        debtor=PartyInfo(name="김채무(SAMPLE)"),
         currency=CurrencyEnum.KRW,
         principal_amount=Decimal("1000000"),
         loan_date=date(2026, 1, 1),

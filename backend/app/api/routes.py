@@ -131,11 +131,23 @@ def compile_ecourt_packet(req: VerifyRequest) -> Dict[str, str]:
     """
     대한민국 법원 전자소송 1:1 클립보드 블록 패키지 반환
     """
+    evidence_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../sample_evidence"))
     verification = VerificationGateService.verify_and_reconcile(
         loan_fact=req.loan_fact,
         claim_draft=req.claim_draft,
         target_date=req.target_date,
+        evidence_files_dir=evidence_dir if os.path.exists(evidence_dir) else None,
     )
+
+    if not verification.is_valid:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "message": "법적 요건사실 결손으로 전자소송 패킷 생성이 차단되었습니다.",
+                "missing_requirements": verification.missing_requirements,
+            }
+        )
+
     return KoreanLegalDocumentCompiler.generate_ecourt_clipboard_packet(
         loan_fact=req.loan_fact,
         verification=verification,
@@ -149,8 +161,8 @@ def get_demo_samples():
     """
     kr_sample = {
         "loan_fact": {
-            "creditor": {"name": "정재훈", "phone": "010-4690-7547", "address": "서울 송파구 거여동 거여1단지 106-1104", "city": "서울", "state": "서울", "zip_code": "05753"},
-            "debtor": {"name": "김채무", "phone": "010-1234-5678", "address": "경기 성남시 중원구 금광동 100", "city": "성남", "state": "경기", "zip_code": "13180"},
+            "creditor": {"name": "홍길동(SAMPLE)", "phone": "010-0000-0000", "address": "서울특별시 샘플구 데모로 0", "city": "서울", "state": "서울", "zip_code": "00000"},
+            "debtor": {"name": "김채무(SAMPLE)", "phone": "010-0000-0000", "address": "경기도 샘플시 데모동 0", "city": "샘플시", "state": "경기", "zip_code": "00000"},
             "currency": "KRW",
             "transaction_kind": "civil",
             "principal_amount": "10000000",
@@ -158,8 +170,8 @@ def get_demo_samples():
             "due_date": "2026-06-30",
             "service_date": "2026-08-31",
             "evidences": [
-                {"id": "갑 제1호증", "title": "토스뱅크 계좌이체확인증", "evidence_type": "transfer_receipt", "sha256_hash": "f350d3ac80739e28ef11285b9ede3724687a748d3d8a3663042b28ed63b1a361", "source_filename": "kr_transfer_receipt.txt", "extracted_amount": "10000000", "extracted_date": "2026-01-01"},
-                {"id": "갑 제2호증", "title": "카카오톡 대화록", "evidence_type": "messenger_chat", "sha256_hash": "01ee74d4a1780b06715d6fe0261aa669e71d564c5c22c50843df44fd9e4ed6c8", "source_filename": "kr_chat_log.txt", "extracted_date": "2026-06-25"}
+                {"id": "갑 제1호증", "title": "샘플은행 계좌이체확인증", "evidence_type": "transfer_receipt", "sha256_hash": "d70b3366d2832696e488d07b9b4ebcd4a12d94d833ec5dcc821ce39b8931568c", "source_filename": "kr_transfer_receipt.txt", "extracted_amount": "10000000", "extracted_date": "2026-01-01"},
+                {"id": "갑 제2호증", "title": "샘플톡 대화록", "evidence_type": "messenger_chat", "sha256_hash": "01ee74d4a1780b06715d6fe0261aa669e71d564c5c22c50843df44fd9e4ed6c8", "source_filename": "kr_chat_log.txt", "extracted_date": "2026-06-25"}
             ]
         },
         "claim_draft": {
@@ -173,7 +185,7 @@ def get_demo_samples():
 
     us_sample = {
         "loan_fact": {
-            "creditor": {"name": "Jaehoon Jeong", "phone": "010-4690-7547", "address": "106-1104, Geoyeo 1-danji Apt, Songpa-gu", "city": "Seoul", "state": "KR", "zip_code": "05753"},
+            "creditor": {"name": "SAMPLE Creditor", "phone": "010-0000-0000", "address": "0 Sample Street, Sample City", "city": "Sample City", "state": "CA", "zip_code": "00000"},
             "debtor": {"name": "Michael Scott", "phone": "213-555-0144", "address": "1725 Slough Avenue", "city": "Los Angeles", "state": "CA", "zip_code": "90012"},
             "currency": "USD",
             "contract_form": "written",
@@ -181,7 +193,7 @@ def get_demo_samples():
             "loan_date": "2026-01-10",
             "due_date": "2026-04-10",
             "evidences": [
-                {"id": "Exhibit A", "title": "Chase Wire Transfer Receipt", "evidence_type": "transfer_receipt", "sha256_hash": "1fa16c7e324d3ead0152aa835c7f2d939ab39ba06e08b3a13706e7d94ec4bc64", "source_filename": "us_wire_receipt.txt", "extracted_amount": "5000.00", "extracted_date": "2026-01-10"},
+                {"id": "Exhibit A", "title": "Sample Bank Wire Transfer Receipt", "evidence_type": "transfer_receipt", "sha256_hash": "5dbb5c03b372ec55f35e217bf7a2f0813dbeeddf6b33b3b6f8b6284710f3a69d", "source_filename": "us_wire_receipt.txt", "extracted_amount": "5000.00", "extracted_date": "2026-01-10"},
                 {"id": "Exhibit B", "title": "Promissory Admission", "evidence_type": "messenger_chat", "sha256_hash": "01ee74d4a1780b06715d6fe0261aa669e71d564c5c22c50843df44fd9e4ed6c8", "source_filename": "kr_chat_log.txt", "extracted_date": "2026-04-01"}
             ]
         },

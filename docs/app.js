@@ -11,8 +11,8 @@ let currentVerification = null;
 const SAMPLE_PRESETS = {
   KR: {
     loan_fact: {
-      creditor: { name: "정재훈", phone: "010-4690-7547", address: "서울 송파구 거여동 거여1단지 106-1104", city: "서울", state: "서울", zip_code: "05753" },
-      debtor: { name: "김채무", phone: "010-1234-5678", address: "경기 성남시 중원구 금광동 100", city: "성남", state: "경기", zip_code: "13180" },
+      creditor: { name: "홍길동(SAMPLE)", phone: "010-0000-0000", address: "서울특별시 샘플구 데모로 0", city: "서울", state: "서울", zip_code: "00000" },
+      debtor: { name: "김채무(SAMPLE)", phone: "010-0000-0000", address: "경기도 샘플시 데모동 0", city: "샘플시", state: "경기", zip_code: "00000" },
       currency: "KRW",
       transaction_kind: "civil",
       principal_amount: "10000000",
@@ -20,8 +20,8 @@ const SAMPLE_PRESETS = {
       due_date: "2026-06-30",
       service_date: "2026-08-31",
       evidences: [
-        { id: "갑 제1호증", title: "토스뱅크 계좌이체확인증", evidence_type: "transfer_receipt", sha256_hash: "f350d3ac80739e28ef11285b9ede3724687a748d3d8a3663042b28ed63b1a361", source_filename: "kr_transfer_receipt.txt", extracted_amount: "10000000", extracted_date: "2026-01-01" },
-        { id: "갑 제2호증", title: "카카오톡 대화록", evidence_type: "messenger_chat", sha256_hash: "01ee74d4a1780b06715d6fe0261aa669e71d564c5c22c50843df44fd9e4ed6c8", source_filename: "kr_chat_log.txt", extracted_date: "2026-06-25" }
+        { id: "갑 제1호증", title: "샘플은행 계좌이체확인증", evidence_type: "transfer_receipt", sha256_hash: "d70b3366d2832696e488d07b9b4ebcd4a12d94d833ec5dcc821ce39b8931568c", source_filename: "kr_transfer_receipt.txt", extracted_amount: "10000000", extracted_date: "2026-01-01" },
+        { id: "갑 제2호증", title: "샘플톡 대화록", evidence_type: "messenger_chat", sha256_hash: "01ee74d4a1780b06715d6fe0261aa669e71d564c5c22c50843df44fd9e4ed6c8", source_filename: "kr_chat_log.txt", extracted_date: "2026-06-25" }
       ]
     },
     claim_draft: {
@@ -34,7 +34,7 @@ const SAMPLE_PRESETS = {
   },
   US: {
     loan_fact: {
-      creditor: { name: "Jaehoon Jeong", phone: "010-4690-7547", address: "106-1104, Geoyeo 1-danji Apt, Songpa-gu", city: "Seoul", state: "KR", zip_code: "05753" },
+      creditor: { name: "SAMPLE Creditor", phone: "010-0000-0000", address: "0 Sample Street, Sample City", city: "Sample City", state: "CA", zip_code: "00000" },
       debtor: { name: "Michael Scott", phone: "213-555-0144", address: "1725 Slough Avenue", city: "Los Angeles", state: "CA", zip_code: "90012" },
       currency: "USD",
       contract_form: "written",
@@ -42,8 +42,8 @@ const SAMPLE_PRESETS = {
       loan_date: "2026-01-10",
       due_date: "2026-04-10",
       evidences: [
-        { id: "Exhibit A", title: "Chase Wire Transfer Receipt", evidence_type: "transfer_receipt", sha256_hash: "1fa16c7e324d3ead0152aa835c7f2d939ab39ba06e08b3a13706e7d94ec4bc64", source_filename: "us_wire_receipt.txt", extracted_amount: "5000.00", extracted_date: "2026-01-10" },
-        { id: "Exhibit B", title: "Promissory Admission", evidence_type: "messenger_chat", sha256_hash: "01ee74d4a1780b06715d6fe0261aa669e71d564c5c22c50843df44fd9e4ed6c8", source_filename: "imessage_chat.png", extracted_date: "2026-04-01" }
+        { id: "Exhibit A", title: "Sample Bank Wire Transfer Receipt", evidence_type: "transfer_receipt", sha256_hash: "5dbb5c03b372ec55f35e217bf7a2f0813dbeeddf6b33b3b6f8b6284710f3a69d", source_filename: "us_wire_receipt.txt", extracted_amount: "5000.00", extracted_date: "2026-01-10" },
+        { id: "Exhibit B", title: "Promissory Admission", evidence_type: "messenger_chat", sha256_hash: "01ee74d4a1780b06715d6fe0261aa669e71d564c5c22c50843df44fd9e4ed6c8", source_filename: "sampletalk_chat.png", extracted_date: "2026-04-01" }
       ]
     },
     claim_draft: {
@@ -266,8 +266,6 @@ function updateVerificationUI(ver) {
   document.getElementById('cardInterest').innerText = cur === 'KRW' ? `${i.toLocaleString()}원` : `$${i.toFixed(2)} USD`;
   document.getElementById('cardTotal').innerText = cur === 'KRW' ? `${t.toLocaleString()}원` : `$${t.toFixed(2)} USD`;
 
-  document.getElementById('timeStatute').innerText = `소멸시효 완성 예정일: ${ver.statute_of_limitations_date} (${ver.is_statute_of_limitations_expired ? '소멸시효 완성으로 청구 불가' : '정상 유효'})`;
-
   auditBox.innerHTML = '';
   ver.audit_notes.forEach(note => {
     const div = document.createElement('div');
@@ -285,13 +283,11 @@ function runFallbackCalculation() {
     reconciled_amount: isKR ? 10000000 : 5000,
     calculated_interest: isKR ? 282192 : 278.08,
     total_claim_amount: isKR ? 10282192 : 5278.08,
-    statute_of_limitations_date: isKR ? '2036-06-30' : '2030-04-10',
-    is_statute_of_limitations_expired: false,
     audit_notes: [
       "초일불산입 원칙 적용: 변제기 익일부터 지연손해금 기산",
       isKR ? "1단계: 2026-07-01 ~ 2026-08-31 연 5.0% 84,932원 발생" : "캘리포니아 법정이율 연 10.0% 단순이자 적용",
       isKR ? "2단계: 2026-09-01 ~ 2026-10-31 소촉법 연 12.0% 197,260원 발생" : "Cal. Civ. Code § 3289(b) 준수",
-      "소멸시효 및 총 청구 한도 검증 통과"
+      "총 청구 한도 검증 통과"
     ]
   };
   currentVerification = ver;

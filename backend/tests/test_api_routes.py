@@ -55,6 +55,25 @@ def test_api_compile_ecourt_packet():
     assert "claim_cause_lawsuit" in data
 
 
+def test_api_compile_ecourt_packet_blocked_when_hold():
+    samples = client.get("/api/demo/samples").json()
+    kr = samples["korean_sample"]
+
+    hold_loan_fact = dict(kr["loan_fact"])
+    hold_loan_fact["evidences"] = []
+    hold_claim_draft = dict(kr["claim_draft"])
+    hold_claim_draft["cited_evidence_ids"] = []
+    hold_claim_draft["statement_of_facts"] = "증거 인용 없이 작성된 청구원인 본문."
+
+    res = client.post("/api/compile/ecourt-packet", json={
+        "loan_fact": hold_loan_fact,
+        "claim_draft": hold_claim_draft,
+        "target_date": "2026-10-31"
+    })
+    assert res.status_code == 400
+    assert "missing_requirements" in res.json()["detail"]
+
+
 def test_api_compile_sc100_endpoint():
     samples = client.get("/api/demo/samples").json()
     us = samples["us_sample"]

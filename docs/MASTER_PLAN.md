@@ -1,3 +1,4 @@
+이 문서는 지난 계획입니다. 현재 계획은 `specs/ClaimBack-AI_검토_및_구현테스트계획.md`
 # ⚖️ ClaimBack-AI: 한·미 개인 간 금전 회수 및 소액소송 자동화 에이전트 구현 계획서
 
 > **Meta Global AI Developer Hackathon — Theme 1: Build for Your World**  
