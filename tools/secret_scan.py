@@ -1,8 +1,9 @@
 """Secret scan for ClaimBack-AI.
 
 Scans repository files (tracked plus untracked-but-not-ignored, or staged
-files with --staged) for key-like strings and tracked .env files
-(.env and .env.* except .env.example).
+files with --staged) for key-like strings and .env files present in the
+worktree (tracked or untracked-but-not-ignored; .env and .env.* except
+.env.example).
 
 Prints file and line number only, never the matched value.
 Exit code 1 when any finding exists, 0 when clean.
@@ -57,6 +58,12 @@ def tracked_dotenv_files() -> list[str]:
     return sorted(n for n in names if is_dotenv_path(n))
 
 
+def present_dotenv_files() -> list[str]:
+    """Tracked plus untracked-but-not-ignored .env files (C9)."""
+    names = repo_files(False)
+    return sorted(n for n in names if is_dotenv_path(n))
+
+
 def scan_file(rel: str) -> list[tuple[int, str]]:
     path = ROOT / rel
     if not path.is_file():
@@ -92,7 +99,7 @@ def main(argv: list[str]) -> int:
             print(f"{rel}: staged .env file must not be committed (rule: dotenv-tracked)")
             findings += 1
     else:
-        for rel in tracked_dotenv_files():
+        for rel in present_dotenv_files():
             print(f"{rel}: tracked .env file must not be committed (rule: dotenv-tracked)")
             findings += 1
     for rel in files:

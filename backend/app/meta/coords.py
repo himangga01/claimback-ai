@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 
 def denormalize_box(box, width: int, height: int, fmt: str) -> list[int]:
     """Convert one box to original pixel coords [x1, y1, x2, y2] (ints).
@@ -66,3 +68,88 @@ def mean_best_iou(pred_boxes, truth_boxes) -> float:
     for p in pred_boxes:
         total += max(box_iou(p, t) for t in truth_boxes)
     return total / len(pred_boxes)
+
+
+# -- Box with coordinate system (M0-fix1 C14) -------------------------------
+# Spark reading boxes are "norm1000" (0-1000 per axis, M0 review).
+# SAM boxes are "pixel" in the input size SAM was told (M0 review: the
+# prompt carries w/h, e.g. 640x960 for chat_capture.png, 360x400 for
+# chat_scroll.mp4 frame 0; SAM returns pixel coords in that space).
+# ref_w/ref_h always mean "size of the image the box was predicted on".
+# For norm1000 the values are provenance only (conversion scales 0-1000
+# to the target size); for pixel they are the scale source.
+
+
+@dataclass(frozen=True)
+class Box:
+    """A box bundled with its coordinate system.
+
+    Attributes:
+        x1, y1, x2, y2: coordinates in ``system`` units.
+        system: "norm1000" (Spark) or "pixel" (SAM).
+        ref_w, ref_h: prediction-image size in pixels.
+    """
+
+    x1: float
+    y1: float
+    x2: float
+    y2: float
+    system: str
+    ref_w: int
+    ref_h: int
+
+    def __post_init__(self) -> None:
+        if self.system not in ("norm1000", "pixel"):
+            raise ValueError(f"unknown box system: {self.system!r}")
+        if int(self.ref_w) <= 0 or int(self.ref_h) <= 0:
+            raise ValueError(
+                f"ref size must be positive: {self.ref_w}x{self.ref_h}"
+            )
+
+
+def box_to_pixels(box: Box, width: int, height: int) -> list[int]:
+    """Convert a Box to original pixel coords [x1, y1, x2, y2] (ints).
+
+    Args:
+        box: the box with its coordinate system.
+        width, height: original (target) image size in pixels.
+
+    For "norm1000", scales 0-1000 to the target size (ref is provenance).
+    For "pixel", scales from ref_w/ref_h to the target size (identity when
+    the SAM input size equals the original, as in M0).
+    """
+    if box.system == "norm1000":
+        return denormalize_box(
+            [box.x1, box.y1, box.x2, box.y2], int(width), int(height),
+            "norm1000",
+        )
+    if box.system == "pixel":
+        # Scale from prediction space to target space, then clip/order.
+        sx = int(width) / float(int(box.ref_w))
+        sy = int(height) / float(int(box.ref_h))
+        scaled = [float(box.x1) * sx, float(box.y1) * sy,
+                  float(box.x2) * sx, float(box.y2) * sy]
+        return denormalize_box(scaled, int(width), int(height), "pixel")
+    raise ValueError(f"unknown box system: {box.system!r}")
+
+
+def box_iou_boxes(a: Box, b: Box) -> float:
+    """IoU for two Boxes in the same coordinate space.
+
+    Raises ValueError when the boxes use different systems or different
+    reference sizes: convert both with box_to_pixels() to a common
+    original size first, then use box_iou() on the pixel results.
+    """
+    if a.system != b.system:
+        raise ValueError(
+            f"cannot mix coordinate systems: {a.system!r} vs {b.system!r} "
+            "(convert both with box_to_pixels first)"
+        )
+    if int(a.ref_w) != int(b.ref_w) or int(a.ref_h) != int(b.ref_h):
+        raise ValueError(
+            f"cannot mix reference sizes: {a.ref_w}x{a.ref_h} vs "
+            f"{b.ref_w}x{b.ref_h} (convert both with box_to_pixels first)"
+        )
+    pa = box_to_pixels(a, int(a.ref_w), int(a.ref_h))
+    pb = box_to_pixels(b, int(b.ref_w), int(b.ref_h))
+    return box_iou(pa, pb)
