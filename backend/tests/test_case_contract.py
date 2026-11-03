@@ -186,8 +186,8 @@ def fake_drafter(case_id, draft_inputs, findings, meta_mode, run_id, **kwargs):
                             "{{principal}}을 보냈습니다. [[EX:4]]",
          "ex_refs": ["EX4"]},
         {"sentence_id": "s2", "type": "fact",
-         "text_with_slots": "{{debtor_name}}은 {{due_date}}까지 갚겠다고 했습니다 "
-                            "[[EX:1]]. {{quote:EX1:item1}} [[EX:6]]",
+         "text_with_slots": "{{debtor_name}}은 {{quote:EX1:item1}}라고 했습니다. "
+                            "[[EX:1]] [[EX:6]]",
          "ex_refs": ["EX1", "EX6"]},
         {"sentence_id": "s3", "type": "fact",
          "text_with_slots": "{{debtor_name}}은 {{repaid_date}} {{repaid_amount}}을 "
@@ -658,7 +658,7 @@ def test_p1_draft_rules_reject_calculated_and_speech():
     assert len(gate.findings) >= 3
     good = [
         {"sentence_id": "s1", "type": "fact",
-         "text_with_slots": "{{debtor_name}}은 {{due_date}}까지 갚겠다고 했습니다 [[EX:1]]. {{quote:EX1:item1}} [[EX:1]]",
+         "text_with_slots": "{{debtor_name}}은 {{quote:EX1:item1}}라고 했습니다. [[EX:1]]",
          "ex_refs": ["EX1"]},
         {"sentence_id": "s2", "type": "user",
          "text_with_slots": "그 뒤로 남은 돈을 받지 못했습니다. [[USER]]",
