@@ -1,3 +1,4 @@
+import logging
 import os
 import tempfile
 from datetime import date
@@ -6,6 +7,7 @@ from typing import Dict, Any, Optional
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
+from starlette.background import BackgroundTask
 
 from app.schemas.loan_fact import (
     LoanFactSchema,
@@ -22,6 +24,14 @@ from app.services.verification_gate import VerificationGateService
 from app.services.pdf_compiler import CaliforniaSC100Compiler, KoreanLegalDocumentCompiler
 
 router = APIRouter(prefix="/api")
+logger = logging.getLogger(__name__)
+
+
+def _remove_temp_file(path: str) -> None:
+    try:
+        os.unlink(path)
+    except OSError:
+        logger.warning("임시 파일 삭제 실패")
 
 
 class VerifyRequest(BaseModel):
@@ -34,7 +44,7 @@ class VerifyRequest(BaseModel):
 def verify_claim(req: VerifyRequest):
     """
     결정론적 규칙 검증 게이트 엔드포인트
-    - 법정이자 산출, 요건사실 대조, 수치 위변조 강제 복원
+    - 이자 산출, 입력값 대조, 초안 금액과 계산값 비교
     """
     evidence_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../sample_evidence"))
     result = VerificationGateService.verify_and_reconcile(
@@ -63,7 +73,7 @@ def compile_sc100_pdf(req: VerifyRequest):
         raise HTTPException(
             status_code=400,
             detail={
-                "message": "법적 요건사실 결손으로 SC-100 PDF 생성이 차단되었습니다.",
+                "message": "서류를 만들 수 없습니다. 아래 칸을 확인하세요.",
                 "missing_requirements": verification.missing_requirements,
             }
         )
@@ -76,20 +86,24 @@ def compile_sc100_pdf(req: VerifyRequest):
             loan_fact=req.loan_fact,
             verification=verification,
             output_path=tmp.name,
+            as_of=req.target_date,
         )
         return FileResponse(
             tmp.name,
             media_type="application/pdf",
             filename=f"SC-100_{req.loan_fact.debtor.name.replace(' ', '_')}.pdf",
+            background=BackgroundTask(_remove_temp_file, tmp.name),
         )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.exception("SC-100 생성 실패")
+        _remove_temp_file(tmp.name)
+        raise HTTPException(status_code=500, detail="서류 생성 중 오류가 발생했습니다.")
 
 
 @router.post("/compile/content-proof")
 def compile_content_proof_pdf(req: VerifyRequest):
     """
-    대한민국 우체국 전자내용증명 표준 규격 PDF 컴파일 다운로드
+    내용증명 PDF 컴파일 다운로드
     """
     evidence_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../sample_evidence"))
     verification = VerificationGateService.verify_and_reconcile(
@@ -103,7 +117,7 @@ def compile_content_proof_pdf(req: VerifyRequest):
         raise HTTPException(
             status_code=400,
             detail={
-                "message": "법적 요건사실 결손으로 내용증명 생성이 차단되었습니다.",
+                "message": "서류를 만들 수 없습니다. 아래 칸을 확인하세요.",
                 "missing_requirements": verification.missing_requirements,
             }
         )
@@ -116,20 +130,24 @@ def compile_content_proof_pdf(req: VerifyRequest):
             loan_fact=req.loan_fact,
             verification=verification,
             output_path=tmp.name,
+            as_of=req.target_date,
         )
         return FileResponse(
             tmp.name,
             media_type="application/pdf",
             filename=f"내용증명_{req.loan_fact.debtor.name}.pdf",
+            background=BackgroundTask(_remove_temp_file, tmp.name),
         )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.exception("내용증명 생성 실패")
+        _remove_temp_file(tmp.name)
+        raise HTTPException(status_code=500, detail="서류 생성 중 오류가 발생했습니다.")
 
 
 @router.post("/compile/ecourt-packet")
 def compile_ecourt_packet(req: VerifyRequest) -> Dict[str, str]:
     """
-    대한민국 법원 전자소송 1:1 클립보드 블록 패키지 반환
+    대한민국 법원 전자소송 클립보드 블록 패키지 반환
     """
     evidence_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../sample_evidence"))
     verification = VerificationGateService.verify_and_reconcile(
@@ -143,7 +161,7 @@ def compile_ecourt_packet(req: VerifyRequest) -> Dict[str, str]:
         raise HTTPException(
             status_code=400,
             detail={
-                "message": "법적 요건사실 결손으로 전자소송 패킷 생성이 차단되었습니다.",
+                "message": "서류를 만들 수 없습니다. 아래 칸을 확인하세요.",
                 "missing_requirements": verification.missing_requirements,
             }
         )

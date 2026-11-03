@@ -15,6 +15,11 @@ from reportlab.pdfbase.ttfonts import TTFont
 
 from app.schemas.loan_fact import LoanFactSchema, VerificationResult, CurrencyEnum
 
+try:
+    from app.services.naming import NOTICE_KO
+except Exception:
+    NOTICE_KO = "본인 작성용 초안, 법률 자문 아님"
+
 
 # 한글 폰트 등록 (NanumGothic 번들)
 FONT_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "templates", "fonts")
@@ -37,6 +42,14 @@ else:
         KO_FONT_BOLD = "Helvetica-Bold"
 
 
+def _fmt_kr_date(d: date) -> str:
+    return f"{d.year}. {d.month}. {d.day}."
+
+
+def _fmt_won(amount: Decimal) -> str:
+    return f"{int(amount):,}"
+
+
 class CaliforniaSC100Compiler:
     """
     미국 캘리포니아 소액재판소 공식 Form SC-100 AcroForm 자동 주입 컴파일러 (Rev. Jan 1, 2026)
@@ -53,6 +66,7 @@ class CaliforniaSC100Compiler:
         output_path: str,
         county_name: str = "Los Angeles",
         court_info: str = "Superior Court of California, County of Los Angeles",
+        as_of: Optional[date] = None,
     ) -> str:
         if not os.path.exists(cls.TEMPLATE_PATH):
             raise FileNotFoundError(f"Template not found at {cls.TEMPLATE_PATH}")
@@ -74,7 +88,7 @@ class CaliforniaSC100Compiler:
         explanation = (
             f"Unpaid personal loan of ${principal_amt_str} USD transferred on {loan_fact.loan_date}. "
             f"Defendant agreed to repay by {loan_fact.due_date} but failed to make full payment. "
-            f"Prejudgment interest accrued under Cal. Civ. Code § 3289(b) / § 3287(a): ${interest_amt_str} USD."
+            f"Prejudgment interest accrued under Cal. Civ. Code section 3289(b) / 3287(a): ${interest_amt_str} USD."
         )
 
         calc_explanation = (
@@ -88,7 +102,7 @@ class CaliforniaSC100Compiler:
             # Page 1 Caption
             "SC-100[0].Page1[0].CaptionRight[0].County[0].CourtInfo[0]": f"County of {county_name}\n{court_info}",
             "SC-100[0].Page1[0].CaptionRight[0].CN[0].CaseName[0]": f"{p.name} v. {d.name}",
-            
+
             # Page 2 Caption
             "SC-100[0].Page2[0].PxCaption[0].Plaintiff[0]": p.name,
 
@@ -118,17 +132,17 @@ class CaliforniaSC100Compiler:
             "SC-100[0].Page3[0].List3[0].Lic[0].FillField1[0]": calc_explanation,
             "SC-100[0].Page3[0].List6[0].item6[0].ZipCode1[0]": d.zip_code or "",
 
-            # 필수 체크박스
-            "SC-100[0].Page3[0].List4[0].Item4[0].Checkbox50[0]": "/1",  # Item 4: Yes, demand was made
-            "SC-100[0].Page3[0].List5[0].Lia[0].Checkbox5cb[0]": "/1",  # Item 5: a(1) venue defendant lives
-            "SC-100[0].Page3[0].List7[0].item7[0].Checkbox60[1]": "/2",  # Item 7: No attorney fee dispute
-            "SC-100[0].Page3[0].List8[0].item8[0].Checkbox61[1]": "/2",  # Item 8: No public entity
-            "SC-100[0].Page4[0].List9[0].Item9[0].Checkbox62[1]": "/2",  # Item 9: No >12 claims
+            # 체크박스
+            "SC-100[0].Page3[0].List4[0].Item4[0].Checkbox50[0]": "/1",
+            "SC-100[0].Page3[0].List5[0].Lia[0].Checkbox5cb[0]": "/1",
+            "SC-100[0].Page3[0].List7[0].item7[0].Checkbox60[1]": "/2",
+            "SC-100[0].Page3[0].List8[0].item8[0].Checkbox61[1]": "/2",
+            "SC-100[0].Page4[0].List9[0].Item9[0].Checkbox62[1]": "/2",
             "SC-100[0].Page4[0].List10[0].li10[0].Checkbox63[0]": "/1" if verification.total_claim_amount > Decimal("2500.00") else "/Off",
             "SC-100[0].Page4[0].List10[0].li10[0].Checkbox63[1]": "/2" if verification.total_claim_amount <= Decimal("2500.00") else "/Off",
 
-            # Item 11 선언 서명부 주입 (Round 2 지적 반영)
-            "SC-100[0].Page4[0].Sign[0].Date1[0]": date.today().strftime("%m/%d/%Y"),
+            # Item 11 선언 서명부
+            "SC-100[0].Page4[0].Sign[0].Date1[0]": as_of.strftime("%m/%d/%Y") if as_of else "",
             "SC-100[0].Page4[0].Sign[0].PlaintiffName1[0]": p.name,
         }
 
@@ -146,7 +160,7 @@ class CaliforniaSC100Compiler:
 
 class KoreanLegalDocumentCompiler:
     """
-    한국 트랙: 전자내용증명 PDF(한글 폰트 완비) 및 전자소송 1:1 클립보드 패키저
+    한국 트랙: 내용증명 PDF(한글 폰트) 및 전자소송 클립보드 패키지
     """
 
     @classmethod
@@ -155,9 +169,10 @@ class KoreanLegalDocumentCompiler:
         loan_fact: LoanFactSchema,
         verification: VerificationResult,
         output_path: str,
+        as_of: Optional[date] = None,
     ) -> str:
         """
-        우체국 전자내용증명 표준 규격 PDF 생성 (나눔고딕 한글 폰트 임베딩 및 정렬 완비)
+        내용증명 PDF 생성 (나눔고딕 한글 폰트)
         """
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         doc = SimpleDocTemplate(
@@ -173,7 +188,7 @@ class KoreanLegalDocumentCompiler:
             fontName=KO_FONT_BOLD,
             fontSize=18,
             leading=24,
-            alignment=1, # Center
+            alignment=1,
             spaceAfter=20
         )
         body_style = ParagraphStyle(
@@ -195,7 +210,7 @@ class KoreanLegalDocumentCompiler:
             fontName=KO_FONT,
             fontSize=10,
             leading=16,
-            alignment=1, # Center
+            alignment=1,
             spaceAfter=10
         )
         right_style = ParagraphStyle(
@@ -203,8 +218,17 @@ class KoreanLegalDocumentCompiler:
             fontName=KO_FONT_BOLD,
             fontSize=10,
             leading=16,
-            alignment=2, # Right
+            alignment=2,
             spaceAfter=5
+        )
+        notice_style = ParagraphStyle(
+            'ProofNotice',
+            fontName=KO_FONT,
+            fontSize=7,
+            leading=10,
+            alignment=1,
+            textColor=colors.grey,
+            spaceBefore=30,
         )
 
         elements = []
@@ -230,32 +254,66 @@ class KoreanLegalDocumentCompiler:
         elements.append(info_table)
         elements.append(Spacer(1, 15))
 
-        amt_str = f"{verification.reconciled_amount:,.0f}원"
-        interest_str = f"{verification.calculated_interest:,.0f}원"
-        total_str = f"{verification.total_claim_amount:,.0f}원"
+        principal_str = f"{_fmt_won(loan_fact.principal_amount)}원"
+        remaining_str = f"{_fmt_won(verification.reconciled_amount)}원"
+        interest_str = f"{_fmt_won(verification.calculated_interest)}원"
+        total_str = f"{_fmt_won(verification.total_claim_amount)}원"
 
-        elements.append(Paragraph(f"<b>[청구 금액 합계: 금 {total_str}]</b> (원금: {amt_str}, 현재 지연손해금: {interest_str})", bold_style))
+        elements.append(Paragraph(f"<b>[청구 금액 합계: 금 {total_str}]</b> (남은 원금: {remaining_str}, 현재 지연손해금: {interest_str})", bold_style))
         elements.append(Spacer(1, 10))
+
+        loan_d = _fmt_kr_date(loan_fact.loan_date)
+        due_d = _fmt_kr_date(loan_fact.due_date)
+        item2 = (
+            f"2. 발신인은 귀하에게 <b>{loan_d}</b>에 금 <b>{principal_str}</b>을 대여하였으며, "
+            f"귀하는 이를 <b>{due_d}</b>까지 전액 변제하기로 약정하였습니다."
+        )
+        if loan_fact.repayments:
+            reps = sorted(loan_fact.repayments, key=lambda r: r.payment_date)
+            if len(reps) == 1:
+                r = reps[0]
+                r_d = _fmt_kr_date(r.payment_date)
+                r_amt = _fmt_won(r.amount)
+                item2 += f"<br/>그중 {r_amt}원을 {r_d} 받았고 남은 원금은 {remaining_str}입니다."
+            else:
+                total_repaid = sum((r.amount for r in reps), Decimal("0"))
+                total_s = _fmt_won(total_repaid)
+                last_d = _fmt_kr_date(reps[-1].payment_date)
+                item2 += (
+                    f"<br/>그중 총 {total_s}원을 {len(reps)}회에 나누어 받았고 "
+                    f"남은 원금은 {remaining_str}입니다. (마지막 수령일 {last_d})"
+                )
+
+        if as_of is not None:
+            deadline = as_of + timedelta(days=7)
+            deadline_s = _fmt_kr_date(deadline)
+            item4 = (
+                f"4. 이에 발신인은 본 내용증명을 통하여 귀하에게 최종 변제를 촉구하오니, "
+                f"<b>{deadline_s}</b>까지 위 원리금 합계액(금 {total_str})을 보내 주시기 바랍니다."
+            )
+        else:
+            item4 = (
+                f"4. 이에 발신인은 본 내용증명을 통하여 귀하에게 최종 변제를 촉구하오니, "
+                f"위 원리금 합계액(금 {total_str})을 보내 주시기 바랍니다."
+            )
 
         body_text = (
             f"1. 귀하의 무궁한 발전을 기원합니다.<br/><br/>"
-            f"2. 발신인은 귀하에게 <b>{loan_fact.loan_date}</b>에 금 <b>{amt_str}</b>을 대여하였으며, "
-            f"귀하는 이를 <b>{loan_fact.due_date}</b>까지 전액 변제하기로 약정하였습니다.<br/><br/>"
-            f"3. 그러나 귀하는 변제기가 경과하였음에도 현재까지 정당한 사유 없이 채무를 이행하지 않고 있습니다.<br/><br/>"
-            f"4. 이에 발신인은 본 내용증명을 통하여 귀하에게 최종 변제를 촉구하오니, 본 서면을 수령한 날로부터 "
-            f"<b>7일 이내</b>에 위 원리금 합계액(금 {total_str})을 완제하여 주시기 바랍니다.<br/><br/>"
-            f"5. 만일 위 기한 내에 변제가 이루어지지 않을 경우, 발신인은 부득이 민사소송법상 <b>지급명령 신청 또는 소제기</b> 등 "
-            f"법적 조치를 취할 것이며, 변제기 익일부터는 민법상 연 5%(상사 거래 연 6%), "
-            f"소송 제기 후 소장/지급명령정본 송달 다음날부터 다 갚는 날까지는 소송촉진 등에 관한 특례법상 연 12%의 지연손해금이 "
-            f"가산됨을 엄히 고지합니다."
+            f"{item2}<br/><br/>"
+            f"3. 발신인은 변제기 이후 현재까지 남은 돈을 받지 못했습니다.<br/><br/>"
+            f"{item4}"
         )
         elements.append(Paragraph(body_text, body_style))
         elements.append(Spacer(1, 25))
 
-        today_str = date.today().strftime("%Y년 %m월 %d일")
-        elements.append(Paragraph(today_str, center_style))
+        if as_of is not None:
+            date_str = as_of.strftime("%Y년 %m월 %d일")
+        else:
+            date_str = "____년 __월 __일"
+        elements.append(Paragraph(date_str, center_style))
         elements.append(Spacer(1, 10))
         elements.append(Paragraph(f"<b>발신인: {p.name} (인/서명)</b>", right_style))
+        elements.append(Paragraph(NOTICE_KO, notice_style))
 
         doc.build(elements)
         return output_path
@@ -267,56 +325,92 @@ class KoreanLegalDocumentCompiler:
         verification: VerificationResult,
     ) -> Dict[str, str]:
         """
-        대한민국 법원 전자소송(ecourt.scourt.go.kr) 1:1 원클릭 복사용 텍스트 블록
+        대한민국 법원 전자소송 클립보드 블록
         """
         p = loan_fact.creditor
         d = loan_fact.debtor
 
-        amt_str = f"{verification.reconciled_amount:,.0f}"
-        interest_str = f"{verification.calculated_interest:,.0f}"
-        total_str = f"{verification.total_claim_amount:,.0f}"
+        remaining_str = f"{_fmt_won(verification.reconciled_amount)}"
+        principal_str = f"{_fmt_won(loan_fact.principal_amount)}"
+        interest_str = f"{_fmt_won(verification.calculated_interest)}"
+        total_str = f"{_fmt_won(verification.total_claim_amount)}"
 
-        # 1. 당사자 표시
         parties_text = (
-            f"채권자(원고): {p.name}\n"
+            f"채권자: {p.name}\n"
             f"주소: {p.address or '주소 불명'}\n"
             f"연락처: {p.phone or '연락처 불명'}\n\n"
-            f"채무자(피고): {d.name}\n"
+            f"채무자: {d.name}\n"
             f"주소: {d.address or '주소 불명'}\n"
             f"연락처: {d.phone or '연락처 불명'}"
         )
 
-        # 2. 청구 취지 (지급명령 표준: 초일불산입 및 2단계 분리)
-        due_next = loan_fact.due_date + timedelta(days=1)
-        rate_pre = "연 6%" if loan_fact.transaction_kind.value == "commercial" else "연 5%"
-        claim_purpose = (
-            f"1. 채무자는 채권자에게 금 {amt_str}원 및 이에 대하여 {due_next}부터 "
-            f"이 사건 지급명령정본 송달일까지는 {rate_pre}, "
-            f"그 다음날부터 다 갚는 날까지는 연 12%의 각 비율로 계산한 돈을 지급하라.\n"
-            f"2. 독촉절차비용은 채무자의 부담으로 한다.\n"
-            f"라는 명령을 구함."
-        )
-
-        # 3. 독촉 사실 문구
-        if loan_fact.demand_date:
-            demand_clause = f"채권자는 {loan_fact.demand_date}경 채무자에게 최종 변제를 최고(독촉)하였으나, 채무자는 현재까지 이를 이행하지 않고 있습니다."
+        sentence = ""
+        if verification.calculation is not None:
+            sentence = verification.calculation.rate_clause.sentence or ""
+        if sentence:
+            claim_purpose = (
+                f"1. {sentence}\n"
+                f"2. 독촉절차비용은 채무자의 부담으로 한다.\n"
+                f"라는 명령을 구함."
+            )
         else:
-            demand_clause = "채무자는 현재까지 정당한 사유 없이 채무의 이행을 지체하고 있습니다."
+            if loan_fact.repayments:
+                last_rep = max(r.payment_date for r in loan_fact.repayments)
+                due_next = loan_fact.due_date + timedelta(days=1)
+                last_next = last_rep + timedelta(days=1)
+                acc = due_next if due_next > last_next else last_next
+            else:
+                acc = loan_fact.due_date + timedelta(days=1)
+            acc_s = _fmt_kr_date(acc)
+            is_commercial = getattr(loan_fact.transaction_kind, "value", "civil") == "commercial"
+            rate_pre = "연 6%" if is_commercial else "연 5%"
+            claim_purpose = (
+                f"1. 채무자는 채권자에게 {remaining_str}원 및 이에 대하여 {acc_s}부터 "
+                f"이 사건 지급명령 정본 송달일까지는 {rate_pre}, "
+                f"그 다음 날부터 다 갚는 날까지는 연 12%의 각 비율로 계산한 돈을 지급하라.\n"
+                f"2. 독촉절차비용은 채무자의 부담으로 한다.\n"
+                f"라는 명령을 구함."
+            )
 
-        # 4. 지급명령용 청구 원인 (호증 인용 제외)
+        if loan_fact.demand_date:
+            dem_s = _fmt_kr_date(loan_fact.demand_date)
+            demand_clause = f"채권자는 {dem_s}경 채무자에게 최종 변제를 요청하였으나, 채무자는 현재까지 이를 지급하지 않고 있습니다."
+        else:
+            demand_clause = "채무자는 변제기 이후 현재까지 남은 돈을 지급하지 않고 있습니다."
+
+        loan_s = _fmt_kr_date(loan_fact.loan_date)
+        due_s = _fmt_kr_date(loan_fact.due_date)
+        lend_part = (
+            f"채권자는 {loan_s}경 채무자에게 금 {principal_str}원을 대여하였고, "
+            f"채무자는 이를 {due_s}까지 변제하기로 약정하였습니다."
+        )
+        if loan_fact.repayments:
+            reps = sorted(loan_fact.repayments, key=lambda r: r.payment_date)
+            if len(reps) == 1:
+                r = reps[0]
+                r_d = _fmt_kr_date(r.payment_date)
+                r_amt = _fmt_won(r.amount)
+                lend_part += f" 그중 {r_amt}원을 {r_d} 받았고 남은 원금은 {remaining_str}원입니다."
+            else:
+                total_repaid = sum((r.amount for r in reps), Decimal("0"))
+                total_s = _fmt_won(total_repaid)
+                last_d = _fmt_kr_date(reps[-1].payment_date)
+                lend_part += (
+                    f" 그중 총 {total_s}원을 {len(reps)}회에 나누어 받았고 "
+                    f"남은 원금은 {remaining_str}원입니다. (마지막 수령일 {last_d})"
+                )
+
         claim_cause_payment_order = (
             f"1. 당사자 관계\n"
             f"채권자는 채무자에게 금전을 대여한 자이며, 채무자는 이를 차용한 자입니다.\n\n"
             f"2. 대여사실 및 변제약정\n"
-            f"채권자는 {loan_fact.loan_date}경 채무자에게 금 {amt_str}원을 대여하였고, "
-            f"채무자는 이를 {loan_fact.due_date}까지 변제하기로 약정하였습니다.\n\n"
-            f"3. 채무 불이행\n"
-            f"약정 변제기가 도래하였음에도 {demand_clause}\n\n"
+            f"{lend_part}\n\n"
+            f"3. 변제기 이후 상황\n"
+            f"약정 변제기가 지났음에도 {demand_clause}\n\n"
             f"4. 결론\n"
-            f"따라서 채권자는 위 대여원금 및 법정 지연손해금을 지급받기 위하여 본 신청에 이르렀습니다."
+            f"따라서 채권자는 위 대여원금 및 지연손해금을 지급받기 위하여 본 신청에 이르렀습니다."
         )
 
-        # 5. 소액소장용 청구 원인 및 입증방법
         evidence_citations = ", ".join([f"[{e.id} {e.title}]" for e in loan_fact.evidences])
         claim_cause_lawsuit = (
             f"{claim_cause_payment_order}\n\n"
@@ -330,6 +424,6 @@ class KoreanLegalDocumentCompiler:
             "claim_cause_payment_order": claim_cause_payment_order,
             "claim_cause_lawsuit": claim_cause_lawsuit,
             "total_claim_amount": total_str,
-            "principal_amount": amt_str,
+            "principal_amount": remaining_str,
             "interest_amount": interest_str,
         }
