@@ -6,3 +6,6 @@ cryptography>=43.0.0
 pytest>=8.3.0
 httpx>=0.28.0
 python-multipart>=0.0.12
+openai==3.42.1
+meta-sam-parser==0.1.0
+Pillow==13.0.0

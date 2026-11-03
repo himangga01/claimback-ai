@@ -1,0 +1,284 @@
+{
+  "mode": "replay",
+  "probes": {
+    "P2": {
+      "success": true,
+      "model": "muse-spark-1.3",
+      "api": "POST /v1/responses (input_image + Reading schema)",
+      "latency_ms": 0,
+      "tokens": {
+        "input": 1609,
+        "cached": 0,
+        "output": 3485,
+        "reasoning": 998
+      },
+      "cost_usd": 0.016823,
+      "rationale": "coord=norm1000; chat_capture.png: best=norm1000 {'pixel': 0.2056, 'norm1000': 0.4713, 'norm01': 0.0} items=12 amount=True date=True; transfer_receipt.png: best=norm1000 {'pixel': 0.0039, 'norm1000': 0.1065, 'norm01': 0.0} items=16 amount=True date=True",
+      "detail": {
+        "chat_capture.png": {
+          "best": "norm1000",
+          "scores": {
+            "pixel": 0.2056,
+            "norm1000": 0.4713,
+            "norm01": 0.0
+          },
+          "items": 12,
+          "amount_ok": true,
+          "date_ok": true
+        },
+        "transfer_receipt.png": {
+          "best": "norm1000",
+          "scores": {
+            "pixel": 0.0039,
+            "norm1000": 0.1065,
+            "norm01": 0.0
+          },
+          "items": 16,
+          "amount_ok": true,
+          "date_ok": true
+        }
+      }
+    },
+    "P0": {
+      "success": true,
+      "model": "registry",
+      "api": "GET /models",
+      "latency_ms": 0,
+      "tokens": {
+        "input": 0,
+        "cached": 0,
+        "output": 0,
+        "reasoning": 0
+      },
+      "cost_usd": 0.0,
+      "rationale": "found 5/5 Standard IDs; missing=none; contributor IDs in registry=2 (not used)",
+      "detail": {
+        "found": [
+          "muse-spark-1.1",
+          "muse-spark-1.2",
+          "muse-spark-1.3",
+          "sam-3.1",
+          "muse-image-1.0"
+        ],
+        "missing": []
+      }
+    },
+    "P1": {
+      "success": true,
+      "model": "muse-spark-1.3",
+      "api": "POST /v1/responses (text.format=json_schema)",
+      "latency_ms": 0,
+      "tokens": {
+        "input": 38,
+        "cached": 0,
+        "output": 629,
+        "reasoning": 601
+      },
+      "cost_usd": 0.002721,
+      "rationale": "JSON match=True; usage keys=['input_tokens', 'input_tokens_details', 'output_tokens', 'output_tokens_details', 'total_tokens']; cached=0; reasoning=601",
+      "detail": {
+        "parsed": {
+          "amount": "5,000,000원",
+          "date": "2026-04-10"
+        }
+      }
+    },
+    "P3": {
+      "success": true,
+      "model": "muse-spark-1.3",
+      "api": "POST /v1/responses (PDF via inline file_data)",
+      "latency_ms": 0,
+      "tokens": {
+        "input": 5403,
+        "cached": 0,
+        "output": 238,
+        "reasoning": 199
+      },
+      "cost_usd": 0.007765,
+      "rationale": "method=inline file_data; amount=True; dates=True",
+      "detail": {
+        "parsed": {
+          "amount": "5,000,000원",
+          "dates": [
+            "2026-01-01",
+            "2026-04-10"
+          ]
+        }
+      }
+    },
+    "P4": {
+      "success": true,
+      "model": "muse-spark-1.3",
+      "api": "POST /v1/responses (video via Files API + input_file)",
+      "latency_ms": 0,
+      "tokens": {
+        "input": 592,
+        "cached": 0,
+        "output": 540,
+        "reasoning": 416
+      },
+      "cost_usd": 0.003035,
+      "rationale": "method=Files API + input_file; utterances=5; promise=True; amount=True; latency=0ms -> 영상 판단 (가) 직접 입력",
+      "detail": {
+        "parsed": {
+          "utterances": [
+            {
+              "text": "형, 5,000,000만 빌려줄 수 있어?"
+            },
+            {
+              "text": "응, 내일 보내줄게. 2026-01-01에 송금할게."
+            },
+            {
+              "text": "고마워! 2026-04-10까지 꼭 갚겠다!"
+            },
+            {
+              "text": "2026-04-10 확인했어. 5,000,000 맞지?"
+            },
+            {
+              "text": "응, 010-0000-0000으로 연락줘."
+            }
+          ]
+        }
+      }
+    },
+    "P5": {
+      "success": true,
+      "model": "sam-3.1",
+      "api": "POST /v1/responses (input_image, noun/box prompts)",
+      "latency_ms": 0,
+      "tokens": {
+        "input": 0,
+        "cached": 0,
+        "output": 0,
+        "reasoning": 0
+      },
+      "cost_usd": 0.01,
+      "rationale": "SAM Responses(image) + meta-sam-parser; chat bubble: n=5 IoU=0.9715 ok=True; signature: n=0 IoU=0.0 ok=False; red stamp: n=1 IoU=0.9875 ok=True; box-prompt bubble#2: n=1 IoU=0.9523 ok=True; billed_frames=0",
+      "detail": {
+        "chat bubble": {
+          "boxes": 5,
+          "iou": 0.9715,
+          "ok": true,
+          "size": [
+            640,
+            960
+          ]
+        },
+        "signature": {
+          "boxes": 0,
+          "iou": 0.0,
+          "ok": false,
+          "size": [
+            800,
+            1130
+          ]
+        },
+        "red stamp": {
+          "boxes": 1,
+          "iou": 0.9875,
+          "ok": true,
+          "size": [
+            800,
+            1130
+          ]
+        },
+        "box-prompt bubble#2": {
+          "boxes": 1,
+          "iou": 0.9523,
+          "ok": true
+        }
+      }
+    },
+    "P6": {
+      "success": true,
+      "model": "sam-3.1",
+      "api": "POST /v1/responses stream (input_video file_id)",
+      "latency_ms": 0,
+      "tokens": {
+        "input": 0,
+        "cached": 0,
+        "output": 0,
+        "reasoning": 0
+      },
+      "cost_usd": 0.01,
+      "rationale": "Files API + input_video + box prompt; billed_frames=50 (>=50 required); lines=13; boxes=13",
+      "detail": {
+        "billed_frames": 50,
+        "lines": 13,
+        "boxes": 13
+      }
+    },
+    "P7": {
+      "success": true,
+      "model": "muse-image-1.0",
+      "api": "POST /v1/images/generations",
+      "latency_ms": 0,
+      "tokens": {
+        "input": 0,
+        "cached": 0,
+        "output": 0,
+        "reasoning": 0
+      },
+      "cost_usd": 0.01,
+      "rationale": "images.generate 1 image; saved=timeline_illustration.png; bytes=87870; text-in-image check is visual by reviewer",
+      "detail": {
+        "file": "C:\\2026_project\\claimback-ai-meta\\backend\\tests\\fixtures\\spike_outputs\\timeline_illustration.png"
+      }
+    },
+    "P8": {
+      "success": true,
+      "model": "muse-spark-1.1/1.2/1.3",
+      "api": "POST /v1/responses (input_image x2 per model)",
+      "latency_ms": 53237,
+      "tokens": {
+        "input": 5232,
+        "cached": 0,
+        "output": 11547,
+        "reasoning": 4613
+      },
+      "cost_usd": 0.055616,
+      "rationale": "muse-spark-1.1: avg=9473ms match=[True, True]; muse-spark-1.2: avg=3767ms match=[True, True]; muse-spark-1.3: avg=13378ms match=[True, True]; pick=muse-spark-1.2",
+      "detail": {
+        "muse-spark-1.1": {
+          "avg_latency_ms": 9473,
+          "latencies": [
+            9297,
+            9650
+          ],
+          "match": [
+            true,
+            true
+          ],
+          "ok": true
+        },
+        "muse-spark-1.2": {
+          "avg_latency_ms": 3767,
+          "latencies": [
+            4185,
+            3349
+          ],
+          "match": [
+            true,
+            true
+          ],
+          "ok": true
+        },
+        "muse-spark-1.3": {
+          "avg_latency_ms": 13378,
+          "latencies": [
+            18447,
+            8309
+          ],
+          "match": [
+            true,
+            true
+          ],
+          "ok": true
+        }
+      }
+    }
+  },
+  "total_cost_usd": 0.21354,
+  "ledger_lines": 37,
+  "note": "Response bodies are not stored here; see fixtures for recorded responses."
+}

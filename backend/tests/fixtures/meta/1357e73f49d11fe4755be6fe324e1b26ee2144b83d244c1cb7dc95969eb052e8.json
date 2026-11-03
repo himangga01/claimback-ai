@@ -1,0 +1,35 @@
+{
+  "latency_ms": 3960,
+  "request": {
+    "endpoint": "files.create",
+    "model": "",
+    "params": {
+      "filename": "chat_scroll.mp4",
+      "purpose": "user_data",
+      "sha256": "13d3551a4648e89f5a3ec4800aa28e8578e052a02fc6fe7617bebc1e61ab3062",
+      "size": 14200
+    },
+    "payload": {
+      "sha256": "13d3551a4648e89f5a3ec4800aa28e8578e052a02fc6fe7617bebc1e61ab3062"
+    }
+  },
+  "response": {
+    "bytes": 14200,
+    "created_at": 1793674940,
+    "expires_at": null,
+    "filename": "chat_scroll.mp4",
+    "id": "file-1632506438672992",
+    "object": "file",
+    "purpose": "user_data",
+    "status": "uploaded",
+    "status_details": null
+  },
+  "usage": {
+    "cached_input_tokens": 0,
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "reasoning_tokens": 0,
+    "total_tokens": 0,
+    "video_frames_processed": 0
+  }
+}

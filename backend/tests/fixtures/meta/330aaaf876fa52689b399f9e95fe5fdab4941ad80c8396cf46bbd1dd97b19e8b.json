@@ -1,0 +1,119 @@
+{
+  "latency_ms": 6003,
+  "request": {
+    "endpoint": "responses",
+    "model": "muse-spark-1.3",
+    "params": {
+      "max_output_tokens": 1500,
+      "reasoning": {
+        "effort": "minimal"
+      },
+      "store": false
+    },
+    "payload": [
+      {
+        "content": [
+          {
+            "text": "Read this Korean IOU PDF and return JSON {\"amount\": \"...\", \"dates\": [\"...\", \"...\"]}.",
+            "type": "input_text"
+          },
+          {
+            "file_data": "sha256:c50299d070eb408a1646b303a6db3bb54944e1c54f114ce4ff8e847581351157:application/pdf",
+            "filename": "iou_2page.pdf",
+            "type": "input_file"
+          }
+        ],
+        "role": "user"
+      }
+    ]
+  },
+  "response": {
+    "access_programs": null,
+    "background": false,
+    "completed_at": 1793674834.0,
+    "conversation": null,
+    "created_at": 1793674834.0,
+    "error": null,
+    "id": "resp_6ae94e52b67cf98ab93343c0",
+    "incomplete_details": null,
+    "instructions": null,
+    "max_output_tokens": 1500,
+    "max_tool_calls": null,
+    "metadata": null,
+    "model": "muse-spark-1.3",
+    "moderation": null,
+    "object": "response",
+    "output": [
+      {
+        "content": null,
+        "encrypted_content": "<redacted>",
+        "id": "rs_6ae94e52b67cf98ab93343c0:rs_b508f9cd-4d27-4f14-b620-8d05a9ddfd17",
+        "status": "completed",
+        "summary": [],
+        "type": "reasoning"
+      },
+      {
+        "content": [
+          {
+            "annotations": [],
+            "logprobs": [],
+            "text": "{\"amount\": \"5,000,000원\", \"dates\": [\"2026-01-01\", \"2026-04-10\"]}",
+            "type": "output_text"
+          }
+        ],
+        "id": "msg_6f04a481-c80a-42b3-91e6-e82765aa022a",
+        "phase": null,
+        "role": "assistant",
+        "status": "completed",
+        "type": "message"
+      }
+    ],
+    "parallel_tool_calls": true,
+    "previous_response_id": null,
+    "prompt": null,
+    "prompt_cache_diagnostics": null,
+    "prompt_cache_key": null,
+    "prompt_cache_options": null,
+    "prompt_cache_retention": null,
+    "reasoning": {
+      "context": null,
+      "effort": "minimal",
+      "generate_summary": null,
+      "mode": null,
+      "summary": null
+    },
+    "safety_identifier": null,
+    "service_tier": "auto",
+    "status": "completed",
+    "store": false,
+    "temperature": 1.0,
+    "text": null,
+    "tool_choice": "auto",
+    "tool_usage": null,
+    "tools": [],
+    "top_logprobs": 0,
+    "top_p": 1.0,
+    "truncation": "disabled",
+    "usage": {
+      "input_tokens": 5403,
+      "input_tokens_details": {
+        "cache_write_tokens": null,
+        "cached_tokens": 0
+      },
+      "output_tokens": 238,
+      "output_tokens_details": {
+        "reasoning_tokens": 199
+      },
+      "total_tokens": 5641
+    },
+    "user": null
+  },
+  "usage": {
+    "cached_input_tokens": 0,
+    "input_tokens": 5403,
+    "output_tokens": 238,
+    "reasoning_tokens": 199,
+    "total_tokens": 5641,
+    "video_frames_processed": 0
+  }
+}

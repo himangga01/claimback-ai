@@ -1,0 +1,239 @@
+{
+  "latency_ms": 18015,
+  "request": {
+    "endpoint": "responses",
+    "model": "muse-spark-1.3",
+    "params": {
+      "max_output_tokens": 4000,
+      "reasoning": {
+        "effort": "minimal"
+      },
+      "store": false,
+      "text_format": {
+        "name": "reading",
+        "schema": {
+          "additionalProperties": false,
+          "properties": {
+            "evidence_id": {
+              "type": "string"
+            },
+            "items": {
+              "items": {
+                "additionalProperties": true,
+                "properties": {
+                  "box": {
+                    "items": {
+                      "type": "number"
+                    },
+                    "maxItems": 4,
+                    "minItems": 4,
+                    "type": "array"
+                  },
+                  "confidence": {
+                    "type": "number"
+                  },
+                  "item_id": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string"
+                  },
+                  "normalized": {
+                    "type": "string"
+                  },
+                  "speaker": {
+                    "type": "string"
+                  },
+                  "text_verbatim": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "item_id",
+                  "kind",
+                  "text_verbatim",
+                  "box"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "evidence_id",
+            "items"
+          ],
+          "type": "object"
+        },
+        "strict": false,
+        "type": "json_schema"
+      }
+    },
+    "payload": [
+      {
+        "content": [
+          {
+            "text": "[P2] Read every chat bubble or receipt field verbatim with its box. Return a Reading JSON: evidence_id, items[{item_id, kind, text_verbatim, normalized, box[x1,y1,x2,y2], speaker, confidence}]. kinds: utterance, amount, date, party. Boxes must be tight around each item.",
+            "type": "input_text"
+          },
+          {
+            "image_url": "sha256:94cd716fea722a596bd226de35e921701a324b4ca8f0fe85c49cada0efb61c72:image/png",
+            "type": "input_image"
+          }
+        ],
+        "role": "user"
+      }
+    ]
+  },
+  "response": {
+    "access_programs": null,
+    "background": false,
+    "completed_at": 1793675168.0,
+    "conversation": null,
+    "created_at": 1793675168.0,
+    "error": null,
+    "id": "resp_6ae94fa065690248d9ac430d",
+    "incomplete_details": null,
+    "instructions": null,
+    "max_output_tokens": 4000,
+    "max_tool_calls": null,
+    "metadata": null,
+    "model": "muse-spark-1.3",
+    "moderation": null,
+    "object": "response",
+    "output": [
+      {
+        "content": null,
+        "encrypted_content": "<redacted>",
+        "id": "rs_6ae94fa065690248d9ac430d:rs_d8faf1fe-e54d-47b5-85cd-96b88a127829",
+        "status": "completed",
+        "summary": [],
+        "type": "reasoning"
+      },
+      {
+        "content": [
+          {
+            "annotations": [],
+            "logprobs": [],
+            "text": "{\"evidence_id\": \"chat_sample_01\", \"items\": [{\"box\": [25, 60, 615, 115], \"confidence\": 0.99, \"item_id\": \"u1\", \"kind\": \"utterance\", \"normalized\": \"\\ud615, 5,000,000\\uc6d0\\ub9cc \\ube4c\\ub824\\uc904 \\uc218 \\uc788\\uc5b4?\", \"speaker\": \"\\uc774\\uc0d8\\ud50c(SAMPLE)\", \"text_verbatim\": \"\\ud615, 5,000,000\\uc6d0\\ub9cc \\ube4c\\ub824\\uc904 \\uc218 \\uc788\\uc5b4?\"}, {\"box\": [308, 142, 975, 197], \"confidence\": 0.99, \"item_id\": \"u2\", \"kind\": \"utterance\", \"normalized\": \"\\uc751, \\ub0b4\\uc77c \\ubcf4\\ub0b4\\uc904\\uac8c. 2026-01-01\\uc5d0 \\uc1a1\\uae08\\ud560\\uac8c.\", \"speaker\": \"\\uae40\\uc0d8\\ud50c(SAMPLE)\", \"text_verbatim\": \"\\uc751, \\ub0b4\\uc77c \\ubcf4\\ub0b4\\uc904\\uac8c. 2026-01-01\\uc5d0 \\uc1a1\\uae08\\ud560\\uac8c.\"}, {\"box\": [25, 238, 638, 292], \"confidence\": 0.99, \"item_id\": \"u3\", \"kind\": \"utterance\", \"normalized\": \"\\uace0\\ub9c8\\uc6cc! 2026-04-10\\uae4c\\uc9c0 \\uaf2d \\uac1a\\uaca0\\ub2e4!\", \"speaker\": \"\\uc774\\uc0d8\\ud50c(SAMPLE)\", \"text_verbatim\": \"\\uace0\\ub9c8\\uc6cc! 2026-04-10\\uae4c\\uc9c0 \\uaf2d \\uac1a\\uaca0\\ub2e4!\"}, {\"box\": [315, 318, 976, 370], \"confidence\": 0.99, \"item_id\": \"u4\", \"kind\": \"utterance\", \"normalized\": \"2026-04-10 \\ud655\\uc778\\ud588\\uc5b4. 5,000,000\\uc6d0 \\ub9de\\uc9c0?\", \"speaker\": \"\\uae40\\uc0d8\\ud50c(SAMPLE)\", \"text_verbatim\": \"2026-04-10 \\ud655\\uc778\\ud588\\uc5b4. 5,000,000\\uc6d0 \\ub9de\\uc9c0?\"}, {\"box\": [25, 397, 581, 446], \"confidence\": 0.99, \"item_id\": \"u5\", \"kind\": \"utterance\", \"normalized\": \"\\uc751, 010-0000-0000\\uc73c\\ub85c \\uc5f0\\ub77d\\uc918.\", \"speaker\": \"\\uc774\\uc0d8\\ud50c(SAMPLE)\", \"text_verbatim\": \"\\uc751, 010-0000-0000\\uc73c\\ub85c \\uc5f0\\ub77d\\uc918.\"}, {\"box\": [92, 70, 310, 103], \"confidence\": 0.98, \"item_id\": \"a1\", \"kind\": \"amount\", \"normalized\": \"5000000\", \"speaker\": \"\\uc774\\uc0d8\\ud50c(SAMPLE)\", \"text_verbatim\": \"5,000,000\\uc6d0\"}, {\"box\": [671, 328, 870, 355], \"confidence\": 0.98, \"item_id\": \"a2\", \"kind\": \"amount\", \"normalized\": \"5000000\", \"speaker\": \"\\uae40\\uc0d8\\ud50c(SAMPLE)\", \"text_verbatim\": \"5,000,000\\uc6d0\"}, {\"box\": [588, 155, 766, 184], \"confidence\": 0.98, \"item_id\": \"d1\", \"kind\": \"date\", \"normalized\": \"2026-01-01\", \"speaker\": \"\\uae40\\uc0d8\\ud50c(SAMPLE)\", \"text_verbatim\": \"2026-01-01\"}, {\"box\": [201, 250, 383, 280], \"confidence\": 0.98, \"item_id\": \"d2\", \"kind\": \"date\", \"normalized\": \"2026-04-10\", \"speaker\": \"\\uc774\\uc0d8\\ud50c(SAMPLE)\", \"text_verbatim\": \"2026-04-10\"}, {\"box\": [333, 329, 513, 355], \"confidence\": 0.98, \"item_id\": \"d3\", \"kind\": \"date\", \"normalized\": \"2026-04-10\", \"speaker\": \"\\uae40\\uc0d8\\ud50c(SAMPLE)\", \"text_verbatim\": \"2026-04-10\"}, {\"box\": [24, 33, 193, 55], \"confidence\": 0.97, \"item_id\": \"p1\", \"kind\": \"party\", \"normalized\": \"\\uc774\\uc0d8\\ud50c\", \"speaker\": \"\\uc774\\uc0d8\\ud50c(SAMPLE)\", \"text_verbatim\": \"\\uc774\\uc0d8\\ud50c(SAMPLE)\"}, {\"box\": [310, 124, 474, 141], \"confidence\": 0.97, \"item_id\": \"p2\", \"kind\": \"party\", \"normalized\": \"\\uae40\\uc0d8\\ud50c\", \"speaker\": \"\\uae40\\uc0d8\\ud50c(SAMPLE)\", \"text_verbatim\": \"\\uae40\\uc0d8\\ud50c(SAMPLE)\"}]}",
+            "type": "output_text"
+          }
+        ],
+        "id": "msg_f978df68-9e9a-451c-9ece-4f91381a102e",
+        "phase": null,
+        "role": "assistant",
+        "status": "completed",
+        "type": "message"
+      }
+    ],
+    "parallel_tool_calls": true,
+    "previous_response_id": null,
+    "prompt": null,
+    "prompt_cache_diagnostics": null,
+    "prompt_cache_key": null,
+    "prompt_cache_options": null,
+    "prompt_cache_retention": null,
+    "reasoning": {
+      "context": null,
+      "effort": "minimal",
+      "generate_summary": null,
+      "mode": null,
+      "summary": null
+    },
+    "safety_identifier": null,
+    "service_tier": "auto",
+    "status": "completed",
+    "store": false,
+    "temperature": 1.0,
+    "text": {
+      "format": {
+        "description": null,
+        "name": "reading",
+        "schema_": {
+          "additionalProperties": false,
+          "properties": {
+            "evidence_id": {
+              "type": "string"
+            },
+            "items": {
+              "items": {
+                "additionalProperties": true,
+                "properties": {
+                  "box": {
+                    "items": {
+                      "type": "number"
+                    },
+                    "maxItems": 4,
+                    "minItems": 4,
+                    "type": "array"
+                  },
+                  "confidence": {
+                    "type": "number"
+                  },
+                  "item_id": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string"
+                  },
+                  "normalized": {
+                    "type": "string"
+                  },
+                  "speaker": {
+                    "type": "string"
+                  },
+                  "text_verbatim": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "item_id",
+                  "kind",
+                  "text_verbatim",
+                  "box"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "evidence_id",
+            "items"
+          ],
+          "type": "object"
+        },
+        "strict": false,
+        "type": "json_schema"
+      },
+      "verbosity": null
+    },
+    "tool_choice": "auto",
+    "tool_usage": null,
+    "tools": [],
+    "top_logprobs": 0,
+    "top_p": 1.0,
+    "truncation": "disabled",
+    "usage": {
+      "input_tokens": 862,
+      "input_tokens_details": {
+        "cache_write_tokens": null,
+        "cached_tokens": 0
+      },
+      "output_tokens": 1833,
+      "output_tokens_details": {
+        "reasoning_tokens": 445
+      },
+      "total_tokens": 2695
+    },
+    "user": null
+  },
+  "usage": {
+    "cached_input_tokens": 0,
+    "input_tokens": 862,
+    "output_tokens": 1833,
+    "reasoning_tokens": 445,
+    "total_tokens": 2695,
+    "video_frames_processed": 0
+  }
+}

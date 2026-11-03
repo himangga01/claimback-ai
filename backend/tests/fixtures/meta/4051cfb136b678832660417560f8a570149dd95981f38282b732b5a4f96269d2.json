@@ -1,0 +1,223 @@
+{
+  "latency_ms": 21303,
+  "request": {
+    "endpoint": "responses",
+    "model": "muse-spark-1.3",
+    "params": {
+      "max_output_tokens": 2000,
+      "store": false,
+      "text_format": {
+        "name": "reading",
+        "schema": {
+          "additionalProperties": false,
+          "properties": {
+            "evidence_id": {
+              "type": "string"
+            },
+            "items": {
+              "items": {
+                "additionalProperties": true,
+                "properties": {
+                  "box": {
+                    "items": {
+                      "type": "number"
+                    },
+                    "maxItems": 4,
+                    "minItems": 4,
+                    "type": "array"
+                  },
+                  "confidence": {
+                    "type": "number"
+                  },
+                  "item_id": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string"
+                  },
+                  "normalized": {
+                    "type": "string"
+                  },
+                  "speaker": {
+                    "type": "string"
+                  },
+                  "text_verbatim": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "item_id",
+                  "kind",
+                  "text_verbatim",
+                  "box"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "evidence_id",
+            "items"
+          ],
+          "type": "object"
+        },
+        "strict": false,
+        "type": "json_schema"
+      }
+    },
+    "payload": [
+      {
+        "content": [
+          {
+            "text": "Read every chat bubble or receipt field verbatim with its box. Return a Reading JSON: evidence_id, items[{item_id, kind, text_verbatim, normalized, box[x1,y1,x2,y2], speaker, confidence}]. kinds: utterance, amount, date, party.",
+            "type": "input_text"
+          },
+          {
+            "image_url": "sha256:94cd716fea722a596bd226de35e921701a324b4ca8f0fe85c49cada0efb61c72:image/png",
+            "type": "input_image"
+          }
+        ],
+        "role": "user"
+      }
+    ]
+  },
+  "response": {
+    "access_programs": null,
+    "background": false,
+    "completed_at": null,
+    "conversation": null,
+    "created_at": 1793674732.0,
+    "error": null,
+    "id": "resp_6ae94dec0766aff629534ed5",
+    "incomplete_details": {
+      "reason": "max_output_tokens"
+    },
+    "instructions": null,
+    "max_output_tokens": 2000,
+    "max_tool_calls": null,
+    "metadata": null,
+    "model": "muse-spark-1.3",
+    "moderation": null,
+    "object": "response",
+    "output": [
+      {
+        "content": null,
+        "encrypted_content": "<redacted>",
+        "id": "rs_6ae94dec0766aff629534ed5:rs_9c178fe1-a040-4c06-b9d9-4996fe0f27ad",
+        "status": "incomplete",
+        "summary": [],
+        "type": "reasoning"
+      }
+    ],
+    "parallel_tool_calls": true,
+    "previous_response_id": null,
+    "prompt": null,
+    "prompt_cache_diagnostics": null,
+    "prompt_cache_key": null,
+    "prompt_cache_options": null,
+    "prompt_cache_retention": null,
+    "reasoning": {
+      "context": null,
+      "effort": "high",
+      "generate_summary": null,
+      "mode": null,
+      "summary": null
+    },
+    "safety_identifier": null,
+    "service_tier": "auto",
+    "status": "incomplete",
+    "store": false,
+    "temperature": 1.0,
+    "text": {
+      "format": {
+        "description": null,
+        "name": "reading",
+        "schema_": {
+          "additionalProperties": false,
+          "properties": {
+            "evidence_id": {
+              "type": "string"
+            },
+            "items": {
+              "items": {
+                "additionalProperties": true,
+                "properties": {
+                  "box": {
+                    "items": {
+                      "type": "number"
+                    },
+                    "maxItems": 4,
+                    "minItems": 4,
+                    "type": "array"
+                  },
+                  "confidence": {
+                    "type": "number"
+                  },
+                  "item_id": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string"
+                  },
+                  "normalized": {
+                    "type": "string"
+                  },
+                  "speaker": {
+                    "type": "string"
+                  },
+                  "text_verbatim": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "item_id",
+                  "kind",
+                  "text_verbatim",
+                  "box"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "evidence_id",
+            "items"
+          ],
+          "type": "object"
+        },
+        "strict": false,
+        "type": "json_schema"
+      },
+      "verbosity": null
+    },
+    "tool_choice": "auto",
+    "tool_usage": null,
+    "tools": [],
+    "top_logprobs": 0,
+    "top_p": 1.0,
+    "truncation": "disabled",
+    "usage": {
+      "input_tokens": 851,
+      "input_tokens_details": {
+        "cache_write_tokens": null,
+        "cached_tokens": 739
+      },
+      "output_tokens": 2000,
+      "output_tokens_details": {
+        "reasoning_tokens": 1998
+      },
+      "total_tokens": 2851
+    },
+    "user": null
+  },
+  "usage": {
+    "cached_input_tokens": 739,
+    "input_tokens": 851,
+    "output_tokens": 2000,
+    "reasoning_tokens": 1998,
+    "total_tokens": 2851,
+    "video_frames_processed": 0
+  }
+}

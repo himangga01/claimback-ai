@@ -1,0 +1,179 @@
+{
+  "latency_ms": 4575,
+  "request": {
+    "endpoint": "responses",
+    "model": "muse-spark-1.3",
+    "params": {
+      "max_output_tokens": 2000,
+      "reasoning": {
+        "effort": "minimal"
+      },
+      "store": false,
+      "text_format": {
+        "name": "utterances",
+        "schema": {
+          "additionalProperties": false,
+          "properties": {
+            "utterances": {
+              "items": {
+                "additionalProperties": true,
+                "properties": {
+                  "text": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "text"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "utterances"
+          ],
+          "type": "object"
+        },
+        "strict": false,
+        "type": "json_schema"
+      }
+    },
+    "payload": [
+      {
+        "content": [
+          {
+            "text": "Watch this chat screen-recording and list each bubble's text.",
+            "type": "input_text"
+          },
+          {
+            "file_id": "file-1133810755768105",
+            "type": "input_file"
+          }
+        ],
+        "role": "user"
+      }
+    ]
+  },
+  "response": {
+    "access_programs": null,
+    "background": false,
+    "completed_at": 1793675301.0,
+    "conversation": null,
+    "created_at": 1793675301.0,
+    "error": null,
+    "id": "resp_6ae95025488f0d003e5e457e",
+    "incomplete_details": null,
+    "instructions": null,
+    "max_output_tokens": 2000,
+    "max_tool_calls": null,
+    "metadata": null,
+    "model": "muse-spark-1.3",
+    "moderation": null,
+    "object": "response",
+    "output": [
+      {
+        "content": null,
+        "encrypted_content": "<redacted>",
+        "id": "rs_6ae95025488f0d003e5e457e:rs_f2d5d8d0-644b-4d4f-b0a9-38bd361c04d4",
+        "status": "completed",
+        "summary": [],
+        "type": "reasoning"
+      },
+      {
+        "content": [
+          {
+            "annotations": [],
+            "logprobs": [],
+            "text": "{\"utterances\": [{\"text\": \"형, 5,000,000만 빌려줄 수 있어?\"}, {\"text\": \"응, 내일 보내줄게. 2026-01-01에 송금할게.\"}, {\"text\": \"고마워! 2026-04-10까지 꼭 갚겠다!\"}, {\"text\": \"2026-04-10 확인했어. 5,000,000 맞지?\"}, {\"text\": \"응, 010-0000-0000으로 연락줘.\"}]}",
+            "type": "output_text"
+          }
+        ],
+        "id": "msg_a9c55b52-d346-4a1e-a2a5-b48a9e85e5a4",
+        "phase": null,
+        "role": "assistant",
+        "status": "completed",
+        "type": "message"
+      }
+    ],
+    "parallel_tool_calls": true,
+    "previous_response_id": null,
+    "prompt": null,
+    "prompt_cache_diagnostics": null,
+    "prompt_cache_key": null,
+    "prompt_cache_options": null,
+    "prompt_cache_retention": null,
+    "reasoning": {
+      "context": null,
+      "effort": "minimal",
+      "generate_summary": null,
+      "mode": null,
+      "summary": null
+    },
+    "safety_identifier": null,
+    "service_tier": "auto",
+    "status": "completed",
+    "store": false,
+    "temperature": 1.0,
+    "text": {
+      "format": {
+        "description": null,
+        "name": "utterances",
+        "schema_": {
+          "additionalProperties": false,
+          "properties": {
+            "utterances": {
+              "items": {
+                "additionalProperties": true,
+                "properties": {
+                  "text": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "text"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "utterances"
+          ],
+          "type": "object"
+        },
+        "strict": false,
+        "type": "json_schema"
+      },
+      "verbosity": null
+    },
+    "tool_choice": "auto",
+    "tool_usage": null,
+    "tools": [],
+    "top_logprobs": 0,
+    "top_p": 1.0,
+    "truncation": "disabled",
+    "usage": {
+      "input_tokens": 592,
+      "input_tokens_details": {
+        "cache_write_tokens": null,
+        "cached_tokens": 0
+      },
+      "output_tokens": 540,
+      "output_tokens_details": {
+        "reasoning_tokens": 416
+      },
+      "total_tokens": 1132
+    },
+    "user": null
+  },
+  "usage": {
+    "cached_input_tokens": 0,
+    "input_tokens": 592,
+    "output_tokens": 540,
+    "reasoning_tokens": 416,
+    "total_tokens": 1132,
+    "video_frames_processed": 0
+  }
+}

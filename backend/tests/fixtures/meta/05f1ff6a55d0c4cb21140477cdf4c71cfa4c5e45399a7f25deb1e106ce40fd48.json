@@ -1,0 +1,80 @@
+{
+  "latency_ms": 682,
+  "request": {
+    "endpoint": "models.list",
+    "model": "",
+    "params": {},
+    "payload": {
+      "op": "list"
+    }
+  },
+  "response": {
+    "data": [
+      {
+        "created": 0,
+        "id": "sam-3.1",
+        "object": "model",
+        "owned_by": "meta",
+        "shutdown_date": null
+      },
+      {
+        "created": 0,
+        "id": "muse-spark-1.3-contributor",
+        "object": "model",
+        "owned_by": "meta",
+        "shutdown_date": null
+      },
+      {
+        "created": 0,
+        "id": "muse-voice-transcribe-1.0",
+        "object": "model",
+        "owned_by": "meta",
+        "shutdown_date": null
+      },
+      {
+        "created": 0,
+        "id": "muse-spark-1.3",
+        "object": "model",
+        "owned_by": "meta",
+        "shutdown_date": null
+      },
+      {
+        "created": 0,
+        "id": "muse-image-1.0",
+        "object": "model",
+        "owned_by": "meta",
+        "shutdown_date": null
+      },
+      {
+        "created": 0,
+        "id": "muse-spark-1.2-contributor",
+        "object": "model",
+        "owned_by": "meta",
+        "shutdown_date": null
+      },
+      {
+        "created": 0,
+        "id": "muse-spark-1.2",
+        "object": "model",
+        "owned_by": "meta",
+        "shutdown_date": null
+      },
+      {
+        "created": 0,
+        "id": "muse-spark-1.1",
+        "object": "model",
+        "owned_by": "meta",
+        "shutdown_date": null
+      }
+    ],
+    "object": "list"
+  },
+  "usage": {
+    "cached_input_tokens": 0,
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "reasoning_tokens": 0,
+    "total_tokens": 0,
+    "video_frames_processed": 0
+  }
+}

@@ -1,0 +1,239 @@
+{
+  "latency_ms": 9297,
+  "request": {
+    "endpoint": "responses",
+    "model": "muse-spark-1.1",
+    "params": {
+      "max_output_tokens": 4000,
+      "reasoning": {
+        "effort": "minimal"
+      },
+      "store": false,
+      "text_format": {
+        "name": "reading",
+        "schema": {
+          "additionalProperties": false,
+          "properties": {
+            "evidence_id": {
+              "type": "string"
+            },
+            "items": {
+              "items": {
+                "additionalProperties": true,
+                "properties": {
+                  "box": {
+                    "items": {
+                      "type": "number"
+                    },
+                    "maxItems": 4,
+                    "minItems": 4,
+                    "type": "array"
+                  },
+                  "confidence": {
+                    "type": "number"
+                  },
+                  "item_id": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string"
+                  },
+                  "normalized": {
+                    "type": "string"
+                  },
+                  "speaker": {
+                    "type": "string"
+                  },
+                  "text_verbatim": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "item_id",
+                  "kind",
+                  "text_verbatim",
+                  "box"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "evidence_id",
+            "items"
+          ],
+          "type": "object"
+        },
+        "strict": false,
+        "type": "json_schema"
+      }
+    },
+    "payload": [
+      {
+        "content": [
+          {
+            "text": "[P8-muse-spark-1.1-0] Read every chat bubble or receipt field verbatim with its box. Return a Reading JSON: evidence_id, items[{item_id, kind, text_verbatim, normalized, box[x1,y1,x2,y2], speaker, confidence}]. kinds: utterance, amount, date, party. Boxes must be tight around each item.",
+            "type": "input_text"
+          },
+          {
+            "image_url": "sha256:94cd716fea722a596bd226de35e921701a324b4ca8f0fe85c49cada0efb61c72:image/png",
+            "type": "input_image"
+          }
+        ],
+        "role": "user"
+      }
+    ]
+  },
+  "response": {
+    "access_programs": null,
+    "background": false,
+    "completed_at": 1793675211.0,
+    "conversation": null,
+    "created_at": 1793675211.0,
+    "error": null,
+    "id": "resp_6ae94fcbba66bb3b830d429d",
+    "incomplete_details": null,
+    "instructions": null,
+    "max_output_tokens": 4000,
+    "max_tool_calls": null,
+    "metadata": null,
+    "model": "muse-spark-1.1",
+    "moderation": null,
+    "object": "response",
+    "output": [
+      {
+        "content": null,
+        "encrypted_content": "<redacted>",
+        "id": "rs_6ae94fcbba66bb3b830d429d:rs_1caee000-266d-4866-9b5a-daa2928271a6",
+        "status": "completed",
+        "summary": [],
+        "type": "reasoning"
+      },
+      {
+        "content": [
+          {
+            "annotations": [],
+            "logprobs": [],
+            "text": "{\n  \"evidence_id\": \"P8-muse-spark-1.1-0\",\n  \"items\": [\n    {\n      \"box\": [\n        24,\n        40,\n        195,\n        57\n      ],\n      \"confidence\": 0.99,\n      \"item_id\": \"party_01\",\n      \"kind\": \"party\",\n      \"normalized\": \"\\uc774\\uc0d8\\ud50c\",\n      \"speaker\": \"\\uc774\\uc0d8\\ud50c(SAMPLE)\",\n      \"text_verbatim\": \"\\uc774\\uc0d8\\ud50c(SAMPLE)\"\n    },\n    {\n      \"box\": [\n        26,\n        64,\n        570,\n        113\n      ],\n      \"confidence\": 0.99,\n      \"item_id\": \"utt_01\",\n      \"kind\": \"utterance\",\n      \"normalized\": \"\\ud615, 5,000,000\\uc6d0\\ub9cc \\ube4c\\ub824\\uc904 \\uc218 \\uc788\\uc5b4?\",\n      \"speaker\": \"\\uc774\\uc0d8\\ud50c(SAMPLE)\",\n      \"text_verbatim\": \"\\ud615, 5,000,000\\uc6d0\\ub9cc \\ube4c\\ub824\\uc904 \\uc218 \\uc788\\uc5b4?\"\n    },\n    {\n      \"box\": [\n        135,\n        75,\n        359,\n        100\n      ],\n      \"confidence\": 0.99,\n      \"item_id\": \"amount_01\",\n      \"kind\": \"amount\",\n      \"normalized\": \"5000000\",\n      \"speaker\": \"\\uc774\\uc0d8\\ud50c(SAMPLE)\",\n      \"text_verbatim\": \"5,000,000\\uc6d0\"\n    },\n    {\n      \"box\": [\n        314,\n        127,\n        482,\n        144\n      ],\n      \"confidence\": 0.99,\n      \"item_id\": \"party_02\",\n      \"kind\": \"party\",\n      \"normalized\": \"\\uae40\\uc0d8\\ud50c\",\n      \"speaker\": \"\\uae40\\uc0d8\\ud50c(SAMPLE)\",\n      \"text_verbatim\": \"\\uae40\\uc0d8\\ud50c(SAMPLE)\"\n    },\n    {\n      \"box\": [\n        310,\n        149,\n        977,\n        195\n      ],\n      \"confidence\": 0.99,\n      \"item_id\": \"utt_02\",\n      \"kind\": \"utterance\",\n      \"normalized\": \"\\uc751, \\ub0b4\\uc77c \\ubcf4\\ub0b4\\uc904\\uac8c. 2026-01-01\\uc5d0 \\uc1a1\\uae08\\ud560\\uac8c.\",\n      \"speaker\": \"\\uae40\\uc0d8\\ud50c(SAMPLE)\",\n      \"text_verbatim\": \"\\uc751, \\ub0b4\\uc77c \\ubcf4\\ub0b4\\uc904\\uac8c. 2026-01-01\\uc5d0 \\uc1a1\\uae08\\ud560\\uac8c.\"\n    },\n    {\n      \"box\": [\n        593,\n        155,\n        780,\n        180\n      ],\n      \"confidence\": 0.99,\n      \"item_id\": \"date_01\",\n      \"kind\": \"date\",\n      \"normalized\": \"2026-01-01\",\n      \"speaker\": \"\\uae40\\uc0d8\\ud50c(SAMPLE)\",\n      \"text_verbatim\": \"2026-01-01\"\n    },\n    {\n      \"box\": [\n        24,\n        205,\n        195,\n        221\n      ],\n      \"confidence\": 0.99,\n      \"item_id\": \"party_03\",\n      \"kind\": \"party\",\n      \"normalized\": \"\\uc774\\uc0d8\\ud50c\",\n      \"speaker\": \"\\uc774\\uc0d8\\ud50c(SAMPLE)\",\n      \"text_verbatim\": \"\\uc774\\uc0d8\\ud50c(SAMPLE)\"\n    },\n    {\n      \"box\": [\n        26,\n        235,\n        590,\n        284\n      ],\n      \"confidence\": 0.99,\n      \"item_id\": \"utt_03\",\n      \"kind\": \"utterance\",\n      \"normalized\": \"\\uace0\\ub9c8\\uc6cc! 2026-04-10\\uae4c\\uc9c0 \\uaf2d \\uac1a\\uaca0\\ub2e4!\",\n      \"speaker\": \"\\uc774\\uc0d8\\ud50c(SAMPLE)\",\n      \"text_verbatim\": \"\\uace0\\ub9c8\\uc6cc! 2026-04-10\\uae4c\\uc9c0 \\uaf2d \\uac1a\\uaca0\\ub2e4!\"\n    },\n    {\n      \"box\": [\n        213,\n        243,\n        398,\n        269\n      ],\n      \"confidence\": 0.99,\n      \"item_id\": \"date_02\",\n      \"kind\": \"date\",\n      \"normalized\": \"2026-04-10\",\n      \"speaker\": \"\\uc774\\uc0d8\\ud50c(SAMPLE)\",\n      \"text_verbatim\": \"2026-04-10\"\n    },\n    {\n      \"box\": [\n        316,\n        284,\n        480,\n        300\n      ],\n      \"confidence\": 0.99,\n      \"item_id\": \"party_04\",\n      \"kind\": \"party\",\n      \"normalized\": \"\\uae40\\uc0d8\\ud50c\",\n      \"speaker\": \"\\uae40\\uc0d8\\ud50c(SAMPLE)\",\n      \"text_verbatim\": \"\\uae40\\uc0d8\\ud50c(SAMPLE)\"\n    },\n    {\n      \"box\": [\n        315,\n        309,\n        977,\n        357\n      ],\n      \"confidence\": 0.99,\n      \"item_id\": \"utt_04\",\n      \"kind\": \"utterance\",\n      \"normalized\": \"2026-04-10 \\ud655\\uc778\\ud588\\uc5b4. 5,000,000\\uc6d0 \\ub9de\\uc9c0?\",\n      \"speaker\": \"\\uae40\\uc0d8\\ud50c(SAMPLE)\",\n      \"text_verbatim\": \"2026-04-10 \\ud655\\uc778\\ud588\\uc5b4. 5,000,000\\uc6d0 \\ub9de\\uc9c0?\"\n    },\n    {\n      \"box\": [\n        338,\n        318,\n        496,\n        344\n      ],\n      \"confidence\": 0.99,\n      \"item_id\": \"date_03\",\n      \"kind\": \"date\",\n      \"normalized\": \"2026-04-10\",\n      \"speaker\": \"\\uae40\\uc0d8\\ud50c(SAMPLE)\",\n      \"text_verbatim\": \"2026-04-10\"\n    },\n    {\n      \"box\": [\n        664,\n        318,\n        869,\n        345\n      ],\n      \"confidence\": 0.99,\n      \"item_id\": \"amount_02\",\n      \"kind\": \"amount\",\n      \"normalized\": \"5000000\",\n      \"speaker\": \"\\uae40\\uc0d8\\ud50c(SAMPLE)\",\n      \"text_verbatim\": \"5,000,000\\uc6d0\"\n    },\n    {\n      \"box\": [\n        24,\n        365,\n        195,\n        383\n      ],\n      \"confidence\": 0.99,\n      \"item_id\": \"party_05\",\n      \"kind\": \"party\",\n      \"normalized\": \"\\uc774\\uc0d8\\ud50c\",\n      \"speaker\": \"\\uc774\\uc0d8\\ud50c(SAMPLE)\",\n      \"text_verbatim\": \"\\uc774\\uc0d8\\ud50c(SAMPLE)\"\n    },\n    {\n      \"box\": [\n        26,\n        390,\n        538,\n        439\n      ],\n      \"confidence\": 0.99,\n      \"item_id\": \"utt_05\",\n      \"kind\": \"utterance\",\n      \"normalized\": \"\\uc751, 010-0000-0000\\uc73c\\ub85c \\uc5f0\\ub77d\\uc918.\",\n      \"speaker\": \"\\uc774\\uc0d8\\ud50c(SAMPLE)\",\n      \"text_verbatim\": \"\\uc751, 010-0000-0000\\uc73c\\ub85c \\uc5f0\\ub77d\\uc918.\"\n    },\n    {\n      \"box\": [\n        94,\n        401,\n        351,\n        427\n      ],\n      \"confidence\": 0.98,\n      \"item_id\": \"party_06\",\n      \"kind\": \"party\",\n      \"normalized\": \"010-0000-0000\",\n      \"speaker\": \"\\uc774\\uc0d8\\ud50c(SAMPLE)\",\n      \"text_verbatim\": \"010-0000-0000\"\n    },\n    {\n      \"box\": [\n        23,\n        966,\n        390,\n        986\n      ],\n      \"confidence\": 0.95,\n      \"item_id\": \"party_07\",\n      \"kind\": \"party\",\n      \"normalized\": \"010-0000-0000\",\n      \"speaker\": \"system\",\n      \"text_verbatim\": \"010-0000-0000  SAMPLE / \\ub370\\ubaa8\\uc6a9\"\n    }\n  ]\n}",
+            "type": "output_text"
+          }
+        ],
+        "id": "msg_4f9d6de5-62cf-4fb3-a4b7-67b7e5d806b5",
+        "phase": null,
+        "role": "assistant",
+        "status": "completed",
+        "type": "message"
+      }
+    ],
+    "parallel_tool_calls": true,
+    "previous_response_id": null,
+    "prompt": null,
+    "prompt_cache_diagnostics": null,
+    "prompt_cache_key": null,
+    "prompt_cache_options": null,
+    "prompt_cache_retention": null,
+    "reasoning": {
+      "context": null,
+      "effort": "minimal",
+      "generate_summary": null,
+      "mode": null,
+      "summary": null
+    },
+    "safety_identifier": null,
+    "service_tier": "auto",
+    "status": "completed",
+    "store": false,
+    "temperature": 1.0,
+    "text": {
+      "format": {
+        "description": null,
+        "name": "reading",
+        "schema_": {
+          "additionalProperties": false,
+          "properties": {
+            "evidence_id": {
+              "type": "string"
+            },
+            "items": {
+              "items": {
+                "additionalProperties": true,
+                "properties": {
+                  "box": {
+                    "items": {
+                      "type": "number"
+                    },
+                    "maxItems": 4,
+                    "minItems": 4,
+                    "type": "array"
+                  },
+                  "confidence": {
+                    "type": "number"
+                  },
+                  "item_id": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string"
+                  },
+                  "normalized": {
+                    "type": "string"
+                  },
+                  "speaker": {
+                    "type": "string"
+                  },
+                  "text_verbatim": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "item_id",
+                  "kind",
+                  "text_verbatim",
+                  "box"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "evidence_id",
+            "items"
+          ],
+          "type": "object"
+        },
+        "strict": false,
+        "type": "json_schema"
+      },
+      "verbosity": null
+    },
+    "tool_choice": "auto",
+    "tool_usage": null,
+    "tools": [],
+    "top_logprobs": 0,
+    "top_p": 1.0,
+    "truncation": "disabled",
+    "usage": {
+      "input_tokens": 872,
+      "input_tokens_details": {
+        "cache_write_tokens": null,
+        "cached_tokens": 0
+      },
+      "output_tokens": 3180,
+      "output_tokens_details": {
+        "reasoning_tokens": 1020
+      },
+      "total_tokens": 4052
+    },
+    "user": null
+  },
+  "usage": {
+    "cached_input_tokens": 0,
+    "input_tokens": 872,
+    "output_tokens": 3180,
+    "reasoning_tokens": 1020,
+    "total_tokens": 4052,
+    "video_frames_processed": 0
+  }
+}

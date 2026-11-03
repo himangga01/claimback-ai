@@ -1,0 +1,239 @@
+{
+  "latency_ms": 13228,
+  "request": {
+    "endpoint": "responses",
+    "model": "muse-spark-1.3",
+    "params": {
+      "max_output_tokens": 4000,
+      "reasoning": {
+        "effort": "minimal"
+      },
+      "store": false,
+      "text_format": {
+        "name": "reading",
+        "schema": {
+          "additionalProperties": false,
+          "properties": {
+            "evidence_id": {
+              "type": "string"
+            },
+            "items": {
+              "items": {
+                "additionalProperties": true,
+                "properties": {
+                  "box": {
+                    "items": {
+                      "type": "number"
+                    },
+                    "maxItems": 4,
+                    "minItems": 4,
+                    "type": "array"
+                  },
+                  "confidence": {
+                    "type": "number"
+                  },
+                  "item_id": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string"
+                  },
+                  "normalized": {
+                    "type": "string"
+                  },
+                  "speaker": {
+                    "type": "string"
+                  },
+                  "text_verbatim": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "item_id",
+                  "kind",
+                  "text_verbatim",
+                  "box"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "evidence_id",
+            "items"
+          ],
+          "type": "object"
+        },
+        "strict": false,
+        "type": "json_schema"
+      }
+    },
+    "payload": [
+      {
+        "content": [
+          {
+            "text": "[P2] Read every chat bubble or receipt field verbatim with its box. Return a Reading JSON: evidence_id, items[{item_id, kind, text_verbatim, normalized, box[x1,y1,x2,y2], speaker, confidence}]. kinds: utterance, amount, date, party. Boxes must be tight around each item.",
+            "type": "input_text"
+          },
+          {
+            "image_url": "sha256:7ddafd1d913d5b01751b652d452e939c26abe1d7148e2936843165deb2792fbe:image/png",
+            "type": "input_image"
+          }
+        ],
+        "role": "user"
+      }
+    ]
+  },
+  "response": {
+    "access_programs": null,
+    "background": false,
+    "completed_at": 1793675181.0,
+    "conversation": null,
+    "created_at": 1793675181.0,
+    "error": null,
+    "id": "resp_6ae94fadff078044dfc84d63",
+    "incomplete_details": null,
+    "instructions": null,
+    "max_output_tokens": 4000,
+    "max_tool_calls": null,
+    "metadata": null,
+    "model": "muse-spark-1.3",
+    "moderation": null,
+    "object": "response",
+    "output": [
+      {
+        "content": null,
+        "encrypted_content": "<redacted>",
+        "id": "rs_6ae94fadff078044dfc84d63:rs_6eb998ad-60af-4a48-9032-13d7662c73f5",
+        "status": "completed",
+        "summary": [],
+        "type": "reasoning"
+      },
+      {
+        "content": [
+          {
+            "annotations": [],
+            "logprobs": [],
+            "text": "{\"evidence_id\": \"p2_sample_transfer_001\", \"items\": [{\"box\": [12, 6, 328, 30], \"confidence\": 0.99, \"item_id\": \"r01_header_top\", \"kind\": \"utterance\", \"normalized\": \"샘플톡 SAMPLE / 데모용\", \"speaker\": \"receipt\", \"text_verbatim\": \"샘플톡 SAMPLE / 데모용\"}, {\"box\": [36, 73, 215, 113], \"confidence\": 0.99, \"item_id\": \"r02_bank\", \"kind\": \"party\", \"normalized\": \"샘플은행\", \"speaker\": \"receipt\", \"text_verbatim\": \"샘플은행\"}, {\"box\": [36, 122, 290, 155], \"confidence\": 0.99, \"item_id\": \"r03_title\", \"kind\": \"utterance\", \"normalized\": \"계좌이체확인증\", \"speaker\": \"receipt\", \"text_verbatim\": \"계좌이체확인증\"}, {\"box\": [45, 211, 173, 239], \"confidence\": 0.97, \"item_id\": \"r04_label_sender\", \"kind\": \"utterance\", \"normalized\": \"보낸 사람\", \"speaker\": \"receipt\", \"text_verbatim\": \"보낸 사람\"}, {\"box\": [295, 207, 556, 239], \"confidence\": 0.98, \"item_id\": \"r05_sender_name\", \"kind\": \"party\", \"normalized\": \"김샘플(SAMPLE)\", \"speaker\": \"receipt\", \"text_verbatim\": \"김샘플(SAMPLE)\"}, {\"box\": [45, 275, 173, 303], \"confidence\": 0.97, \"item_id\": \"r06_label_receiver\", \"kind\": \"utterance\", \"normalized\": \"받는 사람\", \"speaker\": \"receipt\", \"text_verbatim\": \"받는 사람\"}, {\"box\": [295, 271, 557, 303], \"confidence\": 0.98, \"item_id\": \"r07_receiver_name\", \"kind\": \"party\", \"normalized\": \"이샘플(SAMPLE)\", \"speaker\": \"receipt\", \"text_verbatim\": \"이샘플(SAMPLE)\"}, {\"box\": [43, 338, 108, 368], \"confidence\": 0.97, \"item_id\": \"r08_label_amount\", \"kind\": \"utterance\", \"normalized\": \"금액\", \"speaker\": \"receipt\", \"text_verbatim\": \"금액\"}, {\"box\": [295, 336, 493, 370], \"confidence\": 0.99, \"item_id\": \"r09_amount\", \"kind\": \"amount\", \"normalized\": \"5,000,000원\", \"speaker\": \"receipt\", \"text_verbatim\": \"5,000,000원\"}, {\"box\": [45, 406, 134, 433], \"confidence\": 0.97, \"item_id\": \"r10_label_date\", \"kind\": \"utterance\", \"normalized\": \"이체일\", \"speaker\": \"receipt\", \"text_verbatim\": \"이체일\"}, {\"box\": [295, 403, 481, 432], \"confidence\": 0.99, \"item_id\": \"r11_date\", \"kind\": \"date\", \"normalized\": \"2026-01-01\", \"speaker\": \"receipt\", \"text_verbatim\": \"2026-01-01\"}, {\"box\": [45, 471, 159, 499], \"confidence\": 0.97, \"item_id\": \"r12_label_account\", \"kind\": \"utterance\", \"normalized\": \"출금계좌\", \"speaker\": \"receipt\", \"text_verbatim\": \"출금계좌\"}, {\"box\": [296, 470, 568, 497], \"confidence\": 0.95, \"item_id\": \"r13_account\", \"kind\": \"utterance\", \"normalized\": \"******-**-000000\", \"speaker\": \"receipt\", \"text_verbatim\": \"******-**-000000\"}, {\"box\": [47, 534, 132, 562], \"confidence\": 0.97, \"item_id\": \"r14_label_contact\", \"kind\": \"utterance\", \"normalized\": \"연락처\", \"speaker\": \"receipt\", \"text_verbatim\": \"연락처\"}, {\"box\": [294, 533, 548, 563], \"confidence\": 0.99, \"item_id\": \"r15_contact\", \"kind\": \"utterance\", \"normalized\": \"010-0000-0000\", \"speaker\": \"receipt\", \"text_verbatim\": \"010-0000-0000\"}, {\"box\": [35, 621, 254, 646], \"confidence\": 0.99, \"item_id\": \"r16_footer\", \"kind\": \"utterance\", \"normalized\": \"SAMPLE / 데모용\", \"speaker\": \"receipt\", \"text_verbatim\": \"SAMPLE / 데모용\"}]}",
+            "type": "output_text"
+          }
+        ],
+        "id": "msg_8b6f19f2-98c1-4952-9b02-84f07687e9cc",
+        "phase": null,
+        "role": "assistant",
+        "status": "completed",
+        "type": "message"
+      }
+    ],
+    "parallel_tool_calls": true,
+    "previous_response_id": null,
+    "prompt": null,
+    "prompt_cache_diagnostics": null,
+    "prompt_cache_key": null,
+    "prompt_cache_options": null,
+    "prompt_cache_retention": null,
+    "reasoning": {
+      "context": null,
+      "effort": "minimal",
+      "generate_summary": null,
+      "mode": null,
+      "summary": null
+    },
+    "safety_identifier": null,
+    "service_tier": "auto",
+    "status": "completed",
+    "store": false,
+    "temperature": 1.0,
+    "text": {
+      "format": {
+        "description": null,
+        "name": "reading",
+        "schema_": {
+          "additionalProperties": false,
+          "properties": {
+            "evidence_id": {
+              "type": "string"
+            },
+            "items": {
+              "items": {
+                "additionalProperties": true,
+                "properties": {
+                  "box": {
+                    "items": {
+                      "type": "number"
+                    },
+                    "maxItems": 4,
+                    "minItems": 4,
+                    "type": "array"
+                  },
+                  "confidence": {
+                    "type": "number"
+                  },
+                  "item_id": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string"
+                  },
+                  "normalized": {
+                    "type": "string"
+                  },
+                  "speaker": {
+                    "type": "string"
+                  },
+                  "text_verbatim": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "item_id",
+                  "kind",
+                  "text_verbatim",
+                  "box"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "evidence_id",
+            "items"
+          ],
+          "type": "object"
+        },
+        "strict": false,
+        "type": "json_schema"
+      },
+      "verbosity": null
+    },
+    "tool_choice": "auto",
+    "tool_usage": null,
+    "tools": [],
+    "top_logprobs": 0,
+    "top_p": 1.0,
+    "truncation": "disabled",
+    "usage": {
+      "input_tokens": 747,
+      "input_tokens_details": {
+        "cache_write_tokens": null,
+        "cached_tokens": 0
+      },
+      "output_tokens": 1652,
+      "output_tokens_details": {
+        "reasoning_tokens": 553
+      },
+      "total_tokens": 2399
+    },
+    "user": null
+  },
+  "usage": {
+    "cached_input_tokens": 0,
+    "input_tokens": 747,
+    "output_tokens": 1652,
+    "reasoning_tokens": 553,
+    "total_tokens": 2399,
+    "video_frames_processed": 0
+  }
+}

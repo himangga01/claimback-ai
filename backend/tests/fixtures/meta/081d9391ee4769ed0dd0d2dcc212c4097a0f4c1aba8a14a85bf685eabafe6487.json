@@ -1,0 +1,239 @@
+{
+  "latency_ms": 3349,
+  "request": {
+    "endpoint": "responses",
+    "model": "muse-spark-1.2",
+    "params": {
+      "max_output_tokens": 4000,
+      "reasoning": {
+        "effort": "minimal"
+      },
+      "store": false,
+      "text_format": {
+        "name": "reading",
+        "schema": {
+          "additionalProperties": false,
+          "properties": {
+            "evidence_id": {
+              "type": "string"
+            },
+            "items": {
+              "items": {
+                "additionalProperties": true,
+                "properties": {
+                  "box": {
+                    "items": {
+                      "type": "number"
+                    },
+                    "maxItems": 4,
+                    "minItems": 4,
+                    "type": "array"
+                  },
+                  "confidence": {
+                    "type": "number"
+                  },
+                  "item_id": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string"
+                  },
+                  "normalized": {
+                    "type": "string"
+                  },
+                  "speaker": {
+                    "type": "string"
+                  },
+                  "text_verbatim": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "item_id",
+                  "kind",
+                  "text_verbatim",
+                  "box"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "evidence_id",
+            "items"
+          ],
+          "type": "object"
+        },
+        "strict": false,
+        "type": "json_schema"
+      }
+    },
+    "payload": [
+      {
+        "content": [
+          {
+            "text": "[P8-muse-spark-1.2-1] Read every chat bubble or receipt field verbatim with its box. Return a Reading JSON: evidence_id, items[{item_id, kind, text_verbatim, normalized, box[x1,y1,x2,y2], speaker, confidence}]. kinds: utterance, amount, date, party. Boxes must be tight around each item.",
+            "type": "input_text"
+          },
+          {
+            "image_url": "sha256:94cd716fea722a596bd226de35e921701a324b4ca8f0fe85c49cada0efb61c72:image/png",
+            "type": "input_image"
+          }
+        ],
+        "role": "user"
+      }
+    ]
+  },
+  "response": {
+    "access_programs": null,
+    "background": false,
+    "completed_at": 1793675228.0,
+    "conversation": null,
+    "created_at": 1793675228.0,
+    "error": null,
+    "id": "resp_6ae94fdcf594f2f9c4034859",
+    "incomplete_details": null,
+    "instructions": null,
+    "max_output_tokens": 4000,
+    "max_tool_calls": null,
+    "metadata": null,
+    "model": "muse-spark-1.2",
+    "moderation": null,
+    "object": "response",
+    "output": [
+      {
+        "content": null,
+        "encrypted_content": "<redacted>",
+        "id": "rs_6ae94fdcf594f2f9c4034859:rs_a770e51b-f57b-490a-9b94-f443c58a7aaf",
+        "status": "completed",
+        "summary": [],
+        "type": "reasoning"
+      },
+      {
+        "content": [
+          {
+            "annotations": [],
+            "logprobs": [],
+            "text": "{\"evidence_id\":\"P8-muse-spark-1.2-1\",\"items\":[{\"box\":[24,63,571,111],\"confidence\":0.99,\"item_id\":\"1\",\"kind\":\"utterance\",\"normalized\":\"형, 5,000,000원만 빌려줄 수 있어?\",\"speaker\":\"이샘플(SAMPLE)\",\"text_verbatim\":\"형, 5,000,000원만 빌려줄 수 있어?\"},{\"box\":[98,76,271,97],\"confidence\":0.99,\"item_id\":\"1-amount-1\",\"kind\":\"amount\",\"normalized\":\"5000000\",\"speaker\":\"이샘플(SAMPLE)\",\"text_verbatim\":\"5,000,000원\"},{\"box\":[309,145,977,194],\"confidence\":0.99,\"item_id\":\"2\",\"kind\":\"utterance\",\"normalized\":\"응, 내일 보내줄게. 2026-01-01에 송금할게.\",\"speaker\":\"김샘플(SAMPLE)\",\"text_verbatim\":\"응, 내일 보내줄게. 2026-01-01에 송금할게.\"},{\"box\":[661,157,817,180],\"confidence\":0.99,\"item_id\":\"2-date-1\",\"kind\":\"date\",\"normalized\":\"2026-01-01\",\"speaker\":\"김샘플(SAMPLE)\",\"text_verbatim\":\"2026-01-01\"},{\"box\":[24,226,592,276],\"confidence\":0.99,\"item_id\":\"3\",\"kind\":\"utterance\",\"normalized\":\"고마워! 2026-04-10까지 꼭 갚겠다!\",\"speaker\":\"이샘플(SAMPLE)\",\"text_verbatim\":\"고마워! 2026-04-10까지 꼭 갚겠다!\"},{\"box\":[149,238,326,262],\"confidence\":0.99,\"item_id\":\"3-date-1\",\"kind\":\"date\",\"normalized\":\"2026-04-10\",\"speaker\":\"이샘플(SAMPLE)\",\"text_verbatim\":\"2026-04-10\"},{\"box\":[315,308,978,358],\"confidence\":0.99,\"item_id\":\"4\",\"kind\":\"utterance\",\"normalized\":\"2026-04-10 확인했어. 5,000,000원 맞지?\",\"speaker\":\"김샘플(SAMPLE)\",\"text_verbatim\":\"2026-04-10 확인했어. 5,000,000원 맞지?\"},{\"box\":[333,320,493,342],\"confidence\":0.99,\"item_id\":\"4-date-1\",\"kind\":\"date\",\"normalized\":\"2026-04-10\",\"speaker\":\"김샘플(SAMPLE)\",\"text_verbatim\":\"2026-04-10\"},{\"box\":[696,320,821,342],\"confidence\":0.99,\"item_id\":\"4-amount-1\",\"kind\":\"amount\",\"normalized\":\"5000000\",\"speaker\":\"김샘플(SAMPLE)\",\"text_verbatim\":\"5,000,000원\"},{\"box\":[24,390,539,439],\"confidence\":0.99,\"item_id\":\"5\",\"kind\":\"utterance\",\"normalized\":\"응, 010-0000-0000으로 연락줘.\",\"speaker\":\"이샘플(SAMPLE)\",\"text_verbatim\":\"응, 010-0000-0000으로 연락줘.\"},{\"box\":[22,39,153,58],\"confidence\":0.98,\"item_id\":\"p1\",\"kind\":\"party\",\"normalized\":\"이샘플(SAMPLE)\",\"speaker\":\"이샘플(SAMPLE)\",\"text_verbatim\":\"이샘플(SAMPLE)\"},{\"box\":[311,125,476,142],\"confidence\":0.98,\"item_id\":\"p2\",\"kind\":\"party\",\"normalized\":\"김샘플(SAMPLE)\",\"speaker\":\"김샘플(SAMPLE)\",\"text_verbatim\":\"김샘플(SAMPLE)\"}]}",
+            "type": "output_text"
+          }
+        ],
+        "id": "msg_8f8284d4-3dc7-4c2c-ab08-a784d9b60d19",
+        "phase": null,
+        "role": "assistant",
+        "status": "completed",
+        "type": "message"
+      }
+    ],
+    "parallel_tool_calls": true,
+    "previous_response_id": null,
+    "prompt": null,
+    "prompt_cache_diagnostics": null,
+    "prompt_cache_key": null,
+    "prompt_cache_options": null,
+    "prompt_cache_retention": null,
+    "reasoning": {
+      "context": null,
+      "effort": "minimal",
+      "generate_summary": null,
+      "mode": null,
+      "summary": null
+    },
+    "safety_identifier": null,
+    "service_tier": "auto",
+    "status": "completed",
+    "store": false,
+    "temperature": 1.0,
+    "text": {
+      "format": {
+        "description": null,
+        "name": "reading",
+        "schema_": {
+          "additionalProperties": false,
+          "properties": {
+            "evidence_id": {
+              "type": "string"
+            },
+            "items": {
+              "items": {
+                "additionalProperties": true,
+                "properties": {
+                  "box": {
+                    "items": {
+                      "type": "number"
+                    },
+                    "maxItems": 4,
+                    "minItems": 4,
+                    "type": "array"
+                  },
+                  "confidence": {
+                    "type": "number"
+                  },
+                  "item_id": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string"
+                  },
+                  "normalized": {
+                    "type": "string"
+                  },
+                  "speaker": {
+                    "type": "string"
+                  },
+                  "text_verbatim": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "item_id",
+                  "kind",
+                  "text_verbatim",
+                  "box"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "evidence_id",
+            "items"
+          ],
+          "type": "object"
+        },
+        "strict": false,
+        "type": "json_schema"
+      },
+      "verbosity": null
+    },
+    "tool_choice": "auto",
+    "tool_usage": null,
+    "tools": [],
+    "top_logprobs": 0,
+    "top_p": 1.0,
+    "truncation": "disabled",
+    "usage": {
+      "input_tokens": 872,
+      "input_tokens_details": {
+        "cache_write_tokens": null,
+        "cached_tokens": 0
+      },
+      "output_tokens": 1357,
+      "output_tokens_details": {
+        "reasoning_tokens": 547
+      },
+      "total_tokens": 2229
+    },
+    "user": null
+  },
+  "usage": {
+    "cached_input_tokens": 0,
+    "input_tokens": 872,
+    "output_tokens": 1357,
+    "reasoning_tokens": 547,
+    "total_tokens": 2229,
+    "video_frames_processed": 0
+  }
+}

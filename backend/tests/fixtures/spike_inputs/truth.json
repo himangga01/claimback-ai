@@ -1,0 +1,298 @@
+{
+  "chat_capture.png": {
+    "file": "chat_capture.png",
+    "size": [
+      640,
+      960
+    ],
+    "bubbles": [
+      {
+        "id": 0,
+        "box": [
+          16,
+          60,
+          364,
+          105
+        ],
+        "speaker": "이샘플(SAMPLE)",
+        "text": "형, 5,000,000원만 빌려줄 수 있어?"
+      },
+      {
+        "id": 1,
+        "box": [
+          198,
+          139,
+          624,
+          184
+        ],
+        "speaker": "김샘플(SAMPLE)",
+        "text": "응, 내일 보내줄게. 2026-01-01에 송금할게."
+      },
+      {
+        "id": 2,
+        "box": [
+          16,
+          218,
+          376,
+          263
+        ],
+        "speaker": "이샘플(SAMPLE)",
+        "text": "고마워! 2026-04-10까지 꼭 갚겠다!"
+      },
+      {
+        "id": 3,
+        "box": [
+          202,
+          297,
+          624,
+          342
+        ],
+        "speaker": "김샘플(SAMPLE)",
+        "text": "2026-04-10 확인했어. 5,000,000원 맞지?"
+      },
+      {
+        "id": 4,
+        "box": [
+          16,
+          376,
+          343,
+          421
+        ],
+        "speaker": "이샘플(SAMPLE)",
+        "text": "응, 010-0000-0000으로 연락줘."
+      }
+    ],
+    "amounts": [
+      {
+        "box": [
+          60,
+          70,
+          183,
+          91
+        ],
+        "value": "5,000,000원",
+        "normalized": "5000000",
+        "bubble_id": 0
+      },
+      {
+        "box": [
+          432,
+          307,
+          555,
+          328
+        ],
+        "value": "5,000,000원",
+        "normalized": "5000000",
+        "bubble_id": 3
+      }
+    ],
+    "dates": [
+      {
+        "box": [
+          380,
+          149,
+          500,
+          170
+        ],
+        "value": "2026-01-01",
+        "normalized": "2026-01-01",
+        "bubble_id": 1
+      },
+      {
+        "box": [
+          103,
+          228,
+          223,
+          249
+        ],
+        "value": "2026-04-10",
+        "normalized": "2026-04-10",
+        "bubble_id": 2
+      },
+      {
+        "box": [
+          214,
+          307,
+          334,
+          328
+        ],
+        "value": "2026-04-10",
+        "normalized": "2026-04-10",
+        "bubble_id": 3
+      }
+    ]
+  },
+  "transfer_receipt.png": {
+    "file": "transfer_receipt.png",
+    "size": [
+      640,
+      800
+    ],
+    "amounts": [
+      {
+        "box": [
+          190,
+          272,
+          316,
+          295
+        ],
+        "value": "5,000,000원",
+        "normalized": "5000000"
+      }
+    ],
+    "dates": [
+      {
+        "box": [
+          190,
+          324,
+          310,
+          347
+        ],
+        "value": "2026-01-01",
+        "normalized": "2026-01-01"
+      }
+    ],
+    "sender": {
+      "box": [
+        190,
+        168,
+        355,
+        191
+      ],
+      "value": "김샘플(SAMPLE)"
+    },
+    "receiver": {
+      "box": [
+        190,
+        220,
+        355,
+        243
+      ],
+      "value": "이샘플(SAMPLE)"
+    }
+  },
+  "iou_page1.png": {
+    "file": "iou_page1.png",
+    "size": [
+      800,
+      1130
+    ],
+    "amounts": [
+      {
+        "box": [
+          107,
+          286,
+          241,
+          309
+        ],
+        "value": "5,000,000원",
+        "normalized": "5000000"
+      }
+    ],
+    "dates": [
+      {
+        "box": [
+          129,
+          334,
+          257,
+          357
+        ],
+        "value": "2026-01-01",
+        "normalized": "2026-01-01"
+      },
+      {
+        "box": [
+          129,
+          382,
+          257,
+          405
+        ],
+        "value": "2026-04-10",
+        "normalized": "2026-04-10"
+      }
+    ],
+    "signature": {
+      "box": [
+        250,
+        492,
+        620,
+        568
+      ]
+    }
+  },
+  "iou_page2.png": {
+    "file": "iou_page2.png",
+    "size": [
+      800,
+      1130
+    ],
+    "amounts": [
+      {
+        "box": [
+          128,
+          190,
+          262,
+          213
+        ],
+        "value": "5,000,000원",
+        "normalized": "5000000"
+      }
+    ],
+    "dates": [
+      {
+        "box": [
+          129,
+          240,
+          257,
+          263
+        ],
+        "value": "2026-01-01",
+        "normalized": "2026-01-01"
+      }
+    ],
+    "signature": {
+      "box": [
+        150,
+        324,
+        420,
+        400
+      ]
+    },
+    "stamp": {
+      "box": [
+        500,
+        320,
+        660,
+        480
+      ]
+    }
+  },
+  "iou_2page.pdf": {
+    "file": "iou_2page.pdf",
+    "pages": 2,
+    "amounts": [
+      "5,000,000원"
+    ],
+    "dates": [
+      "2026-01-01",
+      "2026-04-10"
+    ],
+    "note": "PDF truth is values only; pixel boxes live in iou_pageN.png"
+  },
+  "chat_scroll.mp4": {
+    "file": "chat_scroll.mp4",
+    "size": [
+      360,
+      400
+    ],
+    "frames": 30,
+    "fps": 10,
+    "duration_s": 3.0,
+    "bytes": 14200,
+    "source": "chat_capture.png"
+  },
+  "meta": {
+    "watermark": "SAMPLE / 데모용",
+    "note": "Synthetic SAMPLE inputs. truth.json is for tests/spike scoring only; never pass it to models."
+  }
+}
