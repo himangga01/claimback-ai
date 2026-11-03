@@ -463,6 +463,18 @@ def get_readings(case_id: str) -> Any:
     return copy.deepcopy(READINGS_EXAMPLE)
 
 
+@app.get("/api/cases/{case_id}/redactions")
+def get_redactions(case_id: str) -> Any:
+    _get_case(case_id)
+    raise _err(404, "not_found", "가림 미리보기가 없습니다.")
+
+
+@app.get("/api/cases/{case_id}/segments")
+def get_segments(case_id: str) -> Any:
+    _get_case(case_id)
+    raise _err(404, "not_found", "감식 결과가 없습니다.")
+
+
 @app.get("/api/cases/{case_id}/review")
 def get_review(case_id: str) -> Any:
     case = _get_case(case_id)
