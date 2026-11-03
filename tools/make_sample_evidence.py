@@ -85,7 +85,10 @@ BAND_FILL = (200, 30, 30)
 BAND_TEXT = (255, 255, 255)
 SIG_INK = (30, 40, 130)
 STAMP_RED = (200, 30, 30)
-BAND_H = 36  # margin band, inside the top 40px
+BAND_H = 36  # margin band drawing parameter, inside the top 40px
+# PIL rectangles are inclusive: rectangle([0, 0, w, 36]) paints rows 0..36,
+# i.e. 37 rows. Truth ignore_regions and visibility checks use this height.
+BAND_BOX_H = BAND_H + 1
 
 KINDS = ("utterance", "amount", "date", "party_name", "account_number",
          "id_number", "phone", "address", "label", "header", "watermark")
@@ -122,7 +125,7 @@ def draw_band(img: Image.Image) -> list[int]:
     fnt = font(18, bold=True)
     tw = float(draw.textlength(WATERMARK, font=fnt))
     draw.text(((w - tw) / 2, 7), WATERMARK, font=fnt, fill=BAND_TEXT)
-    return [0, 0, w, BAND_H]
+    return [0, 0, w, BAND_BOX_H]
 
 
 def wrap_words(draw: ImageDraw.ImageDraw, text: str,
@@ -215,7 +218,8 @@ def draw_face(draw: ImageDraw.ImageDraw, cx: int, cy: int, r: int) -> list[int]:
     return [cx - r, cy - r, cx + r, cy + r]
 
 
-# Handwriting-like scribble programs, one per signer. Each stroke is
+# Handwriting-like scribble programs, one per signer (KR creditor 0,
+# KR debtor 1, EN creditor 2, EN debtor 3). Each stroke is
 # (pen width, [(rx, ry), ...]) with coordinates relative to the inner box.
 # Every program lifts the pen between strokes (4 separate strokes), uses
 # irregular lengths and heights, and stays inside part of the box so the ink
@@ -234,6 +238,20 @@ SIGNATURE_PROGRAMS: tuple[tuple[tuple[int, list[tuple[float, float]]], ...], ...
         (2, [(0.38, 0.62), (0.46, 0.36), (0.55, 0.60), (0.60, 0.44)]),
         (3, [(0.12, 0.80), (0.36, 0.86), (0.58, 0.78)]),
         (2, [(0.05, 0.40), (0.09, 0.52)]),
+    ),
+    (  # Signer 2: loop, zigzag, double underline, tick.
+        (3, [(0.10, 0.60), (0.18, 0.34), (0.28, 0.34), (0.30, 0.58),
+             (0.20, 0.70)]),
+        (2, [(0.34, 0.30), (0.42, 0.66), (0.50, 0.32)]),
+        (4, [(0.06, 0.84), (0.34, 0.78), (0.56, 0.84)]),
+        (2, [(0.60, 0.40), (0.66, 0.52)]),
+    ),
+    (  # Signer 3: w-shape, tall stroke, short underline, dot.
+        (2, [(0.08, 0.40), (0.14, 0.66), (0.22, 0.42), (0.30, 0.68),
+             (0.38, 0.40)]),
+        (3, [(0.44, 0.26), (0.46, 0.70)]),
+        (4, [(0.10, 0.82), (0.28, 0.88), (0.46, 0.80)]),
+        (2, [(0.54, 0.50), (0.58, 0.60)]),
     ),
 )
 
@@ -515,12 +533,16 @@ IOU_W, IOU_H = 1240, 1754  # A4 at 150 DPI
 def render_iou_png(path: Path, title: str,
                    rows: list[tuple[str, str, str, object]],
                    note_line: str, id_value: str | None,
-                   signers: list[str], stamp_text: str | None) -> dict:
+                   signers: list[str], stamp_text: str | None,
+                   signer_programs: list[int] | None = None) -> dict:
     """Draw the IOU PNG. rows: (label, value, value_kind, normalized).
 
     note_line is a standalone printed line (kind label, e.g. interest terms).
     id_value (or None) is drawn inside a separate box. signers get framed
-    multi-stroke signatures. Returns truth with vision + redaction targets.
+    multi-stroke signatures. signer_programs selects the scribble program
+    per signer (default: signer order); KR and EN use different programs so
+    no two people share the same signature pixels. Returns truth with
+    vision + redaction targets.
     """
     img = Image.new("RGB", (IOU_W, IOU_H), WHITE)
     draw = ImageDraw.Draw(img)
@@ -598,6 +620,9 @@ def render_iou_png(path: Path, title: str,
 
     # Signature frames with per-signer scribbles. The name label sits above
     # its frame so it never overlaps the signature ink.
+    if signer_programs is None:
+        signer_programs = list(range(len(signers)))
+    assert len(signer_programs) == len(signers)
     sig_frames: list[list[int]] = []
     for si, signer in enumerate(signers):
         lab = f"{signer} 서명" if stamp_text else f"{signer} signature"
@@ -608,7 +633,7 @@ def render_iou_png(path: Path, title: str,
         draw.rectangle(frame, outline=(120, 126, 132), width=2)
         ink, strokes = draw_signature(
             draw, [frame[0] + 24, frame[1] + 24, frame[2] - 24, frame[3] - 24],
-            si)
+            signer_programs[si])
         vision.append({"target": "signature", "box": ink, "frame_box": frame,
                        "item_id": None, "frame_ts": None, "frame_index": None,
                        "strokes": strokes})
@@ -657,13 +682,16 @@ def render_iou_pdf(path: Path, png_path: Path) -> None:
     deterministic.
     """
     from reportlab.lib.pagesizes import A4
+    from reportlab.lib.utils import ImageReader
     from reportlab.pdfgen import canvas
 
     assert png_path.is_file(), f"preview must be rendered first: {png_path}"
     c = canvas.Canvas(str(path), pagesize=A4, invariant=1)
     w, h = A4
     # The PNG is A4 at 150 DPI, so it covers the page exactly (72/150 scale).
-    c.drawImage(str(png_path), 0, 0, width=w, height=h,
+    # ImageReader keeps the image name (and hence the PDF bytes) independent
+    # of the build folder path; a plain path string leaks a path hash.
+    c.drawImage(ImageReader(str(png_path)), 0, 0, width=w, height=h,
                 preserveAspectRatio=True, anchor="c")
     c.showPage()
     c.save()
@@ -688,7 +716,7 @@ def first_full_frame(top: int, bottom: int, offsets: list[int]) -> int:
     """First frame where [top, bottom] is fully inside the viewport below
     the fixed SAMPLE band."""
     for i, off in enumerate(offsets):
-        if top - off >= BAND_H and bottom - off <= VIDEO_H:
+        if top - off >= BAND_BOX_H and bottom - off <= VIDEO_H:
             return i
     raise AssertionError(f"item never fully visible: {(top, bottom)}")
 
@@ -727,7 +755,8 @@ def build_video(tall_path: Path, out_path: Path, tall_truth: dict) -> dict:
                "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "23",
                "-flags:v", "+bitexact", "-map_metadata", "-1",
                "-threads", "1", str(out_path)]
-        proc = subprocess.run(cmd, capture_output=True, text=True)
+        proc = subprocess.run(cmd, capture_output=True, text=True,
+                                encoding="utf-8", errors="replace")
         if proc.returncode != 0:
             raise RuntimeError(f"ffmpeg failed: {proc.stderr[-2000:]}")
     finally:
@@ -761,7 +790,7 @@ def build_video(tall_path: Path, out_path: Path, tall_truth: dict) -> dict:
             if it["kind"] == "utterance" and (it["frame_ts"] or 0) > 1.0]
     assert late, "no bubble appears late in the scroll video"
     return {"items": items, "vision": vision, "tags": dict(tall_truth["tags"]),
-            "redactions": [], "ignore": [[0, 0, VIDEO_W, BAND_H]],
+            "redactions": [], "ignore": [[0, 0, VIDEO_W, BAND_BOX_H]],
             "size": [VIDEO_W, VIDEO_H],
             "video": {"fps": VIDEO_FPS, "frames": VIDEO_FRAMES,
                       "frame_offsets": offsets}}
@@ -1004,7 +1033,8 @@ def build_kr() -> None:
                         {KR_ACCT_A, KR_ACCT_B})
     r7 = render_iou_png(KR_DIR / "iou.png", "차 용 증", KR_IOU_ROWS,
                         "이자 약정 없음", KR_ID_NUMBER,
-                        [KR_CREDITOR, KR_DEBTOR], "탁나루")
+                        [KR_CREDITOR, KR_DEBTOR], "탁나루",
+                        signer_programs=[0, 1])
     render_iou_pdf(KR_DIR / "iou.pdf", KR_DIR / "iou.png")
     # The PDF twin reuses the PNG pixel boxes (declared via coord_basis).
     # iou.png stays on disk as the EX6 preview but is not an evidence.
@@ -1031,7 +1061,8 @@ def build_en() -> None:
                         {EN_ACCT_A, EN_ACCT_B})
     r4 = render_iou_png(EN_DIR / "promissory_note.png", "Promissory Note",
                         EN_NOTE_ROWS, "No interest", None,
-                        [EN_CREDITOR, EN_DEBTOR], None)
+                        [EN_CREDITOR, EN_DEBTOR], None,
+                        signer_programs=[2, 3])
     render_iou_pdf(EN_DIR / "promissory_note.pdf", EN_DIR / "promissory_note.png")
     # The PDF reuses the PNG pixel boxes; the PNG stays on disk as the EX3
     # preview but is not an evidence.

@@ -1,4 +1,4 @@
-/* ClaimBack-AI case-flow screen (M2b). Vanilla JS, no build, no external scripts. */
+/* ClaimBack-AI case-flow screen (M2b-fix1). Vanilla JS, no build, no external scripts. */
 "use strict";
 
 const S = {
@@ -9,8 +9,10 @@ const S = {
   drafts: null,
   pkg: null,
   selectedEx: null,
-  pollTimer: null,
   serverOk: false,
+  running: false,
+  runGen: 0,
+  putting: false,
 };
 
 const AGENTS = [
@@ -18,7 +20,25 @@ const AGENTS = [
   { group: "Fact-Timeline Chronology", desc: "증거 읽기와 사실 정리" },
   { group: "Financial Auditor", desc: "계산과 숫자 대조" },
   { group: "Judicial Form Filler", desc: "서류 묶음 만들기" },
-  { group: "User", desc: "사람이 값과 문장을 확인" },
+];
+
+const STATE_KO = {
+  INTAKE: "접수",
+  READING: "판독 중",
+  ORGANIZING: "사실 정리 중",
+  CHECKPOINT_1: "사실 확인 대기",
+  CALCULATING: "계산 중",
+  DRAFTING: "문안 작성 중",
+  VERIFYING: "검증 중",
+  DRAFT_APPROVAL: "문안 승인 대기",
+  PACKAGING: "편철 중",
+  CHECKPOINT_2: "최종 확인",
+  HOLD: "보류",
+};
+
+const STATE_ORDER = [
+  "INTAKE", "READING", "ORGANIZING", "CHECKPOINT_1", "CALCULATING",
+  "DRAFTING", "VERIFYING", "DRAFT_APPROVAL", "PACKAGING", "CHECKPOINT_2",
 ];
 
 const STATUS_KO = {
@@ -37,26 +57,41 @@ const TAG_KO = {
   other: "기타",
 };
 
+const GATE_KO = {
+  G1a: "숫자·이름은 슬롯으로만",
+  G3: "문장마다 증거 표시",
+  G2: "필수 칸 확인",
+  G4: "금액 범위 확인",
+  NAMING: "금지 표현 검사",
+};
+
 const ROLE_OPTIONS = [
   ["loan_transfer", "대여 이체"],
   ["repayment", "변제 입금"],
-  ["loan_agreement", "차용증"],
-  ["chat", "대화 기록"],
   ["other", "기타"],
 ];
+
+const KNOWN_ROLES = new Set(ROLE_OPTIONS.map(([val]) => val));
 
 function $(id) {
   return document.getElementById(id);
 }
 
-function setStatus(msg) {
-  $("status-line").textContent = msg || "";
+function setStatus(msg, kind) {
+  const el = $("status-line");
+  el.textContent = msg || "";
+  el.classList.toggle("is-neutral", kind === "neutral");
 }
 
 function errText(data) {
   if (data && data.detail) {
     if (typeof data.detail === "string") return data.detail;
-    if (data.detail.message) return data.detail.message;
+    let msg = data.detail.message || "";
+    const miss = data.detail.missing_requirements;
+    if (Array.isArray(miss) && miss.length > 0) {
+      msg += ` (필요: ${miss.join(", ")})`;
+    }
+    return msg;
   }
   return "";
 }
@@ -95,6 +130,15 @@ function exLabel(exId) {
   return m ? `갑 제${m[1]}호증` : exId;
 }
 
+function sentenceNo(sid) {
+  const m = /^s(\d+)$/.exec(sid || "");
+  return m ? `문장 ${Number(m[1])}` : `문장 ${sid}`;
+}
+
+function gateName(g) {
+  return GATE_KO[g] || g;
+}
+
 function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
@@ -105,6 +149,7 @@ function esc(s) {
 
 document.addEventListener("DOMContentLoaded", () => {
   $("btn-sample").addEventListener("click", loadSample);
+  $("btn-run").addEventListener("click", runCase);
   $("btn-delete").addEventListener("click", deleteCase);
   $("btn-confirm").addEventListener("click", confirmFacts);
   $("btn-approve-continue").addEventListener("click", approveAndContinue);
@@ -129,58 +174,118 @@ async function checkServer() {
   }
 }
 
+function revealSection(sectionId, titleId) {
+  $(sectionId).hidden = false;
+  const t = titleId ? $(titleId) : null;
+  if (t) {
+    t.focus({ preventScroll: true });
+    t.scrollIntoView({ block: "start" });
+  }
+}
+
 /* ---------- case lifecycle ---------- */
 
+function setRunningUI(on) {
+  for (const id of ["btn-sample", "btn-run", "btn-confirm", "btn-approve-continue"]) {
+    const el = $(id);
+    if (!el) continue;
+    if (id === "btn-run") {
+      el.disabled = on || !S.caseId;
+    } else {
+      el.disabled = on;
+    }
+  }
+}
+
 async function loadSample() {
+  if (S.running || S.putting) return;
   setStatus("");
   const res = await api("POST", "/api/cases/sample", { set: "kr" });
   if (!res.ok) {
     setStatus("사건을 불러오지 못했습니다. " + errText(res.data));
     return;
   }
-  S.caseId = res.data.case_id;
-  S.caseView = res.data;
+  resetCaseState(res.data);
+  renderCaseMeta();
+  renderBoard();
+  $("btn-delete").disabled = false;
+  const ran = await runWithPolling();
+  if (ran && S.caseView && S.caseView.state === "CHECKPOINT_1") {
+    await loadCheckpoint1();
+  }
+}
+
+function resetCaseState(view) {
+  S.caseId = view.case_id;
+  S.caseView = view;
   S.readings = [];
   S.review = null;
   S.drafts = null;
   S.pkg = null;
   S.selectedEx = null;
-  renderCaseMeta();
-  renderBoard();
-  $("btn-delete").disabled = false;
-  await runWithPolling();
-  if (S.caseView && S.caseView.state === "CHECKPOINT_1") {
-    await loadCheckpoint1();
-  }
+}
+
+async function runCase() {
+  if (!S.caseId || S.running || S.putting) return;
+  setStatus("");
+  const ran = await runWithPolling();
+  if (!ran || !S.caseView) return;
+  await openStagesForState();
+}
+
+async function openStagesForState() {
+  const st = S.caseView && S.caseView.state;
+  if (!st) return;
+  const at = (s) => STATE_ORDER.indexOf(st) >= STATE_ORDER.indexOf(s);
+  if (at("CHECKPOINT_1")) await loadCheckpoint1({ reveal: st === "CHECKPOINT_1" });
+  if (at("DRAFT_APPROVAL")) await loadDrafts({ reveal: st === "DRAFT_APPROVAL" });
+  if (st === "CHECKPOINT_2") await loadPackage({ reveal: true });
 }
 
 async function runWithPolling() {
+  if (S.running) return false;
+  S.running = true;
+  const gen = ++S.runGen;
+  setRunningUI(true);
   $("run-progress").hidden = false;
   const poll = async () => {
-    const res = await api("GET", `/api/cases/${S.caseId}`);
-    if (res.ok) {
-      S.caseView = res.data;
-      renderCaseMeta();
-      renderBoard();
+    if (gen !== S.runGen) return;
+    try {
+      const res = await api("GET", `/api/cases/${S.caseId}`);
+      if (gen !== S.runGen) return;
+      if (res.ok) {
+        S.caseView = res.data;
+        renderCaseMeta();
+        renderBoard();
+      }
+    } catch {
+      /* a failed poll must not stop the run; the final fetch decides */
     }
+    if (gen === S.runGen && S.running) setTimeout(poll, 500);
   };
-  S.pollTimer = setInterval(poll, 500);
+  setTimeout(poll, 500);
   try {
     const res = await api("POST", `/api/cases/${S.caseId}/run`, {});
+    if (gen !== S.runGen) return false;
     if (!res.ok) {
       setStatus("실행하지 못했습니다. " + errText(res.data));
     } else {
       S.caseView = res.data;
     }
   } finally {
-    clearInterval(S.pollTimer);
-    S.pollTimer = null;
-    $("run-progress").hidden = true;
+    if (gen === S.runGen) {
+      S.running = false;
+      setRunningUI(false);
+      $("run-progress").hidden = true;
+    }
   }
+  if (gen !== S.runGen) return false;
   const cur = await api("GET", `/api/cases/${S.caseId}`);
+  if (gen !== S.runGen) return false;
   if (cur.ok) S.caseView = cur.data;
   renderCaseMeta();
   renderBoard();
+  return true;
 }
 
 async function deleteCase() {
@@ -198,6 +303,7 @@ async function deleteCase() {
   S.pkg = null;
   S.selectedEx = null;
   $("btn-delete").disabled = true;
+  $("btn-run").disabled = true;
   for (const id of ["board-section", "checkpoint-section", "calc-section",
     "drafts-section", "package-section"]) {
     $(id).hidden = true;
@@ -205,7 +311,7 @@ async function deleteCase() {
   document.querySelector(".case-meta").hidden = true;
   $("stub-banner").hidden = true;
   $("replay-badge").hidden = true;
-  setStatus("사건을 삭제했습니다.");
+  setStatus("사건을 삭제했습니다.", "neutral");
 }
 
 async function uploadFiles(ev) {
@@ -217,8 +323,7 @@ async function uploadFiles(ev) {
       setStatus("사건을 만들지 못했습니다. " + errText(created.data));
       return;
     }
-    S.caseId = created.data.case_id;
-    S.caseView = created.data;
+    resetCaseState(created.data);
     $("btn-delete").disabled = false;
   }
   const form = new FormData();
@@ -250,16 +355,42 @@ function renderCaseMeta() {
   if (!v) return;
   document.querySelector(".case-meta").hidden = false;
   $("case-id").textContent = v.case_id;
-  $("case-state").textContent = v.state;
+  const st = $("case-state");
+  st.textContent = STATE_KO[v.state] || v.state;
+  st.setAttribute("data-state", v.state);
   $("stub-banner").hidden = !v.stub;
   $("replay-badge").hidden = v.meta_mode !== "replay";
   $("board-section").hidden = false;
+  $("btn-run").disabled = S.running || !S.caseId;
+}
+
+function stepOrder(v, s) {
+  return v.steps.indexOf(s) + 1;
+}
+
+function modelBadgeText(s) {
+  const base = s.model || "규칙";
+  if (s.key === "reading" && s.substeps && s.substeps.length > 0) {
+    const n = s.substeps.filter((x) => x.status === "done").length;
+    return `${base} · 판독 ${n}건`;
+  }
+  return base;
+}
+
+function renderBoardSummary(v) {
+  const el = $("board-summary");
+  const calls = v.steps.filter(
+    (s) => s.model && (s.status === "done" || s.status === "running")).length;
+  const cost = v.run_cost_usd || "0";
+  const mode = v.meta_mode === "replay" ? "재생" : "실호출";
+  el.textContent = `Meta 모델 호출 ${calls}회 · $${cost} · ${mode}`;
 }
 
 function renderBoard() {
   const v = S.caseView;
   if (!v) return;
   renderHold(v);
+  renderBoardSummary(v);
   const board = $("agent-board");
   board.innerHTML = "";
   for (const a of AGENTS) {
@@ -269,7 +400,7 @@ function renderBoard() {
     card.className = "agent-card";
     card.dataset.testid = `agent-card-${a.group}`;
     const h = document.createElement("h3");
-    h.textContent = a.group === "User" ? "사용자 확인" : a.group;
+    h.textContent = a.group;
     card.appendChild(h);
     const d = document.createElement("p");
     d.className = "agent-desc";
@@ -277,27 +408,35 @@ function renderBoard() {
     card.appendChild(d);
     for (const s of steps) {
       const row = document.createElement("div");
-      row.className = "step-row" + (s.status === "skipped" ? " is-skipped" : "");
+      row.className = "step-row" + (s.status === "skipped" ? " is-skipped" : "")
+        + (s.status === "running" ? " is-running" : "");
       row.dataset.testid = `step-${s.key}`;
+      row.dataset.status = s.status;
       const head = document.createElement("div");
       head.className = "step-head";
+      const order = document.createElement("span");
+      order.className = "step-order";
+      order.textContent = String(stepOrder(v, s));
+      head.appendChild(order);
       const agent = document.createElement("span");
       agent.className = "step-agent";
       agent.textContent = s.agent;
       head.appendChild(agent);
       const model = document.createElement("span");
       model.className = "model-badge";
-      model.textContent = s.model || (s.group === "User" ? "—" : "규칙");
+      model.textContent = modelBadgeText(s);
       head.appendChild(model);
       const st = document.createElement("span");
       st.className = "step-status";
       st.dataset.status = s.status;
       st.textContent = STATUS_KO[s.status] || s.status;
       head.appendChild(st);
-      const meta = document.createElement("span");
-      meta.className = "step-meta";
-      meta.textContent = `${fmtLatency(s.latency_ms || 0)} · $${s.cost_usd || "0"}`;
-      head.appendChild(meta);
+      if (s.status !== "waiting" && s.status !== "skipped") {
+        const meta = document.createElement("span");
+        meta.className = "step-meta";
+        meta.textContent = `${fmtLatency(s.latency_ms || 0)} · $${s.cost_usd || "0"}`;
+        head.appendChild(meta);
+      }
       row.appendChild(head);
       const noteText = s.status === "skipped"
         ? "이 버전에서는 사용하지 않음"
@@ -322,6 +461,30 @@ function renderBoard() {
     }
     board.appendChild(card);
   }
+  renderUserStrip(v);
+}
+
+function renderUserStrip(v) {
+  const strip = $("user-strip");
+  strip.innerHTML = "";
+  const users = v.steps.filter((s) => s.group === "User");
+  if (users.length === 0) {
+    strip.hidden = true;
+    return;
+  }
+  strip.hidden = false;
+  const label = document.createElement("span");
+  label.className = "user-strip-label";
+  label.textContent = "사용자 확인";
+  strip.appendChild(label);
+  for (const s of users) {
+    const chip = document.createElement("span");
+    chip.className = "user-chip";
+    chip.dataset.testid = `step-${s.key}`;
+    chip.dataset.status = s.status;
+    chip.textContent = `${stepOrder(v, s)}. ${s.agent} · ${STATUS_KO[s.status] || s.status}`;
+    strip.appendChild(chip);
+  }
 }
 
 function renderHold(v) {
@@ -336,11 +499,13 @@ function renderHold(v) {
     const check = document.createElement("input");
     check.type = "checkbox";
     check.dataset.testid = `hold-check-${i}`;
+    const msgText = r.code === "replay_fixture_missing"
+      ? "기록된 응답이 없는 입력입니다"
+      : (r.message || r.code || "");
+    check.setAttribute("aria-label", `보류 사유 확인: ${msgText}`);
     label.appendChild(check);
     const msg = document.createElement("span");
-    msg.textContent = " " + (r.code === "replay_fixture_missing"
-      ? "기록된 응답이 없는 입력입니다"
-      : (r.message || r.code || ""));
+    msg.textContent = " " + msgText;
     label.appendChild(msg);
     li.appendChild(label);
     list.appendChild(li);
@@ -349,7 +514,7 @@ function renderHold(v) {
 
 /* ---------- checkpoint 1 ---------- */
 
-async function loadCheckpoint1() {
+async function loadCheckpoint1(opts) {
   const [rd, rv] = await Promise.all([
     api("GET", `/api/cases/${S.caseId}/readings`),
     api("GET", `/api/cases/${S.caseId}/review`),
@@ -361,7 +526,7 @@ async function loadCheckpoint1() {
   S.readings = rd.data;
   S.review = rv.data;
   renderCheckpoint();
-  $("checkpoint-section").hidden = false;
+  revealSection("checkpoint-section", opts && opts.reveal === false ? null : "checkpoint-title");
 }
 
 function readingsFor(exId) {
@@ -388,7 +553,7 @@ function renderEvidenceList() {
     btn.type = "button";
     btn.dataset.testid = `evidence-${e.ex_id}`;
     btn.setAttribute("aria-pressed", S.selectedEx === e.ex_id ? "true" : "false");
-    const evStatus = { ok: "정상", hold: "보류", skipped: "건너뜀" }[e.status] || e.status;
+    const evStatus = { ok: "읽음", hold: "보류", skipped: "건너뜀" }[e.status] || e.status;
     btn.textContent = `${e.label} · ${(e.sha256 || "").slice(0, 8)} · ${evStatus}`;
     btn.addEventListener("click", () => selectEvidence(e.ex_id));
     li.appendChild(btn);
@@ -443,11 +608,21 @@ function blinkBox(exId, itemId) {
   requestAnimationFrame(() => {
     const el = document.querySelector(`[data-testid="reading-box-${exId}-${itemId}"]`);
     if (el) {
+      el.scrollIntoView({ block: "nearest", inline: "nearest" });
       el.classList.remove("flash");
       void el.offsetWidth;
       el.classList.add("flash");
     }
   });
+}
+
+function displayHint(f) {
+  if (!f.display) return null;
+  const hint = document.createElement("span");
+  hint.className = "display-hint";
+  hint.dataset.testid = `display-field-${f.field}`;
+  hint.textContent = f.display;
+  return hint;
 }
 
 function renderFields() {
@@ -460,28 +635,29 @@ function renderFields() {
     tr.appendChild(th);
     const tdVal = document.createElement("td");
     if (f.field === "repayments" && Array.isArray(f.value)) {
-      f.value.forEach((r, i) => {
+      const rows = f.value.length > 0 ? f.value : [{ date: "", amount: "" }];
+      rows.forEach((r, i) => {
         const wrap = document.createElement("div");
         const d = document.createElement("input");
         d.type = "date";
         d.value = r.date || "";
         d.dataset.testid = `field-repayments-${i}-date`;
+        d.setAttribute("aria-label", `받은 돈 ${i + 1} 날짜`);
         const a = document.createElement("input");
         a.type = "text";
         a.value = r.amount || "";
         a.dataset.testid = `field-repayments-${i}-amount`;
+        a.setAttribute("aria-label", `받은 돈 ${i + 1} 금액`);
         wrap.appendChild(d);
         wrap.appendChild(a);
         tdVal.appendChild(wrap);
       });
-      if (f.value.length === 0) {
-        const span = document.createElement("span");
-        span.textContent = f.display || "없음";
-        tdVal.appendChild(span);
-      }
+      const hint = displayHint(f);
+      if (hint) tdVal.appendChild(hint);
     } else if (f.field === "transaction_kind") {
       const sel = document.createElement("select");
       sel.dataset.testid = "field-transaction_kind";
+      sel.setAttribute("aria-label", f.label);
       for (const [val, label] of [["civil", "개인 간 거래"], ["commercial", "사업 거래"]]) {
         const opt = document.createElement("option");
         opt.value = val;
@@ -496,7 +672,10 @@ function renderFields() {
       input.value = f.value ?? "";
       input.placeholder = f.display || "";
       input.dataset.testid = `field-${f.field}`;
+      input.setAttribute("aria-label", f.label);
       tdVal.appendChild(input);
+      const hint = displayHint(f);
+      if (hint) tdVal.appendChild(hint);
     }
     tr.appendChild(tdVal);
     const tdSrc = document.createElement("td");
@@ -539,10 +718,12 @@ function renderUtterances() {
   for (const u of (S.review.utterances || [])) {
     const li = document.createElement("li");
     li.dataset.testid = `utterance-${u.ex_id}-${u.item_id}`;
+    li.dataset.tags = (u.tags || []).join(" ");
     const label = document.createElement("label");
     const check = document.createElement("input");
     check.type = "checkbox";
     check.dataset.testid = `highlight-${u.ex_id}-${u.item_id}`;
+    check.setAttribute("aria-label", `강조: ${u.speaker}: ${u.text}`);
     label.appendChild(check);
     const em = document.createElement("span");
     em.textContent = " 강조 ";
@@ -570,11 +751,13 @@ function renderRoles() {
     label.textContent = `${exLabel(r.ex_id)} `;
     const sel = document.createElement("select");
     sel.dataset.testid = `role-${r.ex_id}`;
+    sel.setAttribute("aria-label", `${exLabel(r.ex_id)} 역할`);
+    const current = KNOWN_ROLES.has(r.suggested_role) ? r.suggested_role : "other";
     for (const [val, name] of ROLE_OPTIONS) {
       const opt = document.createElement("option");
       opt.value = val;
       opt.textContent = name;
-      if (r.suggested_role === val) opt.selected = true;
+      if (current === val) opt.selected = true;
       sel.appendChild(opt);
     }
     label.appendChild(sel);
@@ -586,11 +769,15 @@ function renderRoles() {
 function gatherFacts() {
   const fields = {};
   for (const f of S.review.fields) {
-    if (f.field === "repayments" && Array.isArray(f.value)) {
-      fields.repayments = f.value.map((_, i) => ({
-        date: document.querySelector(`[data-testid="field-repayments-${i}-date"]`).value,
-        amount: document.querySelector(`[data-testid="field-repayments-${i}-amount"]`).value,
-      }));
+    if (f.field === "repayments") {
+      const rows = [];
+      for (let i = 0; ; i++) {
+        const d = document.querySelector(`[data-testid="field-repayments-${i}-date"]`);
+        const a = document.querySelector(`[data-testid="field-repayments-${i}-amount"]`);
+        if (!d || !a) break;
+        if (d.value || a.value) rows.push({ date: d.value, amount: a.value });
+      }
+      fields.repayments = rows;
     } else if (f.field === "transaction_kind") {
       fields[f.field] = document.querySelector('[data-testid="field-transaction_kind"]').value;
     } else {
@@ -612,16 +799,24 @@ function gatherFacts() {
 }
 
 async function confirmFacts() {
+  if (S.putting || S.running) return;
   setStatus("");
-  const body = gatherFacts();
-  const put = await api("PUT", `/api/cases/${S.caseId}/facts`, body);
-  if (!put.ok) {
-    setStatus("확정값을 저장하지 못했습니다. " + errText(put.data));
-    return;
+  S.putting = true;
+  $("btn-confirm").disabled = true;
+  try {
+    const body = gatherFacts();
+    const put = await api("PUT", `/api/cases/${S.caseId}/facts`, body);
+    if (!put.ok) {
+      setStatus("확정값을 저장하지 못했습니다. " + errText(put.data));
+      return;
+    }
+    S.caseView = put.data;
+    renderCaseMeta();
+    renderBoard();
+  } finally {
+    S.putting = false;
+    $("btn-confirm").disabled = false;
   }
-  S.caseView = put.data;
-  renderCaseMeta();
-  renderBoard();
   await runWithPolling();
   if (S.caseView && S.caseView.state === "DRAFT_APPROVAL") {
     await loadDrafts();
@@ -630,7 +825,7 @@ async function confirmFacts() {
 
 /* ---------- calculation + draft approval ---------- */
 
-async function loadDrafts() {
+async function loadDrafts(opts) {
   const res = await api("GET", `/api/cases/${S.caseId}/drafts`);
   if (!res.ok) {
     setStatus("초안을 불러오지 못했습니다. " + errText(res.data));
@@ -639,8 +834,10 @@ async function loadDrafts() {
   S.drafts = res.data;
   renderCalc();
   renderDrafts();
+  const reveal = !opts || opts.reveal !== false;
   $("calc-section").hidden = false;
   $("drafts-section").hidden = false;
+  if (reveal) revealSection("calc-section", "calc-title");
 }
 
 function fmtWon(amountStr) {
@@ -651,8 +848,9 @@ function fmtWon(amountStr) {
 
 function renderCalc() {
   const calc = S.drafts.calculation;
+  const ref = calc.reference_total || {};
   $("calc-title").textContent =
-    `입력한 사실 기준 계산(기준일 ${fmtDateDots(calc.reference_total.as_of)})`;
+    `4. 입력한 사실 기준 계산(기준일 ${fmtDateDots(ref.as_of)})`;
   const body = $("alloc-body");
   body.innerHTML = "";
   for (const a of (calc.allocations || [])) {
@@ -668,6 +866,8 @@ function renderCalc() {
   }
   $("remaining-principal").textContent = fmtWon(calc.remaining_principal);
   $("accrual-start").textContent = fmtDateDots(calc.accrual_start_date);
+  $("reference-total").textContent = ref.amount != null ? fmtWon(ref.amount) : "—";
+  $("reference-asof").textContent = fmtDateDots(ref.as_of);
   const ol = $("calc-steps");
   ol.innerHTML = "";
   for (const s of (calc.calculation_steps || [])) {
@@ -699,19 +899,11 @@ function renderDrafts() {
   const rev = $("revision-note");
   if (d.revisions && d.revisions.length > 0) {
     rev.hidden = false;
-    rev.textContent = `문안 작성 ⇄ 검증 ${d.revision_rounds}회`;
+    rev.textContent = `문안 작성 → 검증 → 수정 ${d.revision_rounds}회`;
   } else {
     rev.hidden = true;
   }
-  const gates = $("gate-summary");
-  gates.innerHTML = "";
-  for (const g of (d.gate_results || [])) {
-    const row = document.createElement("div");
-    row.className = "gate-row";
-    row.dataset.testid = `gate-${g.gate}`;
-    row.textContent = `${g.gate}: ${g.status === "pass" ? "통과" : g.status === "fail" ? "지적 있음" : g.status}`;
-    gates.appendChild(row);
-  }
+  renderDraftsGateSummary();
   const list = $("sentence-list");
   list.innerHTML = "";
   for (const s of (d.sentences || [])) {
@@ -719,16 +911,28 @@ function renderDrafts() {
   }
 }
 
+function gateRow(g) {
+  const row = document.createElement("div");
+  row.className = "gate-row";
+  row.dataset.testid = `gate-${g.gate}`;
+  row.dataset.gate = g.gate;
+  row.dataset.status = g.status;
+  const state = g.status === "pass" ? "통과" : g.status === "fail" ? "지적 있음" : g.status;
+  row.textContent = `${gateName(g.gate)} (${g.gate}): ${state}`;
+  return row;
+}
+
 function sentenceEl(s, gateResults) {
   const box = document.createElement("div");
   box.className = "sentence";
   box.dataset.testid = `sentence-${s.sentence_id}`;
+  box.dataset.sentenceType = s.type || "";
 
   const head = document.createElement("div");
   head.className = "sentence-head";
   const id = document.createElement("span");
   id.className = "sentence-id";
-  id.textContent = `문장 ${s.sentence_id}`;
+  id.textContent = sentenceNo(s.sentence_id);
   head.appendChild(id);
   for (const ex of (s.ex_refs || [])) {
     const tag = document.createElement("span");
@@ -741,6 +945,11 @@ function sentenceEl(s, gateResults) {
   toggle.dataset.testid = `slots-toggle-${s.sentence_id}`;
   toggle.textContent = "슬롯 보기";
   head.appendChild(toggle);
+  const editToggle = document.createElement("button");
+  editToggle.type = "button";
+  editToggle.dataset.testid = `edit-toggle-${s.sentence_id}`;
+  editToggle.textContent = "고치기";
+  head.appendChild(editToggle);
   box.appendChild(head);
 
   const rendered = document.createElement("p");
@@ -767,10 +976,22 @@ function sentenceEl(s, gateResults) {
   box.appendChild(findings);
   renderFindings(findings, s, gateResults);
 
+  const notice = document.createElement("p");
+  notice.className = "sentence-notice";
+  notice.dataset.testid = `notice-${s.sentence_id}`;
+  notice.hidden = true;
+  box.appendChild(notice);
+
   const edit = document.createElement("textarea");
   edit.dataset.testid = `edit-${s.sentence_id}`;
+  edit.hidden = true;
   edit.value = s.text_with_slots;
+  edit.setAttribute("aria-label", `${sentenceNo(s.sentence_id)} 고치기`);
   box.appendChild(edit);
+  editToggle.addEventListener("click", () => {
+    edit.hidden = !edit.hidden;
+    editToggle.textContent = edit.hidden ? "고치기" : "접기";
+  });
 
   const row = document.createElement("div");
   row.className = "row";
@@ -786,6 +1007,7 @@ function sentenceEl(s, gateResults) {
   approve.dataset.testid = `approve-${s.sentence_id}`;
   approve.checked = !!s.approved;
   approve.disabled = (s.findings || []).length > 0;
+  approve.setAttribute("aria-label", `${sentenceNo(s.sentence_id)} 승인`);
   approveLabel.appendChild(approve);
   approveLabel.appendChild(document.createTextNode(" 승인"));
   row.appendChild(approveLabel);
@@ -801,29 +1023,62 @@ function renderFindings(el, s, gateResults) {
   const mine = s.findings || [];
   if (mine.length === 0) {
     el.textContent = "지적 없음";
+    el.dataset.status = "pass";
+    el.classList.remove("is-bad");
+    el.classList.add("is-ok");
     return;
   }
+  el.dataset.status = "fail";
+  el.classList.remove("is-ok");
+  el.classList.add("is-bad");
   const byGate = {};
   for (const g of gateResults) {
     for (const f of (g.findings || [])) {
       if (f.sentence_id === s.sentence_id) {
-        (byGate[g.gate] = byGate[g.gate] || []).push(f);
+        if (!byGate[g.gate]) byGate[g.gate] = [];
+        byGate[g.gate].push(f);
       }
     }
   }
   const gates = Object.keys(byGate);
-  const groups = gates.length > 0 ? gates : ["G1a"];
+  const groups = gates.length > 0 ? gates : ["검사"];
   for (const gate of groups) {
     const line = document.createElement("div");
+    line.dataset.gate = gate;
     const name = document.createElement("span");
     name.className = "gate-name";
-    name.textContent = `${gate}: `;
+    name.textContent = gate === "검사" ? "검사: " : `${gateName(gate)} (${gate}): `;
     line.appendChild(name);
     const items = byGate[gate] || mine;
     line.appendChild(document.createTextNode(
-      items.map((f) => `${f.message} (${f.fix_hint})`).join(" / ")));
+      items.map((f) => (f.fix_hint ? `${f.message} (${f.fix_hint})` : f.message)).join(" / ")));
     el.appendChild(line);
   }
+}
+
+function setDraftInputsDisabled(on) {
+  document.querySelectorAll('input[data-testid^="approve-"]').forEach((el) => {
+    el.disabled = on;
+  });
+  document.querySelectorAll('[data-testid^="update-"]').forEach((el) => {
+    el.disabled = on;
+  });
+  $("btn-approve-continue").disabled = on;
+}
+
+function restoreDraftInputs() {
+  const byId = {};
+  for (const s of ((S.drafts && S.drafts.sentences) || [])) byId[s.sentence_id] = s;
+  document.querySelectorAll('input[data-testid^="approve-"]').forEach((el) => {
+    const sid = el.dataset.testid.slice("approve-".length);
+    const s = byId[sid];
+    el.checked = !!(s && s.approved);
+    el.disabled = s ? (s.findings || []).length > 0 : false;
+  });
+  document.querySelectorAll('[data-testid^="update-"]').forEach((el) => {
+    el.disabled = false;
+  });
+  $("btn-approve-continue").disabled = false;
 }
 
 async function refreshSentence(sid) {
@@ -838,79 +1093,107 @@ async function refreshSentence(sid) {
   if (s && box) {
     renderFindings(
       box.querySelector(`[data-testid="findings-${sid}"]`), s, S.drafts.gate_results || []);
-    const approve = box.querySelector(`[data-testid="approve-${sid}"]`);
-    approve.checked = !!s.approved;
-    approve.disabled = (s.findings || []).length > 0;
     const rendered = box.querySelector(`[data-testid="rendered-${sid}"]`);
     rendered.textContent = s.rendered_text;
   }
   renderDraftsGateSummary();
+  restoreDraftInputs();
 }
 
 function renderDraftsGateSummary() {
   const gates = $("gate-summary");
   gates.innerHTML = "";
   for (const g of (S.drafts.gate_results || [])) {
-    const row = document.createElement("div");
-    row.className = "gate-row";
-    row.dataset.testid = `gate-${g.gate}`;
-    row.textContent = `${g.gate}: ${g.status === "pass" ? "통과" : g.status === "fail" ? "지적 있음" : g.status}`;
-    gates.appendChild(row);
+    gates.appendChild(gateRow(g));
   }
 }
 
 async function updateSentence(sid) {
+  if (S.putting || S.running) return;
   setStatus("");
   const box = document.querySelector(`[data-testid="sentence-${sid}"]`);
   const text = box.querySelector(`[data-testid="edit-${sid}"]`).value;
-  const res = await api("PUT", `/api/cases/${S.caseId}/drafts`, {
-    sentences: [{ sentence_id: sid, text_with_slots: text }],
-  });
-  if (!res.ok) {
-    setStatus("다시 검사하지 못했습니다. " + errText(res.data));
-    return;
-  }
-  S.drafts = res.data;
-  await refreshSentence(sid);
-  const s = S.drafts.sentences.find((x) => x.sentence_id === sid);
-  if (s && (s.findings || []).length > 0) {
-    setStatus("지적이 있어 승인할 수 없습니다.");
+  S.putting = true;
+  setDraftInputsDisabled(true);
+  try {
+    const res = await api("PUT", `/api/cases/${S.caseId}/drafts`, {
+      sentences: [{ sentence_id: sid, text_with_slots: text }],
+    });
+    if (!res.ok) {
+      setStatus("다시 검사하지 못했습니다. " + errText(res.data));
+      return;
+    }
+    S.drafts = res.data;
+    await refreshSentence(sid);
+    const s = S.drafts.sentences.find((x) => x.sentence_id === sid);
+    const notice = box.querySelector(`[data-testid="notice-${sid}"]`);
+    if (s && (s.findings || []).length > 0) {
+      notice.textContent = "지적이 있어 승인할 수 없습니다.";
+      notice.hidden = false;
+    } else if (notice) {
+      notice.hidden = true;
+    }
+  } finally {
+    S.putting = false;
+    restoreDraftInputs();
   }
 }
 
 async function approveSentence(sid) {
+  if (S.putting || S.running) {
+    const box = document.querySelector(`[data-testid="sentence-${sid}"]`);
+    if (box) {
+      const cur = (S.drafts.sentences || []).find((x) => x.sentence_id === sid);
+      box.querySelector(`[data-testid="approve-${sid}"]`).checked = !!(cur && cur.approved);
+    }
+    return;
+  }
   setStatus("");
   const box = document.querySelector(`[data-testid="sentence-${sid}"]`);
   const want = box.querySelector(`[data-testid="approve-${sid}"]`).checked;
-  const res = await api("PUT", `/api/cases/${S.caseId}/drafts`, {
-    sentences: [{ sentence_id: sid, approved: want }],
-  });
-  if (!res.ok) {
-    setStatus("승인하지 못했습니다. " + errText(res.data));
-    return;
+  S.putting = true;
+  setDraftInputsDisabled(true);
+  try {
+    const res = await api("PUT", `/api/cases/${S.caseId}/drafts`, {
+      sentences: [{ sentence_id: sid, approved: want }],
+    });
+    if (!res.ok) {
+      setStatus("승인하지 못했습니다. " + errText(res.data));
+      return;
+    }
+    S.drafts = res.data;
+    await refreshSentence(sid);
+  } finally {
+    S.putting = false;
+    restoreDraftInputs();
   }
-  S.drafts = res.data;
-  await refreshSentence(sid);
 }
 
 async function approveAndContinue() {
+  if (S.putting || S.running) return;
   setStatus("");
-  const res = await api("POST", `/api/cases/${S.caseId}/run`, {});
-  if (!res.ok) {
-    setStatus("계속하지 못했습니다. " + errText(res.data));
-    return;
-  }
-  S.caseView = res.data;
-  renderCaseMeta();
-  renderBoard();
-  if (S.caseView.state === "CHECKPOINT_2") {
-    await loadPackage();
+  const btn = $("btn-approve-continue");
+  btn.disabled = true;
+  try {
+    const res = await api("POST", `/api/cases/${S.caseId}/run`, {});
+    if (!res.ok) {
+      setStatus("계속하지 못했습니다. " + errText(res.data));
+      return;
+    }
+    S.caseView = res.data;
+    renderCaseMeta();
+    renderBoard();
+    if (S.caseView.state === "CHECKPOINT_2") {
+      await loadPackage();
+    }
+  } finally {
+    btn.disabled = false;
   }
 }
 
 /* ---------- package ---------- */
 
-async function loadPackage() {
+async function loadPackage(opts) {
   const res = await api("GET", `/api/cases/${S.caseId}/package`);
   if (!res.ok) {
     setStatus("서류 묶음을 불러오지 못했습니다. " + errText(res.data));
@@ -932,7 +1215,7 @@ async function loadPackage() {
   $("claim-cause").textContent = (S.pkg.ecourt || {}).claim_cause_payment_order || "";
   $("pkg-notice").textContent = (S.pkg.notices || {}).notice_ko || "";
   $("pkg-disclaimer").textContent = (S.pkg.notices || {}).disclaimer_ko || "";
-  $("package-section").hidden = false;
+  revealSection("package-section", opts && opts.reveal === false ? null : "package-title");
 }
 
 async function copyBlock(preId, btn) {
