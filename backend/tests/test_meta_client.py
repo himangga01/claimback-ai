@@ -874,8 +874,8 @@ def test_concurrent_reservation_blocks_overspend(tmp_path, monkeypatch):
     # without the lock both read an empty ledger and pass, so the test
     # fails (M0-fix2 item 8). The winner is gated in the transport layer
     # so its reservation stays open while the loser checks. Sleeps here
-    # are real: only retry waits are patched.
-    import concurrent.futures
+    # are real: only retry waits are patched. T1: daemon workers with a
+    # join timeout so a lock hang fails instead of stalling the suite.
     import threading
     import time as real_time
     monkeypatch.delenv("MODEL_API_KEY", raising=False)
@@ -910,32 +910,39 @@ def test_concurrent_reservation_blocks_overspend(tmp_path, monkeypatch):
         return base_create(**kwargs)
 
     transport.responses.create = single_create  # type: ignore[method-assign]
+    outcomes: list = [None, None]
 
-    def big_call():
-        assert go.wait(timeout=10)
-        client = MetaClient(mode="live", run_id="conc",
-                            ledger_path=ledger_path,
-                            fixture_dir=fixture_dir, transport=transport)
-        return client.responses_create("muse-spark-1.3", "hi",
-                                       max_output_tokens=400000)
-
-    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
-        first = pool.submit(big_call)
-        second = pool.submit(big_call)
-        go.set()
+    def big_call(idx: int):
         try:
-            assert entered.wait(timeout=10)
-            # The loser needs ~0.6s (winner's locked read + its own).
-            real_time.sleep(0.9)
-        finally:
-            release.set()
-        outcomes = []
-        for future in (first, second):
-            try:
-                body = future.result(timeout=30)
-                outcomes.append(("ok", body["id"]))
-            except BudgetExceeded:
-                outcomes.append(("refused", ""))
+            assert go.wait(timeout=10)
+            client = MetaClient(mode="live", run_id="conc",
+                                ledger_path=ledger_path,
+                                fixture_dir=fixture_dir, transport=transport)
+            body = client.responses_create("muse-spark-1.3", "hi",
+                                           max_output_tokens=400000)
+            outcomes[idx] = ("ok", body["id"])
+        except BudgetExceeded:
+            outcomes[idx] = ("refused", "")
+        except Exception as exc:  # noqa: BLE001 - re-raised in main thread
+            outcomes[idx] = ("error", exc)
+
+    threads = [threading.Thread(target=big_call, args=(idx,), daemon=True)
+               for idx in range(2)]
+    for thread in threads:
+        thread.start()
+    go.set()
+    try:
+        assert entered.wait(timeout=10)
+        # The loser needs ~0.6s (winner's locked read + its own).
+        real_time.sleep(0.9)
+    finally:
+        release.set()
+    for thread in threads:
+        thread.join(timeout=30)
+        assert not thread.is_alive(), "worker exceeded 30s (lock hang?)"
+    for kind, detail in outcomes:
+        if kind == "error":
+            raise detail
     assert sorted(o[0] for o in outcomes) == ["ok", "refused"]
     run_total, _ = MetaClient(
         mode="replay", run_id="conc", ledger_path=ledger_path,
@@ -1212,21 +1219,40 @@ def test_meta_ledger_path_env(tmp_path, monkeypatch):
 
 def test_stale_lock_cleaned(tmp_path, monkeypatch):
     import os
+    import threading
     import time as real_time
+    import app.meta.client as client_mod
     client = make_client(tmp_path, "live", FakeTransport(), run_id="stale",
                          monkeypatch=monkeypatch)
     lock_path = tmp_path / "ledger.jsonl.lock"
     lock_path.write_text("99999999", encoding="utf-8")
-    old = real_time.time() - 6.0
+    # T2: age sits just past the threshold (threshold + 1s). A mutant
+    # raising the threshold to 9s would wait ~3s for the lock to age into
+    # staleness, so the elapsed limit below kills it.
+    old = real_time.time() - (client_mod._LOCK_STALE_S + 1.0)
     os.utime(lock_path, (old, old))
+    box: dict = {}
+
+    def worker():
+        try:
+            box["body"] = client.responses_create(
+                "muse-spark-1.3", "hi", max_output_tokens=10)
+        except Exception as exc:  # noqa: BLE001 - re-raised in main thread
+            box["exc"] = exc
+
+    # T1: bounded join so a lock hang fails instead of stalling the suite.
     started = real_time.monotonic()
-    body = client.responses_create("muse-spark-1.3", "hi",
-                                   max_output_tokens=10)
+    thread = threading.Thread(target=worker, daemon=True)
+    thread.start()
+    thread.join(timeout=10)
     elapsed = real_time.monotonic() - started
-    assert body["id"] == "resp-fake"
+    assert not thread.is_alive(), "stale cleanup exceeded 10s (lock hang?)"
+    if "exc" in box:
+        raise box["exc"]
+    assert box["body"]["id"] == "resp-fake"
     assert list(tmp_path.glob("*.lock*")) == []
-    # E8: stale cleanup must finish well inside the 15s lock wait limit.
-    assert elapsed < 10.0
+    # Immediate cleanup: a threshold mutant would need ~3s here.
+    assert elapsed < 2.0
 
 
 def test_lock_timeouts_stale_shorter_than_wait():
@@ -1370,6 +1396,7 @@ def test_files_delete_works_over_cap(tmp_path, monkeypatch):
 
 def test_future_mtime_lock_is_stale(tmp_path, monkeypatch):
     import os
+    import threading
     import time as real_time
     client = make_client(tmp_path, "live", FakeTransport(), run_id="future",
                          monkeypatch=monkeypatch)
@@ -1377,9 +1404,23 @@ def test_future_mtime_lock_is_stale(tmp_path, monkeypatch):
     lock_path.write_text("99999999", encoding="utf-8")
     future = real_time.time() + 3600.0
     os.utime(lock_path, (future, future))
-    body = client.responses_create("muse-spark-1.3", "hi",
-                                   max_output_tokens=10)
-    assert body["id"] == "resp-fake"
+    box: dict = {}
+
+    def worker():
+        try:
+            box["body"] = client.responses_create(
+                "muse-spark-1.3", "hi", max_output_tokens=10)
+        except Exception as exc:  # noqa: BLE001 - re-raised in main thread
+            box["exc"] = exc
+
+    # T1: bounded join so a lock hang fails instead of stalling the suite.
+    thread = threading.Thread(target=worker, daemon=True)
+    thread.start()
+    thread.join(timeout=10)
+    assert not thread.is_alive(), "future-lock cleanup exceeded 10s"
+    if "exc" in box:
+        raise box["exc"]
+    assert box["body"]["id"] == "resp-fake"
     assert list(tmp_path.glob("*.lock*")) == []
 
 
@@ -1466,7 +1507,7 @@ def test_request_hash_pinned():
 
 
 def test_concurrent_8x50_no_lock_errors(tmp_path, monkeypatch):
-    import concurrent.futures
+    import threading
     import time as real_time
     monkeypatch.delenv("MODEL_API_KEY", raising=False)
     monkeypatch.delenv("META_RUN_CAP_USD", raising=False)
@@ -1477,9 +1518,10 @@ def test_concurrent_8x50_no_lock_errors(tmp_path, monkeypatch):
     fixture_dir = tmp_path / "fixtures"
     transport = FakeTransport()
     errors: list = []
+    counts = [0] * 8
     started = real_time.monotonic()
 
-    def worker(n: int) -> int:
+    def worker(n: int) -> None:
         client = MetaClient(mode="live", run_id="load8x50",
                             ledger_path=ledger_path,
                             fixture_dir=fixture_dir, transport=transport)
@@ -1492,11 +1534,19 @@ def test_concurrent_8x50_no_lock_errors(tmp_path, monkeypatch):
                 done += 1
         except Exception as exc:  # noqa: BLE001 - collected below
             errors.append(exc)
-        return done
+        counts[n] = done
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
-        counts = list(pool.map(worker, range(8)))
+    # T1: daemon workers with a bounded join so a lock hang fails instead
+    # of stalling the suite.
+    threads = [threading.Thread(target=worker, args=(n,), daemon=True)
+               for n in range(8)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=40)
     elapsed = real_time.monotonic() - started
+    assert not any(t.is_alive() for t in threads), \
+        "load workers exceeded 40s (lock hang?)"
     assert errors == []
     assert sum(counts) == 400
     entries = read_ledger(tmp_path)
@@ -1508,6 +1558,7 @@ def test_concurrent_8x50_no_lock_errors(tmp_path, monkeypatch):
 
 def test_permission_error_injected_retries(tmp_path, monkeypatch):
     import os as real_os
+    import threading
     orig_open = real_os.open
     injected = {"n": 0}
 
@@ -1520,9 +1571,23 @@ def test_permission_error_injected_retries(tmp_path, monkeypatch):
     monkeypatch.setattr(real_os, "open", flaky_open)
     client = make_client(tmp_path, "live", FakeTransport(), run_id="perm",
                          monkeypatch=monkeypatch)
-    body = client.responses_create("muse-spark-1.3", "hi",
-                                   max_output_tokens=10)
-    assert body["id"] == "resp-fake"
+    box: dict = {}
+
+    def worker():
+        try:
+            box["body"] = client.responses_create(
+                "muse-spark-1.3", "hi", max_output_tokens=10)
+        except Exception as exc:  # noqa: BLE001 - re-raised in main thread
+            box["exc"] = exc
+
+    # T1: bounded join so a lock hang fails instead of stalling the suite.
+    thread = threading.Thread(target=worker, daemon=True)
+    thread.start()
+    thread.join(timeout=10)
+    assert not thread.is_alive(), "lock retry exceeded 10s (lock hang?)"
+    if "exc" in box:
+        raise box["exc"]
+    assert box["body"]["id"] == "resp-fake"
     assert injected["n"] == 5
     assert len(read_ledger(tmp_path)) == 2
 
@@ -1568,6 +1633,7 @@ def test_billed_image_preserved_on_ledger_failure(tmp_path, monkeypatch):
 
 
 def test_lock_stat_failure_respects_deadline(tmp_path, monkeypatch):
+    import threading
     import time as real_time
     import app.meta.client as client_mod
     monkeypatch.setattr(client_mod, "_LOCK_TIMEOUT_S", 0.3)
@@ -1581,16 +1647,33 @@ def test_lock_stat_failure_respects_deadline(tmp_path, monkeypatch):
     monkeypatch.setattr(Path, "stat", failing_stat)
     lock_path = tmp_path / "ledger.jsonl.lock"
     lock_path.write_text("stale", encoding="utf-8")
+    box: dict = {}
+
+    def worker():
+        try:
+            client_mod._acquire_file_lock(lock_path)
+            box["outcome"] = "acquired"
+        except BudgetLedgerError:
+            box["outcome"] = "refused"
+        except Exception as exc:  # noqa: BLE001 - re-raised in main thread
+            box["outcome"] = exc
+
+    # T1: a mutant dropping the deadline would spin forever; the bounded
+    # join turns that into a failure instead of stalling the suite.
     started = real_time.monotonic()
-    with pytest.raises(BudgetLedgerError):
-        client_mod._acquire_file_lock(lock_path)
+    thread = threading.Thread(target=worker, daemon=True)
+    thread.start()
+    thread.join(timeout=5)
     elapsed = real_time.monotonic() - started
+    assert not thread.is_alive(), "stat-failure path exceeded 5s (no limit?)"
+    assert box.get("outcome") == "refused"
     # Waited out the limit with yields (not a CPU spin, not past it).
     assert 0.3 <= elapsed < 3.0
 
 
 def test_lock_rename_failure_respects_deadline(tmp_path, monkeypatch):
     import os
+    import threading
     import time as real_time
     import app.meta.client as client_mod
     monkeypatch.setattr(client_mod, "_LOCK_TIMEOUT_S", 0.3)
@@ -1606,10 +1689,26 @@ def test_lock_rename_failure_respects_deadline(tmp_path, monkeypatch):
     lock_path.write_text("99999999", encoding="utf-8")
     old = real_time.time() - 6.0
     os.utime(lock_path, (old, old))
+    box: dict = {}
+
+    def worker():
+        try:
+            client_mod._acquire_file_lock(lock_path)
+            box["outcome"] = "acquired"
+        except BudgetLedgerError:
+            box["outcome"] = "refused"
+        except Exception as exc:  # noqa: BLE001 - re-raised in main thread
+            box["outcome"] = exc
+
+    # T1: a mutant dropping the deadline would spin forever; the bounded
+    # join turns that into a failure instead of stalling the suite.
     started = real_time.monotonic()
-    with pytest.raises(BudgetLedgerError):
-        client_mod._acquire_file_lock(lock_path)
+    thread = threading.Thread(target=worker, daemon=True)
+    thread.start()
+    thread.join(timeout=5)
     elapsed = real_time.monotonic() - started
+    assert not thread.is_alive(), "rename-failure path exceeded 5s"
+    assert box.get("outcome") == "refused"
     assert 0.3 <= elapsed < 3.0
 
 
@@ -1619,12 +1718,17 @@ def test_lock_rename_failure_respects_deadline(tmp_path, monkeypatch):
 def test_sdk_client_single_under_threads(tmp_path, monkeypatch):
     import sys
     import threading
+    import time as real_time
     created: list = []
     closed: list = []
     fake = FakeTransport()
 
     class FakeOpenAI:
         def __init__(self, **kwargs):
+            # T2: the delay forces the race open: without the creation
+            # lock every thread would be inside __init__ at once and
+            # created would hold 8 entries instead of 1.
+            real_time.sleep(0.3)
             created.append(kwargs)
             self.models = fake.models
             self.responses = fake.responses
@@ -1646,16 +1750,25 @@ def test_sdk_client_single_under_threads(tmp_path, monkeypatch):
     try:
         barrier = threading.Barrier(8)
         seen: list = []
+        errors: list = []
 
         def grab():
-            barrier.wait(timeout=10)
-            seen.append(client._live_transport())
+            try:
+                barrier.wait(timeout=10)
+                seen.append(client._live_transport())
+            except Exception as exc:  # noqa: BLE001 - collected below
+                errors.append(exc)
 
-        threads = [threading.Thread(target=grab) for _ in range(8)]
+        threads = [threading.Thread(target=grab, daemon=True)
+                   for _ in range(8)]
         for thread in threads:
             thread.start()
         for thread in threads:
             thread.join(timeout=10)
+        # T1: an overrun fails explicitly instead of hanging the suite.
+        assert not any(t.is_alive() for t in threads), \
+            "grab workers exceeded 10s"
+        assert errors == []
         assert len(created) == 1
         assert len(seen) == 8 and all(s is seen[0] for s in seen)
         client.close()
@@ -1850,3 +1963,151 @@ def test_images_failure_records_failed(tmp_path, monkeypatch):
     assert len(failed) == 1
     assert failed[0]["cost_usd"] == pytest.approx(pricing.image_cost_usd(2))
     assert failed[0]["reservation_id"] == entries[0]["reservation_id"]
+
+
+# -- M0-fix4 N1: files_delete must not create a missing ledger -----------
+
+
+def test_files_delete_does_not_create_missing_ledger(tmp_path, monkeypatch):
+    # Review section 3 repro order: first call refused -> files_delete ->
+    # the next responses_create is still refused (no $0 ledger created).
+    monkeypatch.delenv("MODEL_API_KEY", raising=False)
+    monkeypatch.delenv("META_RUN_CAP_USD", raising=False)
+    monkeypatch.delenv("META_TOTAL_CAP_USD", raising=False)
+    missing = tmp_path / "nowhere" / "ledger.jsonl"
+    monkeypatch.setenv("META_LEDGER_PATH", str(missing))
+    monkeypatch.delenv("META_LEDGER_INIT", raising=False)
+    transport = FakeTransport()
+    client = MetaClient(mode="live", run_id="n1",
+                        fixture_dir=tmp_path / "fixtures",
+                        transport=transport)
+    with pytest.raises(BudgetLedgerError):
+        client.responses_create("muse-spark-1.3", "hi",
+                                max_output_tokens=10)
+    with pytest.raises(BudgetLedgerError):
+        client.files_delete("file-fake123")
+    assert not missing.exists()
+    assert transport.calls == []
+    with pytest.raises(BudgetLedgerError):
+        client.responses_create("muse-spark-1.3", "hi",
+                                max_output_tokens=10)
+    assert not missing.exists()
+
+
+# -- M0-fix4 T2: mutation-catching tests ---------------------------------
+
+
+def test_acquire_returns_matching_owner_token(tmp_path):
+    import app.meta.client as client_mod
+    lock_path = tmp_path / "owner.lock"
+    token = client_mod._acquire_file_lock(lock_path)
+    # Fails when acquire returns None or a fixed value: the file content
+    # must equal the returned token.
+    assert token
+    assert lock_path.read_text(encoding="ascii") == token
+    client_mod._release_file_lock(lock_path, token)
+    assert not lock_path.exists()
+    # Tokens are unique per acquisition (fails on a fixed return).
+    token2 = client_mod._acquire_file_lock(lock_path)
+    assert token2 and token2 != token
+    # Fails when release skips the token check: a wrong token must keep
+    # the lock file.
+    client_mod._release_file_lock(lock_path, "wrong.token")
+    assert lock_path.exists()
+    client_mod._release_file_lock(lock_path, token2)
+    assert not lock_path.exists()
+
+
+def test_ledger_init_zero_refused(tmp_path, monkeypatch):
+    # META_LEDGER_INIT=0 is not INIT: a missing ledger is refused and
+    # nothing is created. Fails when "0" is accepted as init.
+    monkeypatch.delenv("MODEL_API_KEY", raising=False)
+    monkeypatch.delenv("META_RUN_CAP_USD", raising=False)
+    monkeypatch.delenv("META_TOTAL_CAP_USD", raising=False)
+    missing = tmp_path / "nowhere" / "ledger.jsonl"
+    monkeypatch.setenv("META_LEDGER_PATH", str(missing))
+    monkeypatch.setenv("META_LEDGER_INIT", "0")
+    transport = FakeTransport()
+    client = MetaClient(mode="live", run_id="init-zero",
+                        fixture_dir=tmp_path / "fixtures",
+                        transport=transport)
+    with pytest.raises(BudgetLedgerError):
+        client.responses_create("muse-spark-1.3", "hi",
+                                max_output_tokens=10)
+    assert not missing.exists()
+    assert transport.calls == []
+
+
+def test_relative_ledger_path_refused_with_init(tmp_path, monkeypatch):
+    # A relative META_LEDGER_PATH is refused even with INIT=1 (and even
+    # when the file exists). Fails when the absolute-path check is
+    # removed: the old test only paired "relative" with "missing", which
+    # the existence check refuses anyway.
+    monkeypatch.delenv("MODEL_API_KEY", raising=False)
+    monkeypatch.delenv("META_RUN_CAP_USD", raising=False)
+    monkeypatch.delenv("META_TOTAL_CAP_USD", raising=False)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("META_LEDGER_PATH", "rel-ledger.jsonl")
+    monkeypatch.setenv("META_LEDGER_INIT", "1")
+    transport = FakeTransport()
+    client = MetaClient(mode="live", run_id="rel-init",
+                        fixture_dir=tmp_path / "fixtures",
+                        transport=transport)
+    with pytest.raises(BudgetLedgerError):
+        client.responses_create("muse-spark-1.3", "hi",
+                                max_output_tokens=10)
+    assert transport.calls == []
+    (tmp_path / "rel-ledger.jsonl").write_text(
+        json.dumps({"run_id": "x", "cost_usd": 0.0}) + "\n",
+        encoding="utf-8")
+    with pytest.raises(BudgetLedgerError):
+        client.responses_create("muse-spark-1.3", "hi",
+                                max_output_tokens=10)
+    assert transport.calls == []
+
+
+@pytest.mark.parametrize("method", ["responses", "images", "models",
+                                    "files_create", "files_delete"])
+def test_ledger_guard_all_methods(tmp_path, monkeypatch, method):
+    # Every live/record method enforces the E7 guard. Fails when the
+    # guard is removed from any one of them.
+    monkeypatch.delenv("MODEL_API_KEY", raising=False)
+    monkeypatch.delenv("META_RUN_CAP_USD", raising=False)
+    monkeypatch.delenv("META_TOTAL_CAP_USD", raising=False)
+    missing = tmp_path / "nowhere" / "ledger.jsonl"
+    monkeypatch.setenv("META_LEDGER_PATH", str(missing))
+    monkeypatch.delenv("META_LEDGER_INIT", raising=False)
+    transport = FakeTransport()
+    client = MetaClient(mode="live", run_id=f"guard-{method}",
+                        fixture_dir=tmp_path / "fixtures",
+                        transport=transport)
+
+    def call():
+        if method == "responses":
+            return client.responses_create("muse-spark-1.3", "hi",
+                                           max_output_tokens=10)
+        if method == "images":
+            return client.images_generate("muse-image-1.0", "a cat")
+        if method == "models":
+            return client.models_list()
+        if method == "files_create":
+            return client.files_create(b"bytes", "v.mp4")
+        return client.files_delete("file-fake123")
+
+    with pytest.raises(BudgetLedgerError):
+        call()
+    assert not missing.exists()
+    assert transport.calls == []
+
+
+def test_request_hash_includes_extra_metadata():
+    # A request carrying metadata must hash differently from the same
+    # request without it. Fails when the hash drops extra/metadata; the
+    # pinned value also freezes the composition for replay.
+    plain = {"store": False, "max_output_tokens": 10}
+    with_meta = {"store": False, "max_output_tokens": 10,
+                 "metadata": {"propagation_direction": "forward"}}
+    assert request_hash("sam-3.1", "responses", with_meta, "hi") != \
+        request_hash("sam-3.1", "responses", plain, "hi")
+    assert request_hash("sam-3.1", "responses", with_meta, "hi") == (
+        "bc8f7f3f1e41f907bcaf0f506ae1b2afc396fdd463cf7d15fd5f3c67818e9e65")
