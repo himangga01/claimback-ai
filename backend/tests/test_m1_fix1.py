@@ -111,27 +111,27 @@ def test_g1_bracket_bypass_blocked():
         "돈 {principal}을 빌려주었다",
         "돈 {{ 들었다",
     ]:
-        res = check_g1a(_single(text), KR_SLOTS, PARTY_KR)
+        res = check_g1a(_single(text), KR_SLOTS, PARTY_KR, existing_exhibits=EXISTING)
         assert res.status == "fail", text
     res = check_g1a(
         _single("말 {{quote:EX9:item99}}을 빌려주었다"),
         KR_SLOTS,
         PARTY_KR,
-        EXISTING,
+        existing_exhibits=EXISTING,
     )
     assert res.status == "fail"
     ok = check_g1a(
         _single("말 {{quote:EX1:item1}}을 빌려주었다"),
         KR_SLOTS,
         PARTY_KR,
-        EXISTING,
+        existing_exhibits=EXISTING,
     )
     assert ok.status == "pass", [f.message for f in ok.findings]
 
 
 def test_g1_fullwidth_hanja_amount_blocked():
     for text in ["돈 ５００원을 빌려주었다", "돈 五百萬원을 빌려주었다"]:
-        res = check_g1a(_single(text), KR_SLOTS, PARTY_KR)
+        res = check_g1a(_single(text), KR_SLOTS, PARTY_KR, existing_exhibits=EXISTING)
         assert res.status == "fail", text
 
 
@@ -142,10 +142,10 @@ def test_g2_amount_won_requires_number():
         "그는 회사원이다",
         "원금을 돌려받았다",
     ]:
-        res = check_g1a(_single(text), KR_SLOTS, PARTY_KR)
+        res = check_g1a(_single(text), KR_SLOTS, PARTY_KR, existing_exhibits=EXISTING)
         assert res.status == "pass", (text, [f.message for f in res.findings])
     for text in ["돈 오백만 원을 빌려주었다", "돈 5000000원을 빌려주었다"]:
-        res = check_g1a(_single(text), KR_SLOTS, PARTY_KR)
+        res = check_g1a(_single(text), KR_SLOTS, PARTY_KR, existing_exhibits=EXISTING)
         assert res.status == "fail", text
 
 
@@ -160,35 +160,35 @@ def test_g3_sino_words_pass_but_real_numbers_blocked():
         "영영 돌아오지 않았다",
         "만만한 상대가 아니다",
     ]:
-        res = check_g1a(_single(text), KR_SLOTS, PARTY_KR)
+        res = check_g1a(_single(text), KR_SLOTS, PARTY_KR, existing_exhibits=EXISTING)
         assert res.status == "pass", (text, [f.message for f in res.findings])
     for text in ["돈 삼십일을 기다렸다", "돈 오백만을 기다렸다"]:
-        res = check_g1a(_single(text), KR_SLOTS, PARTY_KR)
+        res = check_g1a(_single(text), KR_SLOTS, PARTY_KR, existing_exhibits=EXISTING)
         assert res.status == "fail", text
 
 
 def test_g4_surname_honorific_lookbehind():
-    res = check_g1a(_single("에서 양해를 구했다"), KR_SLOTS, PARTY_KR)
+    res = check_g1a(_single("에서 양해를 구했다"), KR_SLOTS, PARTY_KR, existing_exhibits=EXISTING)
     assert res.status == "pass", [f.message for f in res.findings]
     for text in ["서 씨가 빌려갔다", "탁 사장이 빌려갔다", "서 선생님이 빌려갔다", "탁 대표가 빌려갔다"]:
-        res = check_g1a(_single(text), KR_SLOTS, PARTY_KR)
+        res = check_g1a(_single(text), KR_SLOTS, PARTY_KR, existing_exhibits=EXISTING)
         assert res.status == "fail", text
 
 
 def test_g5_relative_dates():
     for text in ["한 달 후에 갚겠다", "월말에 갚겠다", "금요일까지 갚겠다", "다음 달에 갚겠다"]:
-        res = check_g1a(_single(text), KR_SLOTS, PARTY_KR)
+        res = check_g1a(_single(text), KR_SLOTS, PARTY_KR, existing_exhibits=EXISTING)
         assert res.status == "fail", text
-    res = check_g1a(_single("이틀 동안 기다렸다"), KR_SLOTS, PARTY_KR)
+    res = check_g1a(_single("이틀 동안 기다렸다"), KR_SLOTS, PARTY_KR, existing_exhibits=EXISTING)
     assert res.status == "pass", [f.message for f in res.findings]
 
 
 def test_g6_english_case_insensitive_and_single_char_skip():
     parties = ["Avery Linden (SAMPLE)", "Rowan Hale (SAMPLE)"]
     for text in ["avery linden이 빌려갔다", "AVERY가 빌려갔다"]:
-        res = check_g1a(_single(text), KR_SLOTS, parties)
+        res = check_g1a(_single(text), KR_SLOTS, parties, existing_exhibits=EXISTING)
         assert res.status == "fail", text
-    res = check_g1a(_single("준이 왔다"), KR_SLOTS, ["서준(SAMPLE)"])
+    res = check_g1a(_single("준이 왔다"), KR_SLOTS, ["서준(SAMPLE)"], existing_exhibits=EXISTING)
     assert res.status == "pass", [f.message for f in res.findings]
 
 
@@ -271,7 +271,7 @@ def test_kr_slots_new_rate_slots():
     assert "agreed_rate" in KR_SLOTS
     assert "delay_rate" in KR_SLOTS
     assert "contract_interest" in KR_SLOTS
-    res = check_g1a(_single("이율은 {{agreed_rate}}이다"), KR_SLOTS, PARTY_KR)
+    res = check_g1a(_single("이율은 {{agreed_rate}}이다"), KR_SLOTS, PARTY_KR, existing_exhibits=EXISTING)
     assert res.status == "pass", [f.message for f in res.findings]
 
 
@@ -406,10 +406,19 @@ def test_k5_base_date_display_and_blank_total(tmp_path):
     KoreanLegalDocumentCompiler.generate_content_proof_pdf(fact, ver, out2, as_of=None)
     text2 = PdfReader(out2).pages[0].extract_text()
     assert "기준" not in text2
-    assert "금 ]" in text2 or "금  ]" in text2 or "합계" in text2
-    packet = KoreanLegalDocumentCompiler.generate_ecourt_clipboard_packet(fact, ver)
+    assert "금 ____원" in text2
+    assert "금 ]" not in text2
+    assert "(금 )" not in text2
+    packet = KoreanLegalDocumentCompiler.generate_ecourt_clipboard_packet(
+        fact, ver, as_of=date(2026, 10, 31)
+    )
     assert "기준" in packet["total_claim_amount"]
     assert "기준" in packet["interest_amount"]
+    blank = KoreanLegalDocumentCompiler.generate_ecourt_clipboard_packet(fact, ver)
+    assert "기준" not in blank["total_claim_amount"]
+    assert "기준" not in blank["interest_amount"]
+    assert "____" in blank["total_claim_amount"]
+    assert "____" in blank["interest_amount"]
 
 
 def test_k6_post_base_repayment_warn_and_filter():

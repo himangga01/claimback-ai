@@ -69,6 +69,12 @@ def _format_rate(rate: Decimal) -> str:
     return format(d, "f")
 
 
+def _canon_rate(rate: Decimal) -> Decimal:
+    if rate == rate.to_integral_value():
+        return Decimal(int(rate))
+    return rate.normalize()
+
+
 def _format_kr_date(d: date) -> str:
     return f"{d.year}. {d.month}. {d.day}."
 
@@ -207,30 +213,32 @@ def calculate_kr(loan_fact: LoanFactSchema, as_of: date) -> Calculation:
     allocations: List[AllocationItem] = []
 
     agreed = loan_fact.agreed_interest_rate
+    if agreed is not None and agreed == 0:
+        agreed = None
     capped: Optional[Decimal] = None
     if agreed is not None:
-        if agreed > Decimal("20.0"):
+        if agreed > Decimal("20"):
             warnings.append(
                 f"입력한 약정 이율(연 {_format_rate(agreed)}%)이 계산 상한 연 20%보다 높아 "
                 "연 20%로 계산했습니다. 확인할 칸: 약정 이율"
             )
-            capped = Decimal("20.0")
+            capped = Decimal("20")
         else:
-            capped = agreed
+            capped = _canon_rate(agreed)
 
     statutory = (
-        Decimal("6.0")
+        Decimal("6")
         if loan_fact.transaction_kind == TransactionKindEnum.COMMERCIAL
-        else Decimal("5.0")
+        else Decimal("5")
     )
     if capped is not None and capped > statutory:
         pre_rate = capped
     else:
         pre_rate = statutory
     if capped is not None:
-        post_rate = capped if capped > Decimal("12.0") else Decimal("12.0")
+        post_rate = capped if capped > Decimal("12") else Decimal("12")
     else:
-        post_rate = Decimal("12.0")
+        post_rate = Decimal("12")
 
     if loan_fact.due_date > as_of:
         missing_fields.append("due_date")
@@ -366,6 +374,10 @@ def calculate_kr(loan_fact: LoanFactSchema, as_of: date) -> Calculation:
         reference_amount = Decimal("0")
 
     unsupported_rate = capped is not None and capped < statutory
+    if unsupported_rate:
+        last_alloc = sorted_reps[-1].payment_date if sorted_reps else loan_fact.loan_date
+        if last_alloc >= loan_fact.due_date:
+            unsupported_rate = False
     if unsupported_rate and "agreed_interest_rate" not in missing_fields:
         missing_fields.append("agreed_interest_rate")
     if capped is not None and capped >= statutory:
@@ -819,6 +831,13 @@ class VerificationGateService:
             if loan_fact.service_date is not None and today <= loan_fact.service_date:
                 breakdown["post_service_interest"] = Decimal("0.00")
             expected_total = calc_obj.reference_total.amount
+            if target_date is None:
+                calculated_interest = Decimal("0")
+                expected_total = remaining_principal
+                calc_obj.accrued_interest = Decimal("0")
+                calc_obj.reference_total.amount = Decimal("0")
+                breakdown["pre_service_interest"] = Decimal("0.00")
+                breakdown["post_service_interest"] = Decimal("0.00")
             if "repayments" in calc_obj.missing_fields and calc_obj.rate_clause.sentence == "":
                 missing_requirements.append(_UNSUPPORTED_REPAYMENT_MSG)
             if "agreed_interest_rate" in calc_obj.missing_fields and calc_obj.rate_clause.sentence == "":
@@ -832,6 +851,11 @@ class VerificationGateService:
             )
             audit_notes.extend(calc_logs)
             expected_total = remaining_principal + calculated_interest
+            if target_date is None:
+                calculated_interest = Decimal("0.00")
+                expected_total = remaining_principal
+                breakdown["pre_service_interest"] = Decimal("0.00")
+                breakdown["post_service_interest"] = Decimal("0.00")
 
         is_satisfied = remaining_principal == Decimal("0.00") and calculated_interest == Decimal("0.00")
         if is_satisfied:
@@ -854,6 +878,8 @@ class VerificationGateService:
         draft_claimed = claim_draft.claim_amount_claimed
         matches_remaining = draft_claimed == remaining_principal
         matches_total = draft_claimed == expected_total
+        if target_date is None:
+            matches_total = matches_remaining
         if not matches_remaining and not matches_total:
             tampering_reconciliations.append(
                 f"초안 금액({draft_claimed})이 계산값(남은 원금 {remaining_principal}, "

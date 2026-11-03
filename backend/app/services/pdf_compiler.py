@@ -2,6 +2,7 @@ import os
 from datetime import date, timedelta
 from decimal import Decimal
 from typing import Dict, Any, List, Optional
+from xml.sax.saxutils import escape as _xml_escape
 from pypdf import PdfReader, PdfWriter
 
 from reportlab.lib.pagesizes import A4
@@ -242,12 +243,18 @@ class KoreanLegalDocumentCompiler:
 
         p = loan_fact.creditor
         d = loan_fact.debtor
+        p_name = _xml_escape(p.name)
+        p_phone = _xml_escape(p.phone or "미기재")
+        p_addr = _xml_escape(p.address or "미기재")
+        d_name = _xml_escape(d.name)
+        d_phone = _xml_escape(d.phone or "미기재")
+        d_addr = _xml_escape(d.address or "미기재")
 
         info_data = [
-            [Paragraph("<b>발 신 인:</b>", bold_style), Paragraph(f"{p.name} (연락처: {p.phone or '미기재'})", body_style)],
-            ["", Paragraph(f"주소: {p.address or '미기재'}", body_style)],
-            [Paragraph("<b>수 신 인:</b>", bold_style), Paragraph(f"{d.name} (연락처: {d.phone or '미기재'})", body_style)],
-            ["", Paragraph(f"주소: {d.address or '미기재'}", body_style)],
+            [Paragraph("<b>발 신 인:</b>", bold_style), Paragraph(f"{p_name} (연락처: {p_phone})", body_style)],
+            ["", Paragraph(f"주소: {p_addr}", body_style)],
+            [Paragraph("<b>수 신 인:</b>", bold_style), Paragraph(f"{d_name} (연락처: {d_phone})", body_style)],
+            ["", Paragraph(f"주소: {d_addr}", body_style)],
             [Paragraph("<b>제    목:</b>", bold_style), Paragraph("<b>대여금 반환 청구의 건</b>", bold_style)],
         ]
         info_table = Table(info_data, colWidths=[65, 430])
@@ -267,9 +274,9 @@ class KoreanLegalDocumentCompiler:
             total_str = f"{_fmt_won(verification.total_claim_amount)}원"
             total_disp = f"{total_str} ({base_s} 기준)"
         else:
-            interest_str = f"{_fmt_won(verification.calculated_interest)}원"
-            total_str = ""
-            total_disp = ""
+            interest_str = "____원"
+            total_str = "____원"
+            total_disp = "____원"
 
         elements.append(Paragraph(f"<b>[청구 금액 합계: 금 {total_disp}]</b> (남은 원금: {remaining_str}, 현재 지연손해금: {interest_str})", bold_style))
         elements.append(Spacer(1, 10))
@@ -315,18 +322,21 @@ class KoreanLegalDocumentCompiler:
                 f"위 원리금 합계액(금 {total_str})을 보내 주시기 바랍니다."
             )
 
+        item3 = "3. 발신인은 변제기 이후 현재까지 남은 돈을 받지 못했습니다."
         if fact_sentences:
-            fact_block = "<br/><br/>".join(fact_sentences)
+            fact_block = "<br/><br/>".join(_xml_escape(s) for s in fact_sentences)
             body_text = (
                 f"1. 귀하의 무궁한 발전을 기원합니다.<br/><br/>"
+                f"{item2}<br/><br/>"
                 f"{fact_block}<br/><br/>"
+                f"{item3}<br/><br/>"
                 f"{item4}"
             )
         else:
             body_text = (
                 f"1. 귀하의 무궁한 발전을 기원합니다.<br/><br/>"
                 f"{item2}<br/><br/>"
-                f"3. 발신인은 변제기 이후 현재까지 남은 돈을 받지 못했습니다.<br/><br/>"
+                f"{item3}<br/><br/>"
                 f"{item4}"
             )
         elements.append(Paragraph(body_text, body_style))
@@ -338,7 +348,7 @@ class KoreanLegalDocumentCompiler:
             date_str = "____년 __월 __일"
         elements.append(Paragraph(date_str, center_style))
         elements.append(Spacer(1, 10))
-        elements.append(Paragraph(f"<b>발신인: {p.name} (인/서명)</b>", right_style))
+        elements.append(Paragraph(f"<b>발신인: {p_name} (인/서명)</b>", right_style))
 
         def _footer(canvas, _doc):
             canvas.saveState()
@@ -365,8 +375,6 @@ class KoreanLegalDocumentCompiler:
         d = loan_fact.debtor
 
         base_date = as_of
-        if base_date is None and verification.calculation is not None:
-            base_date = verification.calculation.reference_total.as_of
         remaining_str = f"{_fmt_won(verification.reconciled_amount)}"
         principal_str = f"{_fmt_won(loan_fact.principal_amount)}"
         if base_date is not None:
@@ -374,8 +382,8 @@ class KoreanLegalDocumentCompiler:
             interest_str = f"{_fmt_won(verification.calculated_interest)} ({base_s} 기준)"
             total_str = f"{_fmt_won(verification.total_claim_amount)} ({base_s} 기준)"
         else:
-            interest_str = f"{_fmt_won(verification.calculated_interest)}"
-            total_str = ""
+            interest_str = "____"
+            total_str = "____"
 
         parties_text = (
             f"채권자: {p.name}\n"
@@ -402,7 +410,7 @@ class KoreanLegalDocumentCompiler:
             dem_s = _fmt_kr_date(loan_fact.demand_date)
             demand_clause = f"채권자는 {dem_s}경 채무자에게 변제를 요청하였으나, 채무자는 현재까지 이를 지급하지 않고 있습니다."
         else:
-            demand_clause = "채무자는 변제기 이후 현재까지 남은 돈을 지급하지 않고 있습니다."
+            demand_clause = "채무자는 현재까지 남은 돈을 지급하지 않고 있습니다."
 
         loan_s = _fmt_kr_date(loan_fact.loan_date)
         due_s = _fmt_kr_date(loan_fact.due_date)
@@ -440,8 +448,10 @@ class KoreanLegalDocumentCompiler:
                 f"1. 당사자 관계\n"
                 f"채권자는 채무자에게 금전을 대여한 자이며, 채무자는 이를 차용한 자입니다.\n\n"
                 f"2. 대여사실 및 변제약정\n"
-                f"{fact_block}\n\n"
-                f"3. 결론\n"
+                f"{lend_part}\n{fact_block}\n\n"
+                f"3. 변제기 이후 상황\n"
+                f"약정 변제기가 지났음에도 {demand_clause}\n\n"
+                f"4. 결론\n"
                 f"따라서 채권자는 위 대여원금 및 지연손해금을 지급받기 위하여 본 신청에 이르렀습니다."
             )
         else:

@@ -96,7 +96,7 @@ def test_g1a_normal_draft_passes():
             ),
         ],
     )
-    res = check_g1a(draft, KR_SLOTS, PARTY_KR)
+    res = check_g1a(draft, KR_SLOTS, PARTY_KR, existing_exhibits=EXISTING)
     assert res.status == "pass"
     assert res.findings == []
     res3 = check_g3(draft, EXISTING)
@@ -112,7 +112,7 @@ def test_g1a_plain_korean_sentences_pass():
             for i, s in enumerate(NORMAL_SENTENCES)
         ],
     )
-    res = check_g1a(draft, KR_SLOTS, PARTY_KR)
+    res = check_g1a(draft, KR_SLOTS, PARTY_KR, existing_exhibits=EXISTING)
     assert res.status == "pass", [f.message for f in res.findings]
     assert res.findings == []
 
@@ -265,7 +265,7 @@ def test_g1a_100_tampers_all_blocked():
             prefix = "korean"
         parties = PARTY_KR + PARTY_EN
         draft = _single(text, sid=label)
-        res = check_g1a(draft, KR_SLOTS, parties)
+        res = check_g1a(draft, KR_SLOTS, parties, existing_exhibits=EXISTING)
         by_prefix.setdefault(prefix, {"total": 0, "blocked": 0})
         by_prefix[prefix]["total"] += 1
         if res.status == "fail" and res.findings:
@@ -327,8 +327,8 @@ def test_demo_tampered_draft_fixture_blocks_one_sentence():
     data = json.loads(path.read_text(encoding="utf-8"))
     normal = SlotDraft(**data["normal_draft"])
     tampered = SlotDraft(**data["tampered_draft"])
-    assert check_g1a(normal, KR_SLOTS, PARTY_KR).status == "pass"
-    res = check_g1a(tampered, KR_SLOTS, PARTY_KR)
+    assert check_g1a(normal, KR_SLOTS, PARTY_KR, existing_exhibits=EXISTING).status == "pass"
+    res = check_g1a(tampered, KR_SLOTS, PARTY_KR, existing_exhibits=EXISTING)
     assert res.status == "fail"
     ids = {f.sentence_id for f in res.findings}
     assert ids == {"t1"}
