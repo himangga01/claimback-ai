@@ -1,5 +1,5 @@
 {
-  "latency_ms": 5139,
+  "latency_ms": 4425,
   "request": {
     "endpoint": "responses",
     "model": "muse-spark-1.2",
@@ -116,11 +116,11 @@
   "response": {
     "access_programs": null,
     "background": false,
-    "completed_at": 1793690413.0,
+    "completed_at": 1793695911.0,
     "conversation": null,
-    "created_at": 1793690413.0,
+    "created_at": 1793695911.0,
     "error": null,
-    "id": "resp_6ae98b2d13e11c9830924f08",
+    "id": "resp_6ae9a0a77f55cabefe5b42fc",
     "incomplete_details": null,
     "instructions": null,
     "max_output_tokens": 4000,
@@ -133,7 +133,7 @@
       {
         "content": null,
         "encrypted_content": "<redacted>",
-        "id": "rs_6ae98b2d13e11c9830924f08:rs_df73ee85-27ed-4102-ae59-99a2bb8b95d1",
+        "id": "rs_6ae9a0a77f55cabefe5b42fc:rs_aea3f07d-6d52-43ff-9963-bd06e2e615fa",
         "status": "completed",
         "summary": [],
         "type": "reasoning"
@@ -143,11 +143,11 @@
           {
             "annotations": [],
             "logprobs": [],
-            "text": "{\"items\":[{\"box\":[30,5,550,125],\"confidence\":0.99,\"kind\":\"utterance\",\"normalized\":null,\"side\":\"left\",\"speaker\":null,\"text_verbatim\":\"네, 병원비로 500만 원이 필요해요. 4월 10일까지 갚을게요.\"},{\"box\":[220,12,380,50],\"confidence\":0.99,\"kind\":\"amount\",\"normalized\":\"5000000\",\"side\":null,\"speaker\":null,\"text_verbatim\":\"500만 원\"},{\"box\":[55,65,220,105],\"confidence\":0.98,\"kind\":\"date\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"4월 10일\"},{\"box\":[480,185,730,220],\"confidence\":0.99,\"kind\":\"date\",\"normalized\":\"2026-03-10\",\"side\":null,\"speaker\":null,\"text_verbatim\":\"2026년 3월 10일\"},{\"box\":[395,280,970,350],\"confidence\":0.99,\"kind\":\"utterance\",\"normalized\":null,\"side\":\"right\",\"speaker\":null,\"text_verbatim\":\"알겠어요. 오늘 5,000,000원 보낼게요.\"},{\"box\":[585,292,785,335],\"confidence\":0.99,\"kind\":\"amount\",\"normalized\":\"5000000\",\"side\":null,\"speaker\":null,\"text_verbatim\":\"5,000,000원\"},{\"box\":[30,400,200,425],\"confidence\":0.98,\"kind\":\"party_name\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"탁나루(SAMPLE)\"},{\"box\":[30,440,355,510],\"confidence\":0.99,\"kind\":\"utterance\",\"normalized\":null,\"side\":\"left\",\"speaker\":\"탁나루(SAMPLE)\",\"text_verbatim\":\"정말 감사합니다!\"}]}",
+            "text": "{\"items\":[{\"box\":[30,5,545,125],\"confidence\":0.98,\"kind\":\"utterance\",\"normalized\":null,\"side\":\"left\",\"speaker\":null,\"text_verbatim\":\"네, 병원비로 500만 원이 필요해요.\\n4월 10일까지 갚을게요.\"},{\"box\":[278,16,420,45],\"confidence\":0.97,\"kind\":\"amount\",\"normalized\":\"5000000\",\"side\":null,\"speaker\":null,\"text_verbatim\":\"500만 원\"},{\"box\":[48,68,188,98],\"confidence\":0.97,\"kind\":\"date\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"4월 10일\"},{\"box\":[405,144,612,176],\"confidence\":0.98,\"kind\":\"date\",\"normalized\":\"2026-03-10\",\"side\":null,\"speaker\":null,\"text_verbatim\":\"2026년 3월 10일\"},{\"box\":[394,213,968,285],\"confidence\":0.98,\"kind\":\"utterance\",\"normalized\":null,\"side\":\"right\",\"speaker\":null,\"text_verbatim\":\"알겠어요. 오늘 5,000,000원 보낼게요.\"},{\"box\":[578,233,805,265],\"confidence\":0.98,\"kind\":\"amount\",\"normalized\":\"5000000\",\"side\":null,\"speaker\":null,\"text_verbatim\":\"5,000,000원\"},{\"box\":[32,312,198,335],\"confidence\":0.96,\"kind\":\"party_name\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"탁나루(SAMPLE)\"},{\"box\":[30,345,355,417],\"confidence\":0.98,\"kind\":\"utterance\",\"normalized\":null,\"side\":\"left\",\"speaker\":\"탁나루(SAMPLE)\",\"text_verbatim\":\"정말 감사합니다!\"}]}",
             "type": "output_text"
           }
         ],
-        "id": "msg_c9833933-6969-43e5-8c8f-346f8a298a6b",
+        "id": "msg_b32ee2fd-a6ec-4c3b-8d5b-89871bf47090",
         "phase": null,
         "role": "assistant",
         "status": "completed",
@@ -274,23 +274,23 @@
       "input_tokens": 1172,
       "input_tokens_details": {
         "cache_write_tokens": null,
-        "cached_tokens": 1123
+        "cached_tokens": 611
       },
-      "output_tokens": 1222,
+      "output_tokens": 1145,
       "output_tokens_details": {
-        "reasoning_tokens": 819
+        "reasoning_tokens": 742
       },
-      "total_tokens": 2394
+      "total_tokens": 2317
     },
     "user": null
   },
   "usage": {
-    "cached_input_tokens": 1123,
+    "cached_input_tokens": 611,
     "images_processed": 0,
     "input_tokens": 1172,
-    "output_tokens": 1222,
-    "reasoning_tokens": 819,
-    "total_tokens": 2394,
+    "output_tokens": 1145,
+    "reasoning_tokens": 742,
+    "total_tokens": 2317,
     "video_frames_processed": 0
   }
 }

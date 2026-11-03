@@ -90,7 +90,7 @@ def test_m2c_empty_value_without_sources_is_not_a_conflict():
             if q["field"] == "transaction_kind"] == []
 
 
-def test_m2c_name_matches_verbatim_ignoring_parens_and_spaces():
+def test_m2c_name_dropped_paren_conflicts_spaces_still_pass():
     readings = [_reading("EX6", [
         _item("item4", "party_name", "서가온(SAMPLE)"),
         _item("item6", "address", "서울특별시  샘플구 데모로 0"),
@@ -106,10 +106,12 @@ def test_m2c_name_matches_verbatim_ignoring_parens_and_spaces():
           "sources": [{"ex_id": "EX6", "item_id": "item8"}],
           "conflict": False, "null_reason": None}],
         readings)
-    for name in ("creditor_name", "creditor_address", "creditor_phone"):
+    # INT-3 task 6: dropping "(SAMPLE)" now conflicts.
+    assert _field(review, "creditor_name")["conflict"] is True
+    for name in ("creditor_address", "creditor_phone"):
         assert _field(review, name)["conflict"] is False, name
-    assert review["conflicts"] == []
-    assert review["questions"] == []
+    assert any("creditor_name" in c["fields"] for c in review["conflicts"])
+    assert any(q["field"] == "creditor_name" for q in review["questions"])
 
 
 def test_m2c_name_mismatch_conflicts_and_asks():

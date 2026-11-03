@@ -1,5 +1,5 @@
 {
-  "latency_ms": 522,
+  "latency_ms": 1400,
   "request": {
     "endpoint": "responses",
     "model": "sam-3.1",
@@ -25,11 +25,11 @@
   "response": {
     "access_programs": null,
     "background": false,
-    "completed_at": 1793686328.0,
+    "completed_at": 1793695978.0,
     "conversation": null,
-    "created_at": 1793686327.0,
+    "created_at": 1793695978.0,
     "error": null,
-    "id": "resp_6ae97b383cc19bfdf5b44363",
+    "id": "resp_6ae9a0ea7ae105ed73eb4528",
     "incomplete_details": null,
     "instructions": null,
     "max_output_tokens": null,
@@ -48,7 +48,7 @@
             "type": "output_text"
           }
         ],
-        "id": "msg_289124f2-fd7c-4ac9-85db-81a7daae5cb4",
+        "id": "msg_a4d761c0-1bb0-4f15-a43a-a17f0eeba7ad",
         "phase": null,
         "role": "assistant",
         "status": "completed",

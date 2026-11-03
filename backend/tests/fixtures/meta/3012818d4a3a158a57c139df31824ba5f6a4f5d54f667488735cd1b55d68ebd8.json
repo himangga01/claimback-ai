@@ -1,5 +1,5 @@
 {
-  "latency_ms": 3999,
+  "latency_ms": 5366,
   "request": {
     "endpoint": "responses",
     "model": "muse-spark-1.2",
@@ -116,11 +116,11 @@
   "response": {
     "access_programs": null,
     "background": false,
-    "completed_at": 1793690446.0,
+    "completed_at": 1793695948.0,
     "conversation": null,
-    "created_at": 1793690446.0,
+    "created_at": 1793695948.0,
     "error": null,
-    "id": "resp_6ae98b4e58a933ece2634863",
+    "id": "resp_6ae9a0ccb3618d30461d4303",
     "incomplete_details": null,
     "instructions": null,
     "max_output_tokens": 4000,
@@ -133,7 +133,7 @@
       {
         "content": null,
         "encrypted_content": "<redacted>",
-        "id": "rs_6ae98b4e58a933ece2634863:rs_9ed63fc3-5afe-4a4a-b790-5f5327e0d25e",
+        "id": "rs_6ae9a0ccb3618d30461d4303:rs_eecfabfd-6d9a-4c70-a839-58bae6cf9e8d",
         "status": "completed",
         "summary": [],
         "type": "reasoning"
@@ -143,11 +143,11 @@
           {
             "annotations": [],
             "logprobs": [],
-            "text": "{\"items\":[{\"box\":[385,12,618,42],\"confidence\":0.99,\"kind\":\"header\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"SAMPLE / 데모용\"},{\"box\":[54,98,430,145],\"confidence\":0.99,\"kind\":\"header\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"샘플은행 입금확인증\"},{\"box\":[56,211,183,245],\"confidence\":0.99,\"kind\":\"label\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"받은 사람\"},{\"box\":[318,206,615,244],\"confidence\":0.99,\"kind\":\"party_name\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"서가온(SAMPLE)\"},{\"box\":[56,322,183,354],\"confidence\":0.99,\"kind\":\"label\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"받은 계좌\"},{\"box\":[342,312,585,364],\"confidence\":0.99,\"kind\":\"account_number\",\"normalized\":\"000-0000-1234\",\"side\":null,\"speaker\":null,\"text_verbatim\":\"000-0000-1234\"},{\"box\":[56,431,183,465],\"confidence\":0.99,\"kind\":\"label\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"보낸 사람\"},{\"box\":[402,428,616,464],\"confidence\":0.99,\"kind\":\"party_name\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"탁나루(SAMPLE)\"},{\"box\":[55,541,184,575],\"confidence\":0.99,\"kind\":\"label\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"보낸 계좌\"},{\"box\":[342,538,585,586],\"confidence\":0.99,\"kind\":\"account_number\",\"normalized\":\"000-0000-5678\",\"side\":null,\"speaker\":null,\"text_verbatim\":\"000-0000-5678\"},{\"box\":[56,652,115,684],\"confidence\":0.99,\"kind\":\"label\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"금액\"},{\"box\":[363,653,553,687],\"confidence\":0.99,\"kind\":\"amount\",\"normalized\":\"1000000\",\"side\":null,\"speaker\":null,\"text_verbatim\":\"1,000,000원\"},{\"box\":[56,766,143,797],\"confidence\":0.99,\"kind\":\"label\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"입금일\"},{\"box\":[359,763,544,801],\"confidence\":0.99,\"kind\":\"date\",\"normalized\":\"2026-05-01\",\"side\":null,\"speaker\":null,\"text_verbatim\":\"2026-05-01\"}]}",
+            "text": "{\"items\":[{\"box\":[350,10,650,40],\"confidence\":0.99,\"kind\":\"header\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"SAMPLE / 데모용\"},{\"box\":[50,95,430,145],\"confidence\":0.99,\"kind\":\"header\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"샘플은행 입금확인증\"},{\"box\":[55,210,170,245],\"confidence\":0.99,\"kind\":\"label\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"받은 사람\"},{\"box\":[315,205,620,245],\"confidence\":0.99,\"kind\":\"party_name\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"서가온(SAMPLE)\"},{\"box\":[55,325,170,360],\"confidence\":0.99,\"kind\":\"label\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"받은 계좌\"},{\"box\":[340,310,590,365],\"confidence\":0.99,\"kind\":\"account_number\",\"normalized\":\"000-0000-1234\",\"side\":null,\"speaker\":null,\"text_verbatim\":\"000-0000-1234\"},{\"box\":[55,435,170,470],\"confidence\":0.99,\"kind\":\"label\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"보낸 사람\"},{\"box\":[315,430,620,470],\"confidence\":0.99,\"kind\":\"party_name\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"탁나루(SAMPLE)\"},{\"box\":[55,545,170,580],\"confidence\":0.99,\"kind\":\"label\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"보낸 계좌\"},{\"box\":[340,535,590,585],\"confidence\":0.99,\"kind\":\"account_number\",\"normalized\":\"000-0000-5678\",\"side\":null,\"speaker\":null,\"text_verbatim\":\"000-0000-5678\"},{\"box\":[55,655,110,690],\"confidence\":0.99,\"kind\":\"label\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"금액\"},{\"box\":[360,655,555,695],\"confidence\":0.99,\"kind\":\"amount\",\"normalized\":\"1000000\",\"side\":null,\"speaker\":null,\"text_verbatim\":\"1,000,000원\"},{\"box\":[55,765,140,800],\"confidence\":0.99,\"kind\":\"label\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"입금일\"},{\"box\":[355,765,545,800],\"confidence\":0.99,\"kind\":\"date\",\"normalized\":\"2026-05-01\",\"side\":null,\"speaker\":null,\"text_verbatim\":\"2026-05-01\"}]}",
             "type": "output_text"
           }
         ],
-        "id": "msg_3b7e9036-43c3-49db-aa94-aebe1b07b421",
+        "id": "msg_ad1f1a06-a87a-42ff-b8df-2a057766916d",
         "phase": null,
         "role": "assistant",
         "status": "completed",
@@ -274,23 +274,23 @@
       "input_tokens": 1172,
       "input_tokens_details": {
         "cache_write_tokens": null,
-        "cached_tokens": 1123
+        "cached_tokens": 611
       },
-      "output_tokens": 1333,
+      "output_tokens": 1556,
       "output_tokens_details": {
-        "reasoning_tokens": 712
+        "reasoning_tokens": 935
       },
-      "total_tokens": 2505
+      "total_tokens": 2728
     },
     "user": null
   },
   "usage": {
-    "cached_input_tokens": 1123,
+    "cached_input_tokens": 611,
     "images_processed": 0,
     "input_tokens": 1172,
-    "output_tokens": 1333,
-    "reasoning_tokens": 712,
-    "total_tokens": 2505,
+    "output_tokens": 1556,
+    "reasoning_tokens": 935,
+    "total_tokens": 2728,
     "video_frames_processed": 0
   }
 }

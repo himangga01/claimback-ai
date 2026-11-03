@@ -1,5 +1,5 @@
 {
-  "latency_ms": 4758,
+  "latency_ms": 6001,
   "request": {
     "endpoint": "responses",
     "model": "muse-spark-1.2",
@@ -116,11 +116,11 @@
   "response": {
     "access_programs": null,
     "background": false,
-    "completed_at": 1793690436.0,
+    "completed_at": 1793695938.0,
     "conversation": null,
-    "created_at": 1793690436.0,
+    "created_at": 1793695938.0,
     "error": null,
-    "id": "resp_6ae98b444c97ad83e6e34dd8",
+    "id": "resp_6ae9a0c22c7022045f56442e",
     "incomplete_details": null,
     "instructions": null,
     "max_output_tokens": 4000,
@@ -133,7 +133,7 @@
       {
         "content": null,
         "encrypted_content": "<redacted>",
-        "id": "rs_6ae98b444c97ad83e6e34dd8:rs_8f5dfd47-c7c0-43a5-af66-2c9c62f9742d",
+        "id": "rs_6ae9a0c22c7022045f56442e:rs_c6778b3b-8b41-4ce7-b18d-a84d719d4d4e",
         "status": "completed",
         "summary": [],
         "type": "reasoning"
@@ -143,11 +143,11 @@
           {
             "annotations": [],
             "logprobs": [],
-            "text": "{\"items\":[{\"box\":[30,60,540,130],\"confidence\":0.99,\"kind\":\"utterance\",\"normalized\":null,\"side\":\"left\",\"speaker\":\"탁나루(SAMPLE)\",\"text_verbatim\":\"오늘 100만 원 먼저 보냈어.\"},{\"box\":[120,73,255,115],\"confidence\":0.99,\"kind\":\"amount\",\"normalized\":\"1000000\",\"side\":null,\"speaker\":null,\"text_verbatim\":\"100만 원\"},{\"box\":[330,380,970,500],\"confidence\":0.99,\"kind\":\"utterance\",\"normalized\":null,\"side\":\"right\",\"speaker\":null,\"text_verbatim\":\"100만 원 받았어요. 남은 400만 원은 언제 주실 수 있나요?\"},{\"box\":[355,395,475,430],\"confidence\":0.99,\"kind\":\"amount\",\"normalized\":\"1000000\",\"side\":null,\"speaker\":null,\"text_verbatim\":\"100만 원\"},{\"box\":[680,395,800,430],\"confidence\":0.99,\"kind\":\"amount\",\"normalized\":\"4000000\",\"side\":null,\"speaker\":null,\"text_verbatim\":\"400만 원\"},{\"box\":[30,840,645,895],\"confidence\":0.99,\"kind\":\"utterance\",\"normalized\":null,\"side\":\"left\",\"speaker\":\"탁나루(SAMPLE)\",\"text_verbatim\":\"5월 20일까지 남은 400만 원 다 갚을게요.\"},{\"box\":[35,850,160,885],\"confidence\":0.98,\"kind\":\"date\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"5월 20일\"},{\"box\":[325,850,445,885],\"confidence\":0.99,\"kind\":\"amount\",\"normalized\":\"4000000\",\"side\":null,\"speaker\":null,\"text_verbatim\":\"400만 원\"},{\"box\":[20,20,200,45],\"confidence\":0.98,\"kind\":\"party_name\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"탁나루(SAMPLE)\"},{\"box\":[30,800,200,825],\"confidence\":0.98,\"kind\":\"party_name\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"탁나루(SAMPLE)\"}]}",
+            "text": "{\"items\":[{\"box\":[30,58,542,130],\"confidence\":0.99,\"kind\":\"utterance\",\"normalized\":null,\"side\":\"left\",\"speaker\":\"탁나루(SAMPLE)\",\"text_verbatim\":\"오늘 100만 원 먼저 보냈어.\"},{\"box\":[130,78,272,112],\"confidence\":0.99,\"kind\":\"amount\",\"normalized\":\"1000000\",\"side\":null,\"speaker\":null,\"text_verbatim\":\"100만 원\"},{\"box\":[325,378,969,501],\"confidence\":0.99,\"kind\":\"utterance\",\"normalized\":null,\"side\":\"right\",\"speaker\":null,\"text_verbatim\":\"100만 원 받았어요. 남은 400만 원은 언제 주실 수 있나요?\"},{\"box\":[356,400,472,435],\"confidence\":0.99,\"kind\":\"amount\",\"normalized\":\"1000000\",\"side\":null,\"speaker\":null,\"text_verbatim\":\"100만 원\"},{\"box\":[666,400,783,435],\"confidence\":0.99,\"kind\":\"amount\",\"normalized\":\"4000000\",\"side\":null,\"speaker\":null,\"text_verbatim\":\"400만 원\"},{\"box\":[30,858,648,939],\"confidence\":0.99,\"kind\":\"utterance\",\"normalized\":null,\"side\":\"left\",\"speaker\":\"탁나루(SAMPLE)\",\"text_verbatim\":\"5월 20일까지 남은 400만 원 다 갚을게요.\"},{\"box\":[52,880,232,919],\"confidence\":0.98,\"kind\":\"date\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"5월 20일\"},{\"box\":[366,880,485,919],\"confidence\":0.99,\"kind\":\"amount\",\"normalized\":\"4000000\",\"side\":null,\"speaker\":null,\"text_verbatim\":\"400만 원\"}]}",
             "type": "output_text"
           }
         ],
-        "id": "msg_a00a3af0-fa4f-44f8-935d-c2e3a9748802",
+        "id": "msg_a25e6ae1-a5df-4853-836c-8b48ff3ab742",
         "phase": null,
         "role": "assistant",
         "status": "completed",
@@ -274,23 +274,23 @@
       "input_tokens": 1172,
       "input_tokens_details": {
         "cache_write_tokens": null,
-        "cached_tokens": 1123
+        "cached_tokens": 611
       },
-      "output_tokens": 1209,
+      "output_tokens": 1439,
       "output_tokens_details": {
-        "reasoning_tokens": 731
+        "reasoning_tokens": 1048
       },
-      "total_tokens": 2381
+      "total_tokens": 2611
     },
     "user": null
   },
   "usage": {
-    "cached_input_tokens": 1123,
+    "cached_input_tokens": 611,
     "images_processed": 0,
     "input_tokens": 1172,
-    "output_tokens": 1209,
-    "reasoning_tokens": 731,
-    "total_tokens": 2381,
+    "output_tokens": 1439,
+    "reasoning_tokens": 1048,
+    "total_tokens": 2611,
     "video_frames_processed": 0
   }
 }

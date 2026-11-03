@@ -1,5 +1,5 @@
 {
-  "latency_ms": 5049,
+  "latency_ms": 4480,
   "request": {
     "endpoint": "responses",
     "model": "muse-spark-1.2",
@@ -116,11 +116,11 @@
   "response": {
     "access_programs": null,
     "background": false,
-    "completed_at": 1793690422.0,
+    "completed_at": 1793695922.0,
     "conversation": null,
-    "created_at": 1793690422.0,
+    "created_at": 1793695922.0,
     "error": null,
-    "id": "resp_6ae98b3692f6095288844cbc",
+    "id": "resp_6ae9a0b255eee63ed3cd422d",
     "incomplete_details": null,
     "instructions": null,
     "max_output_tokens": 4000,
@@ -133,7 +133,7 @@
       {
         "content": null,
         "encrypted_content": "<redacted>",
-        "id": "rs_6ae98b3692f6095288844cbc:rs_5fb1d701-11d7-492b-aae1-c27fc750a5f2",
+        "id": "rs_6ae9a0b255eee63ed3cd422d:rs_707a489c-2fed-4066-8391-dbc687f3739a",
         "status": "completed",
         "summary": [],
         "type": "reasoning"
@@ -143,11 +143,11 @@
           {
             "annotations": [],
             "logprobs": [],
-            "text": "{\"items\":[{\"box\":[112,152,233,174],\"confidence\":0.98,\"kind\":\"party_name\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"탁나루(SAMPLE)\"},{\"box\":[108,182,660,260],\"confidence\":0.99,\"kind\":\"utterance\",\"normalized\":null,\"side\":\"left\",\"speaker\":\"탁나루(SAMPLE)\",\"text_verbatim\":\"죄송해요. 4월 25일까지 꼭 갚을게요.\"},{\"box\":[182,206,285,232],\"confidence\":0.98,\"kind\":\"date\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"4월 25일\"},{\"box\":[402,595,555,625],\"confidence\":0.99,\"kind\":\"date\",\"normalized\":\"2026-04-26\",\"side\":null,\"speaker\":null,\"text_verbatim\":\"2026년 4월 26일\"},{\"box\":[390,931,971,998],\"confidence\":0.97,\"kind\":\"utterance\",\"normalized\":null,\"side\":\"right\",\"speaker\":null,\"text_verbatim\":\"4월 25일이 지났어요. 언제 보내주실 수\"},{\"box\":[413,956,509,986],\"confidence\":0.98,\"kind\":\"date\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"4월 25일\"}]}",
+            "text": "{\"items\":[{\"box\":[115,193,234,214],\"confidence\":0.99,\"kind\":\"party_name\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"탁나루(SAMPLE)\"},{\"box\":[113,227,661,300],\"confidence\":0.98,\"kind\":\"utterance\",\"normalized\":null,\"side\":\"left\",\"speaker\":\"탁나루(SAMPLE)\",\"text_verbatim\":\"죄송해요. 4월 25일까지 꼭 갚을게요.\"},{\"box\":[180,250,273,279],\"confidence\":0.98,\"kind\":\"date\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"4월 25일\"},{\"box\":[403,772,598,799],\"confidence\":0.98,\"kind\":\"date\",\"normalized\":\"2026-04-26\",\"side\":null,\"speaker\":null,\"text_verbatim\":\"2026년 4월 26일\"},{\"box\":[390,932,970,1000],\"confidence\":0.96,\"kind\":\"utterance\",\"normalized\":null,\"side\":\"right\",\"speaker\":null,\"text_verbatim\":\"4월 25일이 지났어요. 언제 보내주실 수\"},{\"box\":[415,956,510,985],\"confidence\":0.98,\"kind\":\"date\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"4월 25일\"}]}",
             "type": "output_text"
           }
         ],
-        "id": "msg_2ae63435-ff5e-4773-949b-689a2236d2ef",
+        "id": "msg_439241a9-fd96-483a-a653-0021d5fc64fd",
         "phase": null,
         "role": "assistant",
         "status": "completed",
@@ -274,23 +274,23 @@
       "input_tokens": 1172,
       "input_tokens_details": {
         "cache_write_tokens": null,
-        "cached_tokens": 1123
+        "cached_tokens": 611
       },
-      "output_tokens": 1031,
+      "output_tokens": 914,
       "output_tokens_details": {
-        "reasoning_tokens": 727
+        "reasoning_tokens": 609
       },
-      "total_tokens": 2203
+      "total_tokens": 2086
     },
     "user": null
   },
   "usage": {
-    "cached_input_tokens": 1123,
+    "cached_input_tokens": 611,
     "images_processed": 0,
     "input_tokens": 1172,
-    "output_tokens": 1031,
-    "reasoning_tokens": 727,
-    "total_tokens": 2203,
+    "output_tokens": 914,
+    "reasoning_tokens": 609,
+    "total_tokens": 2086,
     "video_frames_processed": 0
   }
 }

@@ -535,9 +535,8 @@ def test_redactions_burn_and_keep(env, shared_case):
     for preview in body["previews"]:
         assert preview["status"] == "redacted"
     by_preview = {p["ex_id"]: p for p in body["previews"]}
-    assert by_preview["EX6"]["needs_review"] is True
-    assert redact_mod.LEAK_REVIEW_REASON in (by_preview["EX6"]["reason"] or "")
-    for ex_id in ("EX1", "EX2", "EX4", "EX5"):
+    # INT-3 1a: refined boxes cover EX6 fully — no needs_review anywhere.
+    for ex_id in ("EX1", "EX2", "EX4", "EX5", "EX6"):
         assert by_preview[ex_id]["needs_review"] is False
         assert by_preview[ex_id]["reason"] is None
     # Every mask is fully black in its redacted copy; keeps equal originals.
@@ -581,7 +580,7 @@ def test_redactions_burn_and_keep(env, shared_case):
 
 
 def test_leak_bands_pin_current_boxes(env, shared_case):
-    """L1: EX6 three masks trip the band check, EX4/EX5 are clean zeros."""
+    """L1: INT-3 1a refined boxes — all bands clean zeros, no review."""
     assert redact_mod.BAND_THRESHOLD == 5
     body = env.get(f"/api/cases/{shared_case}/redactions").json()
     by_key = {(e["ex_id"], e["item_id"]): e for e in body["plan"]}
@@ -590,11 +589,10 @@ def test_leak_bands_pin_current_boxes(env, shared_case):
         entry = by_key[key]
         assert entry["band_counts"] == {"top": 0, "bottom": 0, "left": 0}
         assert entry["needs_review"] is False
-    for key in [("EX6", "item8"), ("EX6", "item14"), ("EX6", "item25")]:
+    for key in [("EX6", "item7"), ("EX6", "item13"), ("EX6", "item24")]:
         entry = by_key[key]
-        assert max(entry["band_counts"].values()) >= 5, entry["band_counts"]
-        assert entry["needs_review"] is True
-        assert redact_mod.LEAK_REVIEW_REASON in entry["reason"]
+        assert max(entry["band_counts"].values()) == 0, entry["band_counts"]
+        assert entry["needs_review"] is False
     for key in [("EX1", "face1"), ("EX2", "face1")]:
         assert max(by_key[key]["band_counts"].values()) == 0
 
@@ -745,7 +743,8 @@ def test_vision_hold_path_is_fail_closed(env, monkeypatch):
     assert not (Path(files_dir(case_id)) / "redacted_EX1.png").exists()
     assert not (Path(files_dir(case_id)) / "redacted_EX2.png").exists()
     assert (Path(files_dir(case_id)) / "redacted_EX6.png").exists()
-    assert by_preview["EX6"]["needs_review"] is True
+    # INT-3 1a: refined EX6 boxes need no review.
+    assert by_preview["EX6"]["needs_review"] is False
 
 
 def test_privacy_leak_hold_resumes(env):

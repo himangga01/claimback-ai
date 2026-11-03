@@ -1,5 +1,5 @@
 {
-  "latency_ms": 6375,
+  "latency_ms": 5876,
   "request": {
     "endpoint": "responses",
     "model": "muse-spark-1.2",
@@ -116,11 +116,11 @@
   "response": {
     "access_programs": null,
     "background": false,
-    "completed_at": 1793690408.0,
+    "completed_at": 1793695907.0,
     "conversation": null,
-    "created_at": 1793690408.0,
+    "created_at": 1793695907.0,
     "error": null,
-    "id": "resp_6ae98b2833104489372142a1",
+    "id": "resp_6ae9a0a30f61752116cb4524",
     "incomplete_details": null,
     "instructions": null,
     "max_output_tokens": 4000,
@@ -133,7 +133,7 @@
       {
         "content": null,
         "encrypted_content": "<redacted>",
-        "id": "rs_6ae98b2833104489372142a1:rs_33b0fb59-f384-4fb0-93cf-e8a00020d557",
+        "id": "rs_6ae9a0a30f61752116cb4524:rs_bfa97726-f9b4-49c6-8d8d-41a0cf4fe467",
         "status": "completed",
         "summary": [],
         "type": "reasoning"
@@ -143,11 +143,11 @@
           {
             "annotations": [],
             "logprobs": [],
-            "text": "{\"items\":[{\"box\":[0,0,1000,55],\"confidence\":0.99,\"kind\":\"header\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"SAMPLE / 데모용\"},{\"box\":[30,72,122,108],\"confidence\":0.99,\"kind\":\"header\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"샘플톡\"},{\"box\":[368,132,632,162],\"confidence\":0.99,\"kind\":\"date\",\"normalized\":\"2026-03-09\",\"side\":null,\"speaker\":null,\"text_verbatim\":\"2026년 3월 9일\"},{\"box\":[108,201,282,227],\"confidence\":0.98,\"kind\":\"party_name\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"타나루(SAMPLE)\"},{\"box\":[108,233,764,392],\"confidence\":0.99,\"kind\":\"utterance\",\"normalized\":null,\"side\":\"left\",\"speaker\":\"타나루(SAMPLE)\",\"text_verbatim\":\"서가온님, 급하게 500만 원만 빌려주실 수 있나요?\"},{\"box\":[338,279,508,313],\"confidence\":0.99,\"kind\":\"amount\",\"normalized\":\"5000000\",\"side\":null,\"speaker\":null,\"text_verbatim\":\"500만 원\"},{\"box\":[478,415,969,491],\"confidence\":0.99,\"kind\":\"utterance\",\"normalized\":null,\"side\":\"right\",\"speaker\":null,\"text_verbatim\":\"무슨 일이에요? 500만 원이 맞나요?\"},{\"box\":[690,430,828,463],\"confidence\":0.99,\"kind\":\"amount\",\"normalized\":\"5000000\",\"side\":null,\"speaker\":null,\"text_verbatim\":\"500만 원\"},{\"box\":[30,517,202,542],\"confidence\":0.98,\"kind\":\"party_name\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"타나루(SAMPLE)\"},{\"box\":[30,547,551,662],\"confidence\":0.99,\"kind\":\"utterance\",\"normalized\":null,\"side\":\"left\",\"speaker\":\"타나루(SAMPLE)\",\"text_verbatim\":\"네, 병원비로 500만 원이 필요해요. 4월 10일까지 갚을게요.\"},{\"box\":[228,569,368,601],\"confidence\":0.99,\"kind\":\"amount\",\"normalized\":\"5000000\",\"side\":null,\"speaker\":null,\"text_verbatim\":\"500만 원\"},{\"box\":[52,608,363,642],\"confidence\":0.98,\"kind\":\"date\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"4월 10일\"},{\"box\":[360,692,640,722],\"confidence\":0.99,\"kind\":\"date\",\"normalized\":\"2026-03-10\",\"side\":null,\"speaker\":null,\"text_verbatim\":\"2026년 3월 10일\"},{\"box\":[442,754,969,830],\"confidence\":0.99,\"kind\":\"utterance\",\"normalized\":null,\"side\":\"right\",\"speaker\":null,\"text_verbatim\":\"알겠어요. 오늘 5,000,000원 보낼게요.\"},{\"box\":[600,769,794,803],\"confidence\":0.99,\"kind\":\"amount\",\"normalized\":\"5000000\",\"side\":null,\"speaker\":null,\"text_verbatim\":\"5,000,000원\"},{\"box\":[30,859,202,884],\"confidence\":0.98,\"kind\":\"party_name\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"타나루(SAMPLE)\"},{\"box\":[30,889,355,960],\"confidence\":0.99,\"kind\":\"utterance\",\"normalized\":null,\"side\":\"left\",\"speaker\":\"타나루(SAMPLE)\",\"text_verbatim\":\"정말 감사합니다!\"}]}",
+            "text": "{\"items\":[{\"box\":[440,9,567,37],\"confidence\":0.99,\"kind\":\"header\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"SAMPLE / 데모용\"},{\"box\":[32,76,120,110],\"confidence\":0.99,\"kind\":\"header\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"샘플톡\"},{\"box\":[395,134,598,163],\"confidence\":0.99,\"kind\":\"date\",\"normalized\":\"2026-03-09\",\"side\":null,\"speaker\":null,\"text_verbatim\":\"2026년 3월 9일\"},{\"box\":[110,202,245,227],\"confidence\":0.98,\"kind\":\"party_name\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"타나루(SAMPLE)\"},{\"box\":[110,233,673,351],\"confidence\":0.99,\"kind\":\"utterance\",\"normalized\":null,\"side\":\"left\",\"speaker\":\"타나루(SAMPLE)\",\"text_verbatim\":\"서가온님, 급하게 500만 원만 빌려주실 수 있나요?\"},{\"box\":[383,265,537,294],\"confidence\":0.99,\"kind\":\"amount\",\"normalized\":\"5000000\",\"side\":null,\"speaker\":null,\"text_verbatim\":\"500만 원\"},{\"box\":[478,372,968,447],\"confidence\":0.99,\"kind\":\"utterance\",\"normalized\":null,\"side\":\"right\",\"speaker\":null,\"text_verbatim\":\"무슨 일이에요? 500만 원이 맞나요?\"},{\"box\":[723,397,838,422],\"confidence\":0.99,\"kind\":\"amount\",\"normalized\":\"5000000\",\"side\":null,\"speaker\":null,\"text_verbatim\":\"500만 원\"},{\"box\":[32,474,198,498],\"confidence\":0.98,\"kind\":\"party_name\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"타나루(SAMPLE)\"},{\"box\":[32,502,598,623],\"confidence\":0.99,\"kind\":\"utterance\",\"normalized\":null,\"side\":\"left\",\"speaker\":\"타나루(SAMPLE)\",\"text_verbatim\":\"네, 병원비로 500만 원이 필요해요. 4월 10일까지 갚을게요.\"},{\"box\":[207,523,323,549],\"confidence\":0.99,\"kind\":\"amount\",\"normalized\":\"5000000\",\"side\":null,\"speaker\":null,\"text_verbatim\":\"500만 원\"},{\"box\":[107,554,238,584],\"confidence\":0.98,\"kind\":\"date\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"4월 10일\"},{\"box\":[397,647,598,676],\"confidence\":0.99,\"kind\":\"date\",\"normalized\":\"2026-03-10\",\"side\":null,\"speaker\":null,\"text_verbatim\":\"2026년 3월 10일\"},{\"box\":[440,711,970,786],\"confidence\":0.99,\"kind\":\"utterance\",\"normalized\":null,\"side\":\"right\",\"speaker\":null,\"text_verbatim\":\"알겠어요. 오늘 5,000,000원 보낼게요.\"},{\"box\":[625,731,790,765],\"confidence\":0.99,\"kind\":\"amount\",\"normalized\":\"5000000\",\"side\":null,\"speaker\":null,\"text_verbatim\":\"5,000,000원\"},{\"box\":[32,814,198,837],\"confidence\":0.98,\"kind\":\"party_name\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"타나루(SAMPLE)\"},{\"box\":[32,842,355,916],\"confidence\":0.99,\"kind\":\"utterance\",\"normalized\":null,\"side\":\"left\",\"speaker\":\"타나루(SAMPLE)\",\"text_verbatim\":\"정말 감사합니다!\"}]}",
             "type": "output_text"
           }
         ],
-        "id": "msg_036f524b-091f-487a-830e-72c3c3bfd7e8",
+        "id": "msg_91298f80-462a-414d-9835-a2b35dee5013",
         "phase": null,
         "role": "assistant",
         "status": "completed",
@@ -274,23 +274,23 @@
       "input_tokens": 1172,
       "input_tokens_details": {
         "cache_write_tokens": null,
-        "cached_tokens": 1123
+        "cached_tokens": 0
       },
-      "output_tokens": 1747,
+      "output_tokens": 1641,
       "output_tokens_details": {
-        "reasoning_tokens": 919
+        "reasoning_tokens": 814
       },
-      "total_tokens": 2919
+      "total_tokens": 2813
     },
     "user": null
   },
   "usage": {
-    "cached_input_tokens": 1123,
+    "cached_input_tokens": 0,
     "images_processed": 0,
     "input_tokens": 1172,
-    "output_tokens": 1747,
-    "reasoning_tokens": 919,
-    "total_tokens": 2919,
+    "output_tokens": 1641,
+    "reasoning_tokens": 814,
+    "total_tokens": 2813,
     "video_frames_processed": 0
   }
 }

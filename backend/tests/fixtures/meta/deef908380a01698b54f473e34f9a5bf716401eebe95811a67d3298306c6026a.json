@@ -1,5 +1,5 @@
 {
-  "latency_ms": 593,
+  "latency_ms": 1169,
   "request": {
     "endpoint": "responses",
     "model": "sam-3.1",
@@ -25,11 +25,11 @@
   "response": {
     "access_programs": null,
     "background": false,
-    "completed_at": 1793686318.0,
+    "completed_at": 1793695968.0,
     "conversation": null,
-    "created_at": 1793686318.0,
+    "created_at": 1793695968.0,
     "error": null,
-    "id": "resp_6ae97b2ef04d2ec66c0c4521",
+    "id": "resp_6ae9a0e0cd365374b3654cd8",
     "incomplete_details": null,
     "instructions": null,
     "max_output_tokens": null,
@@ -44,11 +44,11 @@
           {
             "annotations": [],
             "logprobs": [],
-            "text": "<0f>0<|box;x1=20;y1=166;x2=60;y2=206;w=640;h=960|><|mask;x=0;y=0;data=41,41,~!!!%Z!kClx!T8I)ToM66ljE_HaSG'1+=q7ZINoTUi.%Aw4'71eiAeXjpk2/J++wI8D:l=bB@`tW=kH-@lv2sGj2Y!loh1N^Zg4aAN'^r/EX$9`%Koo7/n(Cj^p1_]k&dF9wYp!O5TY.c#u'$wx3ptL^yDSHGFD+C/g8V_9?V.q^vSaEU`=8#W%]5nVGapzM0kLm+c+tF.Kz]^*?u74S]xS'TKZ4jdb-*I=JO5bnaa1uF-W[V2JQZSxg6g-EF^N(Lj+B]RE7%i=HAK8)*Z]oc1Nxd7v98Kh#xxLeCHo@8Z]SKBktmZkK'v@nfJaoGeQAGAEJr@#*(+9?aYsgx{)A:MX+VasP=E(@fZlzrBDO5pp8hxm/)EKX.nx[75Ma^ut&cRNP2D|>\n",
+            "text": "<0f>0<|box;x1=20;y1=166;x2=60;y2=206;w=640;h=960|><|mask;x=0;y=0;data=41,41,~!!!%Y!kClx#J60vwbVQf9(.6&e{ELa0nj:qH%37XKxs*6+/b@EhnnYg3.J-_(dd(OnH_Mv34*&$=cqM0A!l3Lr/LpPeRrT&snIf92sIeQd-EvBn]6b%3j%d#^vO{Xds{-Io[!`.iUCNfVT)(f2wd&%gfot)gRbVb&K?{6AWVMt`piBf@Sn)Wn&V-.)x.To^m4IF`prlrCRMIIrL'`5)q5-TnZ)bXHaCS6X+Z+=jWVgZs8vNWP.$C*g@6=[qR0PAxGzJO+LmWve=^q@A*y4JL^up`gy&]Bv_ka'G7@/?XY.2-OmJivR&lbb[#X^K4{:Aon?=TolM&@Ehv.Tn+SwvWR.y^C=sG$tE)kz.r@BujNW6N@UXL#SPQDjN7vs&IN0{)aKu[|>\n",
             "type": "output_text"
           }
         ],
-        "id": "msg_8cf90b8b-4334-4711-bf1f-f11f4a8dc4d8",
+        "id": "msg_80e608ed-8022-4037-9342-45d5522776b9",
         "phase": null,
         "role": "assistant",
         "status": "completed",

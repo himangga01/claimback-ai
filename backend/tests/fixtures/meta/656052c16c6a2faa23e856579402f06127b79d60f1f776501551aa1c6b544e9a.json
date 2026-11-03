@@ -1,5 +1,5 @@
 {
-  "latency_ms": 6860,
+  "latency_ms": 7128,
   "request": {
     "endpoint": "responses",
     "model": "muse-spark-1.2",
@@ -116,11 +116,11 @@
   "response": {
     "access_programs": null,
     "background": false,
-    "completed_at": 1793690452.0,
+    "completed_at": 1793695955.0,
     "conversation": null,
-    "created_at": 1793690452.0,
+    "created_at": 1793695955.0,
     "error": null,
-    "id": "resp_6ae98b54ce5a94517d814388",
+    "id": "resp_6ae9a0d3f93ca764b1be418f",
     "incomplete_details": null,
     "instructions": null,
     "max_output_tokens": 4000,
@@ -133,7 +133,7 @@
       {
         "content": null,
         "encrypted_content": "<redacted>",
-        "id": "rs_6ae98b54ce5a94517d814388:rs_0a7c7f84-fffd-4395-8404-a80ee231aa94",
+        "id": "rs_6ae9a0d3f93ca764b1be418f:rs_a2b02b0e-4caa-4203-a069-e2e1796d4811",
         "status": "completed",
         "summary": [],
         "type": "reasoning"
@@ -143,11 +143,11 @@
           {
             "annotations": [],
             "logprobs": [],
-            "text": "{\"items\":[{\"box\":[398,7,612,22],\"confidence\":0.99,\"kind\":\"header\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"SAMPLE / 데모용\"},{\"box\":[398,62,585,108],\"confidence\":0.99,\"kind\":\"header\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"차용증\"},{\"box\":[97,171,168,194],\"confidence\":0.99,\"kind\":\"label\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"채권자\"},{\"box\":[336,169,565,196],\"confidence\":0.99,\"kind\":\"party_name\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"서가온(SAMPLE)\"},{\"box\":[98,233,216,261],\"confidence\":0.99,\"kind\":\"label\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"채권자 주소\"},{\"box\":[336,232,684,261],\"confidence\":0.99,\"kind\":\"address\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"서울특별시 샘플구 데모로 0\"},{\"box\":[98,308,216,337],\"confidence\":0.99,\"kind\":\"label\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"채권자 연락처\"},{\"box\":[335,309,536,334],\"confidence\":0.99,\"kind\":\"phone\",\"normalized\":\"010-0000-0001\",\"side\":null,\"speaker\":null,\"text_verbatim\":\"010-0000-0001\"},{\"box\":[97,377,168,401],\"confidence\":0.99,\"kind\":\"label\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"채무자\"},{\"box\":[335,373,565,401],\"confidence\":0.99,\"kind\":\"party_name\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"탁나루(SAMPLE)\"},{\"box\":[98,444,216,471],\"confidence\":0.99,\"kind\":\"label\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"채무자 주소\"},{\"box\":[336,443,674,471],\"confidence\":0.99,\"kind\":\"address\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"경기도 샘플시 데모동 0\"},{\"box\":[98,518,216,546],\"confidence\":0.99,\"kind\":\"label\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"채무자 연락처\"},{\"box\":[335,518,538,543],\"confidence\":0.99,\"kind\":\"phone\",\"normalized\":\"010-0000-0002\",\"side\":null,\"speaker\":null,\"text_verbatim\":\"010-0000-0002\"},{\"box\":[95,583,138,610],\"confidence\":0.99,\"kind\":\"label\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"금액\"},{\"box\":[335,581,495,612],\"confidence\":0.99,\"kind\":\"amount\",\"normalized\":\"5000000\",\"side\":null,\"speaker\":null,\"text_verbatim\":\"5,000,000원\"},{\"box\":[95,652,183,681],\"confidence\":0.99,\"kind\":\"label\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"금액(한글)\"},{\"box\":[335,650,479,679],\"confidence\":0.99,\"kind\":\"amount\",\"normalized\":\"5000000\",\"side\":null,\"speaker\":null,\"text_verbatim\":\"금 오백만 원\"},{\"box\":[97,722,168,745],\"confidence\":0.99,\"kind\":\"label\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"대여일\"},{\"box\":[335,720,489,746],\"confidence\":0.99,\"kind\":\"date\",\"normalized\":\"2026-03-10\",\"side\":null,\"speaker\":null,\"text_verbatim\":\"2026-03-10\"},{\"box\":[97,791,165,816],\"confidence\":0.99,\"kind\":\"label\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"변제기\"},{\"box\":[335,790,489,815],\"confidence\":0.99,\"kind\":\"date\",\"normalized\":\"2026-04-10\",\"side\":null,\"speaker\":null,\"text_verbatim\":\"2026-04-10\"},{\"box\":[96,866,248,895],\"confidence\":0.98,\"kind\":\"label\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"이자 약정 없음\"},{\"box\":[95,935,212,961],\"confidence\":0.99,\"kind\":\"label\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"주민등록번호\"},{\"box\":[346,931,619,964],\"confidence\":0.99,\"kind\":\"id_number\",\"normalized\":\"000000-0000000\",\"side\":null,\"speaker\":null,\"text_verbatim\":\"000000-0000000\"}]}",
+            "text": "{\"items\": [{\"box\": [415, 5, 585, 20], \"confidence\": 0.99, \"kind\": \"header\", \"normalized\": null, \"side\": null, \"speaker\": null, \"text_verbatim\": \"SAMPLE / 데모용\"}, {\"box\": [378, 56, 618, 108], \"confidence\": 0.99, \"kind\": \"header\", \"normalized\": null, \"side\": null, \"speaker\": null, \"text_verbatim\": \"차용증\"}, {\"box\": [95, 146, 165, 178], \"confidence\": 0.99, \"kind\": \"label\", \"normalized\": null, \"side\": null, \"speaker\": null, \"text_verbatim\": \"채권자\"}, {\"box\": [355, 143, 545, 178], \"confidence\": 0.99, \"kind\": \"party_name\", \"normalized\": null, \"side\": null, \"speaker\": null, \"text_verbatim\": \"서가온(SAMPLE)\"}, {\"box\": [95, 215, 195, 247], \"confidence\": 0.99, \"kind\": \"label\", \"normalized\": null, \"side\": null, \"speaker\": null, \"text_verbatim\": \"채권자 주소\"}, {\"box\": [355, 213, 658, 247], \"confidence\": 0.99, \"kind\": \"address\", \"normalized\": null, \"side\": null, \"speaker\": null, \"text_verbatim\": \"서울특별시 샘플구 데모로 0\"}, {\"box\": [95, 283, 215, 315], \"confidence\": 0.99, \"kind\": \"label\", \"normalized\": null, \"side\": null, \"speaker\": null, \"text_verbatim\": \"채권자 연락처\"}, {\"box\": [355, 281, 537, 315], \"confidence\": 0.99, \"kind\": \"phone\", \"normalized\": \"010-0000-0001\", \"side\": null, \"speaker\": null, \"text_verbatim\": \"010-0000-0001\"}, {\"box\": [95, 358, 165, 390], \"confidence\": 0.99, \"kind\": \"label\", \"normalized\": null, \"side\": null, \"speaker\": null, \"text_verbatim\": \"채무자\"}, {\"box\": [355, 355, 545, 390], \"confidence\": 0.99, \"kind\": \"party_name\", \"normalized\": null, \"side\": null, \"speaker\": null, \"text_verbatim\": \"탁나루(SAMPLE)\"}, {\"box\": [95, 428, 195, 460], \"confidence\": 0.99, \"kind\": \"label\", \"normalized\": null, \"side\": null, \"speaker\": null, \"text_verbatim\": \"채무자 주소\"}, {\"box\": [355, 426, 635, 460], \"confidence\": 0.99, \"kind\": \"address\", \"normalized\": null, \"side\": null, \"speaker\": null, \"text_verbatim\": \"경기도 샘플시 데모동 0\"}, {\"box\": [95, 498, 215, 530], \"confidence\": 0.99, \"kind\": \"label\", \"normalized\": null, \"side\": null, \"speaker\": null, \"text_verbatim\": \"채무자 연락처\"}, {\"box\": [355, 496, 537, 530], \"confidence\": 0.99, \"kind\": \"phone\", \"normalized\": \"010-0000-0002\", \"side\": null, \"speaker\": null, \"text_verbatim\": \"010-0000-0002\"}, {\"box\": [95, 568, 135, 598], \"confidence\": 0.99, \"kind\": \"label\", \"normalized\": null, \"side\": null, \"speaker\": null, \"text_verbatim\": \"금액\"}, {\"box\": [355, 565, 493, 598], \"confidence\": 0.99, \"kind\": \"amount\", \"normalized\": \"5000000\", \"side\": null, \"speaker\": null, \"text_verbatim\": \"5,000,000원\"}, {\"box\": [95, 633, 182, 668], \"confidence\": 0.99, \"kind\": \"label\", \"normalized\": null, \"side\": null, \"speaker\": null, \"text_verbatim\": \"금액(한글)\"}, {\"box\": [355, 631, 478, 665], \"confidence\": 0.99, \"kind\": \"amount\", \"normalized\": \"5000000\", \"side\": null, \"speaker\": null, \"text_verbatim\": \"금 오백만 원\"}, {\"box\": [95, 708, 165, 738], \"confidence\": 0.99, \"kind\": \"label\", \"normalized\": null, \"side\": null, \"speaker\": null, \"text_verbatim\": \"대여일\"}, {\"box\": [355, 705, 488, 738], \"confidence\": 0.99, \"kind\": \"date\", \"normalized\": \"2026-03-10\", \"side\": null, \"speaker\": null, \"text_verbatim\": \"2026-03-10\"}, {\"box\": [95, 773, 165, 805], \"confidence\": 0.99, \"kind\": \"label\", \"normalized\": null, \"side\": null, \"speaker\": null, \"text_verbatim\": \"변제기\"}, {\"box\": [355, 770, 488, 805], \"confidence\": 0.99, \"kind\": \"date\", \"normalized\": \"2026-04-10\", \"side\": null, \"speaker\": null, \"text_verbatim\": \"2026-04-10\"}, {\"box\": [95, 848, 245, 878], \"confidence\": 0.99, \"kind\": \"label\", \"normalized\": null, \"side\": null, \"speaker\": null, \"text_verbatim\": \"이자 약정 없음\"}, {\"box\": [95, 935, 215, 962], \"confidence\": 0.99, \"kind\": \"label\", \"normalized\": null, \"side\": null, \"speaker\": null, \"text_verbatim\": \"주민등록번호\"}, {\"box\": [345, 928, 595, 965], \"confidence\": 0.99, \"kind\": \"id_number\", \"normalized\": null, \"side\": null, \"speaker\": null, \"text_verbatim\": \"000000-0000000\"}]}",
             "type": "output_text"
           }
         ],
-        "id": "msg_9aaaef22-0d1e-4a17-9b70-568aa37e3cbd",
+        "id": "msg_7ca43450-3ab2-4eeb-b520-935c1674e971",
         "phase": null,
         "role": "assistant",
         "status": "completed",
@@ -274,23 +274,23 @@
       "input_tokens": 2668,
       "input_tokens_details": {
         "cache_write_tokens": null,
-        "cached_tokens": 2659
+        "cached_tokens": 611
       },
-      "output_tokens": 2146,
+      "output_tokens": 2514,
       "output_tokens_details": {
-        "reasoning_tokens": 1048
+        "reasoning_tokens": 1065
       },
-      "total_tokens": 4814
+      "total_tokens": 5182
     },
     "user": null
   },
   "usage": {
-    "cached_input_tokens": 2659,
+    "cached_input_tokens": 611,
     "images_processed": 0,
     "input_tokens": 2668,
-    "output_tokens": 2146,
-    "reasoning_tokens": 1048,
-    "total_tokens": 4814,
+    "output_tokens": 2514,
+    "reasoning_tokens": 1065,
+    "total_tokens": 5182,
     "video_frames_processed": 0
   }
 }

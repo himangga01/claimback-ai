@@ -35,7 +35,7 @@ from app.services.naming import check_text  # noqa: E402
 
 ARTIFACTS = HERE / "artifacts"
 CONFIRMED_EXAMPLE = ROOT / "specs" / "case-api-examples" / "confirmed_facts_kr.json"
-KNOWN_ROLES = ("loan_transfer", "repayment", "other")
+KNOWN_ROLES = ("loan_transfer", "repayment", "loan_agreement", "other")
 
 
 def _free_port() -> int:
@@ -229,8 +229,8 @@ def test_case_flow(page, base_url, case_cleanup):
             f"board shows {_m.group(1)} calls, case view gives {_want_calls}"
         )
     else:
-        assert int(_m.group(1)) == 6, (
-            f"real backend CHECKPOINT_1 calls should be 6, board: {_summary!r}"
+        assert int(_m.group(1)) == 11, (
+            f"real backend CHECKPOINT_1 calls should be 11, board: {_summary!r}"
         )
     assert "(재생)" in _summary, f"replay marker missing: {_summary!r}"
     steps.shot("board")
@@ -241,12 +241,17 @@ def test_case_flow(page, base_url, case_cleanup):
     page.get_by_test_id("evidence-EX4").click()
     expect(page.get_by_test_id("viewer-title")).to_contain_text("갑 제4호증")
     expect(page.get_by_test_id("viewer-img")).to_be_visible()
-    # M6: no raw null/JSON on screen; 6a cells hidden while endpoints 404.
+    # M6: no raw null/JSON on screen; 6a cells hidden while endpoints 404
+    # (stub). The real backend serves redactions/segments, so they show.
     _body = page.inner_text("body")
     assert "null" not in _body, "raw null shown on screen"
     assert '{"' not in _body, "raw JSON shown on screen"
-    expect(page.get_by_test_id("redaction-col")).to_be_hidden()
-    expect(page.get_by_test_id("segment-legend")).to_be_hidden()
+    if expect_stub:
+        expect(page.get_by_test_id("redaction-col")).to_be_hidden()
+        expect(page.get_by_test_id("segment-legend")).to_be_hidden()
+    else:
+        expect(page.get_by_test_id("redaction-col")).to_be_visible()
+        # EX4 has no segments; show-path is covered by segments_show test.
     steps.shot("checkpoint-evidence")
 
     # 3. fixed demo inputs computed from GET /review (contract section 5).
@@ -325,10 +330,10 @@ def test_case_flow(page, base_url, case_cleanup):
     if not expect_stub:
         _d_summary = page.get_by_test_id("board-summary").inner_text()
         _dm = re.search(r"Meta 모델 호출 (\d+)회", _d_summary)
-        # Recorded sample flow (M2c-fix1): 5 reads + 1 organizer + 1 drafter, no revision.
-        # Update together with the fixtures whenever the sample case is re-recorded.
-        assert _dm and int(_dm.group(1)) == 7, (
-            f"real backend DRAFT_APPROVAL calls should be 7, board: {_d_summary!r}"
+        # Recorded sample flow (INT-3b): 5 reads + 5 vision + 1 organizer
+        # + 1 drafter, no revision. Update with the fixtures on re-record.
+        assert _dm and int(_dm.group(1)) == 12, (
+            f"real backend DRAFT_APPROVAL calls should be 12, board: {_d_summary!r}"
         )
     steps.shot("calculation")
 
@@ -644,7 +649,7 @@ def test_fix1_amount_rejected(page, base_url, case_cleanup):
         )
         err = page.get_by_test_id("error-field-principal")
         expect(err).to_be_visible()
-        expect(err).to_contain_text("숫자 문자열")
+        expect(err).to_contain_text("금액은 숫자로 적어 주세요")
         expect(page.get_by_test_id("case-state")).to_have_attribute(
             "data-state", "CHECKPOINT_1"
         )

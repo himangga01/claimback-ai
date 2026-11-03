@@ -1,5 +1,5 @@
 {
-  "latency_ms": 4140,
+  "latency_ms": 6483,
   "request": {
     "endpoint": "responses",
     "model": "muse-spark-1.2",
@@ -116,11 +116,11 @@
   "response": {
     "access_programs": null,
     "background": false,
-    "completed_at": 1793690417.0,
+    "completed_at": 1793695918.0,
     "conversation": null,
-    "created_at": 1793690417.0,
+    "created_at": 1793695917.0,
     "error": null,
-    "id": "resp_6ae98b3140de7da807b74634",
+    "id": "resp_6ae9a0ae14977859d9594f6e",
     "incomplete_details": null,
     "instructions": null,
     "max_output_tokens": 4000,
@@ -133,7 +133,7 @@
       {
         "content": null,
         "encrypted_content": "<redacted>",
-        "id": "rs_6ae98b3140de7da807b74634:rs_8767ac8a-a27e-4131-9cd4-a910923dd388",
+        "id": "rs_6ae9a0ae14977859d9594f6e:rs_c07aed16-e530-4ffe-a65a-a59f6abeda13",
         "status": "completed",
         "summary": [],
         "type": "reasoning"
@@ -143,11 +143,11 @@
           {
             "annotations": [],
             "logprobs": [],
-            "text": "{\"items\":[{\"box\":[390,12,610,42],\"confidence\":0.99,\"kind\":\"header\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"SAMPLE / 데모용\"},{\"box\":[30,70,125,112],\"confidence\":0.99,\"kind\":\"header\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"샘플톡\"},{\"box\":[360,132,642,164],\"confidence\":0.99,\"kind\":\"date\",\"normalized\":\"2026-04-20\",\"side\":null,\"speaker\":null,\"text_verbatim\":\"2026년 4월 20일\"},{\"box\":[420,513,973,634],\"confidence\":0.98,\"kind\":\"utterance\",\"normalized\":null,\"side\":\"right\",\"speaker\":null,\"text_verbatim\":\"탁나루님, 4월 10일이 지났어요. 확인 부탁드려요.\"},{\"box\":[538,530,682,562],\"confidence\":0.98,\"kind\":\"date\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"4월 10일\"},{\"box\":[115,882,232,908],\"confidence\":0.98,\"kind\":\"party_name\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"탁나루(SAMPLE)\"},{\"box\":[152,913,664,987],\"confidence\":0.98,\"kind\":\"utterance\",\"normalized\":null,\"side\":\"left\",\"speaker\":\"탁나루(SAMPLE)\",\"text_verbatim\":\"죄송해요. 4월 25일까지 꼭 갚을게요.\"},{\"box\":[312,936,432,970],\"confidence\":0.98,\"kind\":\"date\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"4월 25일\"}]}",
+            "text": "{\"items\":[{\"box\":[320,8,680,42],\"confidence\":0.98,\"kind\":\"header\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"SAMPLE / 데모용\"},{\"box\":[30,70,122,108],\"confidence\":0.98,\"kind\":\"header\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"샘플톡\"},{\"box\":[359,132,598,162],\"confidence\":0.98,\"kind\":\"date\",\"normalized\":\"2026-04-20\",\"side\":null,\"speaker\":null,\"text_verbatim\":\"2026년 4월 20일\"},{\"box\":[419,513,971,656],\"confidence\":0.97,\"kind\":\"utterance\",\"normalized\":null,\"side\":\"right\",\"speaker\":null,\"text_verbatim\":\"탁나루님, 4월 10일이 지났어요. 확인 부탁드려요.\"},{\"box\":[585,534,726,568],\"confidence\":0.97,\"kind\":\"date\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"4월 10일\"},{\"box\":[112,836,232,862],\"confidence\":0.96,\"kind\":\"party_name\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"탁나루(SAMPLE)\"},{\"box\":[151,868,745,944],\"confidence\":0.97,\"kind\":\"utterance\",\"normalized\":null,\"side\":\"left\",\"speaker\":\"탁나루(SAMPLE)\",\"text_verbatim\":\"죄송해요. 4월 25일까지 꼭 갚을게요.\"},{\"box\":[310,892,460,926],\"confidence\":0.97,\"kind\":\"date\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"4월 25일\"}]}",
             "type": "output_text"
           }
         ],
-        "id": "msg_851e94e8-8340-4bad-9d61-96e3ed6526db",
+        "id": "msg_e181acd9-4698-43ff-aafe-1e5cda33c032",
         "phase": null,
         "role": "assistant",
         "status": "completed",
@@ -274,23 +274,23 @@
       "input_tokens": 1172,
       "input_tokens_details": {
         "cache_write_tokens": null,
-        "cached_tokens": 1123
+        "cached_tokens": 611
       },
-      "output_tokens": 978,
+      "output_tokens": 1139,
       "output_tokens_details": {
-        "reasoning_tokens": 583
+        "reasoning_tokens": 744
       },
-      "total_tokens": 2150
+      "total_tokens": 2311
     },
     "user": null
   },
   "usage": {
-    "cached_input_tokens": 1123,
+    "cached_input_tokens": 611,
     "images_processed": 0,
     "input_tokens": 1172,
-    "output_tokens": 978,
-    "reasoning_tokens": 583,
-    "total_tokens": 2150,
+    "output_tokens": 1139,
+    "reasoning_tokens": 744,
+    "total_tokens": 2311,
     "video_frames_processed": 0
   }
 }
