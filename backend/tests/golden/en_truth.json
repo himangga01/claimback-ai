@@ -1,5 +1,6 @@
 {
   "_note": "test-only golden answers. Never pass to runtime agents.",
+  "amount_unit": "USD: item normalized are integer cents; case principal_amount/remaining_principal are decimal-dollar strings.",
   "case": {
     "accrual_start_date": "2026-04-11",
     "agreed_interest_rate": null,
@@ -16,8 +17,8 @@
     },
     "due_date": "2026-04-10",
     "loan_date": "2026-01-10",
-    "principal_amount": 5000,
-    "remaining_principal": 5000,
+    "principal_amount": "5000.00",
+    "remaining_principal": "5000.00",
     "repayments": [],
     "transaction_kind": "civil"
   },
@@ -70,44 +71,11 @@
           36
         ]
       ],
-      "sha256": "287c100e632b89bc05441f5eb4d2e0bdf21ecc3463dfdd8017519fd0cce18785",
-      "width": 1240
-    },
-    {
-      "coord_basis": null,
-      "coord_system": "pixel",
-      "ex_id": "EX4",
-      "file": "en/promissory_note.png",
-      "height": 1754,
-      "ignore_regions": [
-        [
-          0,
-          0,
-          1240,
-          36
-        ]
-      ],
-      "sha256": "485acd9ef5bc24c84866010ddf4efc0fb6577da438d442102e10564e6fac2976",
+      "sha256": "d5f49315f4bfbd3ba6958ceed292f223f45adef846e8551cdf497f0a7e20fe75",
       "width": 1240
     }
   ],
   "items": [
-    {
-      "box": [
-        0,
-        0,
-        640,
-        36
-      ],
-      "ex_id": "EX1",
-      "frame_ts": null,
-      "item_id": "item1",
-      "kind": "watermark",
-      "line_box": null,
-      "normalized": "SAMPLE / 데모용",
-      "speaker": null,
-      "text_verbatim": "SAMPLE / 데모용"
-    },
     {
       "box": [
         20,
@@ -116,12 +84,14 @@
         68
       ],
       "ex_id": "EX1",
+      "frame_index": null,
       "frame_ts": null,
-      "item_id": "item2",
+      "item_id": "item1",
       "kind": "header",
       "line_box": null,
       "normalized": "SampleChat",
       "speaker": null,
+      "speaker_role": null,
       "text_verbatim": "SampleChat"
     },
     {
@@ -132,12 +102,14 @@
         102
       ],
       "ex_id": "EX1",
+      "frame_index": null,
       "frame_ts": null,
-      "item_id": "item3",
+      "item_id": "item2",
       "kind": "date",
       "line_box": null,
       "normalized": "2026-01-09",
       "speaker": null,
+      "speaker_role": null,
       "text_verbatim": "January 9, 2026"
     },
     {
@@ -148,12 +120,14 @@
         144
       ],
       "ex_id": "EX1",
+      "frame_index": null,
       "frame_ts": null,
-      "item_id": "item4",
+      "item_id": "item3",
       "kind": "party_name",
       "line_box": null,
       "normalized": "Rowan Hale (SAMPLE)",
       "speaker": null,
+      "speaker_role": null,
       "text_verbatim": "Rowan Hale (SAMPLE)"
     },
     {
@@ -164,12 +138,14 @@
         195
       ],
       "ex_id": "EX1",
+      "frame_index": null,
       "frame_ts": null,
-      "item_id": "item5",
+      "item_id": "item4",
       "kind": "utterance",
       "line_box": null,
       "normalized": "Can you lend me $5,000?",
       "speaker": "Rowan Hale (SAMPLE)",
+      "speaker_role": "debtor",
       "text_verbatim": "Can you lend me $5,000?"
     },
     {
@@ -180,8 +156,9 @@
         183
       ],
       "ex_id": "EX1",
+      "frame_index": null,
       "frame_ts": null,
-      "item_id": "item6",
+      "item_id": "item5",
       "kind": "amount",
       "line_box": [
         86,
@@ -191,6 +168,7 @@
       ],
       "normalized": 500000,
       "speaker": "Rowan Hale (SAMPLE)",
+      "speaker_role": "debtor",
       "text_verbatim": "$5,000"
     },
     {
@@ -201,12 +179,14 @@
         284
       ],
       "ex_id": "EX1",
+      "frame_index": null,
       "frame_ts": null,
-      "item_id": "item7",
+      "item_id": "item6",
       "kind": "utterance",
       "line_box": null,
       "normalized": "What happened? When can you pay it back?",
       "speaker": "Avery Linden (SAMPLE)",
+      "speaker_role": "creditor",
       "text_verbatim": "What happened? When can you pay it back?"
     },
     {
@@ -217,12 +197,14 @@
         316
       ],
       "ex_id": "EX1",
+      "frame_index": null,
       "frame_ts": null,
-      "item_id": "item8",
+      "item_id": "item7",
       "kind": "party_name",
       "line_box": null,
       "normalized": "Rowan Hale (SAMPLE)",
       "speaker": null,
+      "speaker_role": null,
       "text_verbatim": "Rowan Hale (SAMPLE)"
     },
     {
@@ -233,12 +215,14 @@
         395
       ],
       "ex_id": "EX1",
+      "frame_index": null,
       "frame_ts": null,
-      "item_id": "item9",
+      "item_id": "item8",
       "kind": "utterance",
       "line_box": null,
       "normalized": "I need $5,000 for rent. I will pay you back by April 10.",
       "speaker": "Rowan Hale (SAMPLE)",
+      "speaker_role": "debtor",
       "text_verbatim": "I need $5,000 for rent. I will pay you back by April 10."
     },
     {
@@ -249,8 +233,9 @@
         355
       ],
       "ex_id": "EX1",
+      "frame_index": null,
       "frame_ts": null,
-      "item_id": "item10",
+      "item_id": "item9",
       "kind": "amount",
       "line_box": [
         36,
@@ -260,6 +245,7 @@
       ],
       "normalized": 500000,
       "speaker": "Rowan Hale (SAMPLE)",
+      "speaker_role": "debtor",
       "text_verbatim": "$5,000"
     },
     {
@@ -270,8 +256,9 @@
         383
       ],
       "ex_id": "EX1",
+      "frame_index": null,
       "frame_ts": null,
-      "item_id": "item11",
+      "item_id": "item10",
       "kind": "date",
       "line_box": [
         36,
@@ -281,6 +268,7 @@
       ],
       "normalized": null,
       "speaker": "Rowan Hale (SAMPLE)",
+      "speaker_role": "debtor",
       "text_verbatim": "April 10"
     },
     {
@@ -291,12 +279,14 @@
         431
       ],
       "ex_id": "EX1",
+      "frame_index": null,
       "frame_ts": null,
-      "item_id": "item12",
+      "item_id": "item11",
       "kind": "date",
       "line_box": null,
       "normalized": "2026-01-10",
       "speaker": null,
+      "speaker_role": null,
       "text_verbatim": "January 10, 2026"
     },
     {
@@ -307,12 +297,14 @@
         502
       ],
       "ex_id": "EX1",
+      "frame_index": null,
       "frame_ts": null,
-      "item_id": "item13",
+      "item_id": "item12",
       "kind": "utterance",
       "line_box": null,
       "normalized": "OK. I will send $5,000 today.",
       "speaker": "Avery Linden (SAMPLE)",
+      "speaker_role": "creditor",
       "text_verbatim": "OK. I will send $5,000 today."
     },
     {
@@ -323,8 +315,9 @@
         490
       ],
       "ex_id": "EX1",
+      "frame_index": null,
       "frame_ts": null,
-      "item_id": "item14",
+      "item_id": "item13",
       "kind": "amount",
       "line_box": [
         336,
@@ -334,23 +327,8 @@
       ],
       "normalized": 500000,
       "speaker": "Avery Linden (SAMPLE)",
+      "speaker_role": "creditor",
       "text_verbatim": "$5,000"
-    },
-    {
-      "box": [
-        0,
-        0,
-        640,
-        36
-      ],
-      "ex_id": "EX2",
-      "frame_ts": null,
-      "item_id": "item1",
-      "kind": "watermark",
-      "line_box": null,
-      "normalized": "SAMPLE / 데모용",
-      "speaker": null,
-      "text_verbatim": "SAMPLE / 데모용"
     },
     {
       "box": [
@@ -360,12 +338,14 @@
         93
       ],
       "ex_id": "EX2",
+      "frame_index": null,
       "frame_ts": null,
-      "item_id": "item2",
+      "item_id": "item1",
       "kind": "header",
       "line_box": null,
       "normalized": "Sample Bank Wire Receipt",
       "speaker": null,
+      "speaker_role": null,
       "text_verbatim": "Sample Bank Wire Receipt"
     },
     {
@@ -376,12 +356,14 @@
         154
       ],
       "ex_id": "EX2",
+      "frame_index": null,
       "frame_ts": null,
-      "item_id": "item3",
+      "item_id": "item2",
       "kind": "label",
       "line_box": null,
       "normalized": "Sender",
       "speaker": null,
+      "speaker_role": null,
       "text_verbatim": "Sender"
     },
     {
@@ -392,12 +374,14 @@
         155
       ],
       "ex_id": "EX2",
+      "frame_index": null,
       "frame_ts": null,
-      "item_id": "item4",
+      "item_id": "item3",
       "kind": "party_name",
       "line_box": null,
       "normalized": "Avery Linden (SAMPLE)",
       "speaker": null,
+      "speaker_role": null,
       "text_verbatim": "Avery Linden (SAMPLE)"
     },
     {
@@ -408,12 +392,14 @@
         226
       ],
       "ex_id": "EX2",
+      "frame_index": null,
       "frame_ts": null,
-      "item_id": "item5",
+      "item_id": "item4",
       "kind": "label",
       "line_box": null,
       "normalized": "Sender account",
       "speaker": null,
+      "speaker_role": null,
       "text_verbatim": "Sender account"
     },
     {
@@ -424,12 +410,14 @@
         224
       ],
       "ex_id": "EX2",
+      "frame_index": null,
       "frame_ts": null,
-      "item_id": "item6",
+      "item_id": "item5",
       "kind": "account_number",
       "line_box": null,
       "normalized": "000-0000-2468",
       "speaker": null,
+      "speaker_role": null,
       "text_verbatim": "000-0000-2468"
     },
     {
@@ -440,12 +428,14 @@
         299
       ],
       "ex_id": "EX2",
+      "frame_index": null,
       "frame_ts": null,
-      "item_id": "item7",
+      "item_id": "item6",
       "kind": "label",
       "line_box": null,
       "normalized": "Receiver",
       "speaker": null,
+      "speaker_role": null,
       "text_verbatim": "Receiver"
     },
     {
@@ -456,12 +446,14 @@
         299
       ],
       "ex_id": "EX2",
+      "frame_index": null,
       "frame_ts": null,
-      "item_id": "item8",
+      "item_id": "item7",
       "kind": "party_name",
       "line_box": null,
       "normalized": "Rowan Hale (SAMPLE)",
       "speaker": null,
+      "speaker_role": null,
       "text_verbatim": "Rowan Hale (SAMPLE)"
     },
     {
@@ -472,12 +464,14 @@
         371
       ],
       "ex_id": "EX2",
+      "frame_index": null,
       "frame_ts": null,
-      "item_id": "item9",
+      "item_id": "item8",
       "kind": "label",
       "line_box": null,
       "normalized": "Receiver account",
       "speaker": null,
+      "speaker_role": null,
       "text_verbatim": "Receiver account"
     },
     {
@@ -488,12 +482,14 @@
         369
       ],
       "ex_id": "EX2",
+      "frame_index": null,
       "frame_ts": null,
-      "item_id": "item10",
+      "item_id": "item9",
       "kind": "account_number",
       "line_box": null,
       "normalized": "000-0000-1357",
       "speaker": null,
+      "speaker_role": null,
       "text_verbatim": "000-0000-1357"
     },
     {
@@ -504,12 +500,14 @@
         442
       ],
       "ex_id": "EX2",
+      "frame_index": null,
       "frame_ts": null,
-      "item_id": "item11",
+      "item_id": "item10",
       "kind": "label",
       "line_box": null,
       "normalized": "Amount",
       "speaker": null,
+      "speaker_role": null,
       "text_verbatim": "Amount"
     },
     {
@@ -520,12 +518,14 @@
         443
       ],
       "ex_id": "EX2",
+      "frame_index": null,
       "frame_ts": null,
-      "item_id": "item12",
+      "item_id": "item11",
       "kind": "amount",
       "line_box": null,
       "normalized": 500000,
       "speaker": null,
+      "speaker_role": null,
       "text_verbatim": "$5,000.00"
     },
     {
@@ -536,12 +536,14 @@
         514
       ],
       "ex_id": "EX2",
+      "frame_index": null,
       "frame_ts": null,
-      "item_id": "item13",
+      "item_id": "item12",
       "kind": "label",
       "line_box": null,
       "normalized": "Date",
       "speaker": null,
+      "speaker_role": null,
       "text_verbatim": "Date"
     },
     {
@@ -552,29 +554,15 @@
         515
       ],
       "ex_id": "EX2",
+      "frame_index": null,
       "frame_ts": null,
-      "item_id": "item14",
+      "item_id": "item13",
       "kind": "date",
       "line_box": null,
       "normalized": "2026-01-10",
       "speaker": null,
+      "speaker_role": null,
       "text_verbatim": "January 10, 2026"
-    },
-    {
-      "box": [
-        0,
-        0,
-        1240,
-        36
-      ],
-      "ex_id": "EX3",
-      "frame_ts": null,
-      "item_id": "item1",
-      "kind": "watermark",
-      "line_box": null,
-      "normalized": "SAMPLE / 데모용",
-      "speaker": null,
-      "text_verbatim": "SAMPLE / 데모용"
     },
     {
       "box": [
@@ -584,12 +572,14 @@
         137
       ],
       "ex_id": "EX3",
+      "frame_index": null,
       "frame_ts": null,
-      "item_id": "item2",
+      "item_id": "item1",
       "kind": "header",
       "line_box": null,
       "normalized": "Promissory Note",
       "speaker": null,
+      "speaker_role": null,
       "text_verbatim": "Promissory Note"
     },
     {
@@ -600,316 +590,14 @@
         221
       ],
       "ex_id": "EX3",
-      "frame_ts": null,
-      "item_id": "item3",
-      "kind": "label",
-      "line_box": null,
-      "normalized": "Lender",
-      "speaker": null,
-      "text_verbatim": "Lender"
-    },
-    {
-      "box": [
-        470,
-        191,
-        841,
-        224
-      ],
-      "ex_id": "EX3",
-      "frame_ts": null,
-      "item_id": "item4",
-      "kind": "party_name",
-      "line_box": null,
-      "normalized": "Avery Linden (SAMPLE)",
-      "speaker": null,
-      "text_verbatim": "Avery Linden (SAMPLE)"
-    },
-    {
-      "box": [
-        120,
-        287,
-        248,
-        309
-      ],
-      "ex_id": "EX3",
-      "frame_ts": null,
-      "item_id": "item5",
-      "kind": "label",
-      "line_box": null,
-      "normalized": "Borrower",
-      "speaker": null,
-      "text_verbatim": "Borrower"
-    },
-    {
-      "box": [
-        470,
-        279,
-        829,
-        312
-      ],
-      "ex_id": "EX3",
-      "frame_ts": null,
-      "item_id": "item6",
-      "kind": "party_name",
-      "line_box": null,
-      "normalized": "Rowan Hale (SAMPLE)",
-      "speaker": null,
-      "text_verbatim": "Rowan Hale (SAMPLE)"
-    },
-    {
-      "box": [
-        120,
-        372,
-        361,
-        397
-      ],
-      "ex_id": "EX3",
-      "frame_ts": null,
-      "item_id": "item7",
-      "kind": "label",
-      "line_box": null,
-      "normalized": "Borrower address",
-      "speaker": null,
-      "text_verbatim": "Borrower address"
-    },
-    {
-      "box": [
-        470,
-        367,
-        1048,
-        400
-      ],
-      "ex_id": "EX3",
-      "frame_ts": null,
-      "item_id": "item8",
-      "kind": "address",
-      "line_box": null,
-      "normalized": "0 Sample St, Sample City, CA 90000",
-      "speaker": null,
-      "text_verbatim": "0 Sample St, Sample City, CA 90000"
-    },
-    {
-      "box": [
-        120,
-        463,
-        234,
-        485
-      ],
-      "ex_id": "EX3",
-      "frame_ts": null,
-      "item_id": "item9",
-      "kind": "label",
-      "line_box": null,
-      "normalized": "Amount",
-      "speaker": null,
-      "text_verbatim": "Amount"
-    },
-    {
-      "box": [
-        470,
-        454,
-        637,
-        488
-      ],
-      "ex_id": "EX3",
-      "frame_ts": null,
-      "item_id": "item10",
-      "kind": "amount",
-      "line_box": null,
-      "normalized": 500000,
-      "speaker": null,
-      "text_verbatim": "$5,000.00"
-    },
-    {
-      "box": [
-        120,
-        548,
-        360,
-        575
-      ],
-      "ex_id": "EX3",
-      "frame_ts": null,
-      "item_id": "item11",
-      "kind": "label",
-      "line_box": null,
-      "normalized": "Amount in words",
-      "speaker": null,
-      "text_verbatim": "Amount in words"
-    },
-    {
-      "box": [
-        470,
-        543,
-        803,
-        573
-      ],
-      "ex_id": "EX3",
-      "frame_ts": null,
-      "item_id": "item12",
-      "kind": "amount",
-      "line_box": null,
-      "normalized": 500000,
-      "speaker": null,
-      "text_verbatim": "Five thousand dollars"
-    },
-    {
-      "box": [
-        120,
-        636,
-        256,
-        661
-      ],
-      "ex_id": "EX3",
-      "frame_ts": null,
-      "item_id": "item13",
-      "kind": "label",
-      "line_box": null,
-      "normalized": "Loan date",
-      "speaker": null,
-      "text_verbatim": "Loan date"
-    },
-    {
-      "box": [
-        470,
-        633,
-        746,
-        664
-      ],
-      "ex_id": "EX3",
-      "frame_ts": null,
-      "item_id": "item14",
-      "kind": "date",
-      "line_box": null,
-      "normalized": "2026-01-10",
-      "speaker": null,
-      "text_verbatim": "January 10, 2026"
-    },
-    {
-      "box": [
-        120,
-        724,
-        245,
-        749
-      ],
-      "ex_id": "EX3",
-      "frame_ts": null,
-      "item_id": "item15",
-      "kind": "label",
-      "line_box": null,
-      "normalized": "Due date",
-      "speaker": null,
-      "text_verbatim": "Due date"
-    },
-    {
-      "box": [
-        470,
-        719,
-        700,
-        752
-      ],
-      "ex_id": "EX3",
-      "frame_ts": null,
-      "item_id": "item16",
-      "kind": "date",
-      "line_box": null,
-      "normalized": "2026-04-10",
-      "speaker": null,
-      "text_verbatim": "April 10, 2026"
-    },
-    {
-      "box": [
-        120,
-        816,
-        294,
-        843
-      ],
-      "ex_id": "EX3",
-      "frame_ts": null,
-      "item_id": "item17",
-      "kind": "label",
-      "line_box": null,
-      "normalized": "No interest",
-      "speaker": null,
-      "text_verbatim": "No interest"
-    },
-    {
-      "box": [
-        120,
-        924,
-        551,
-        951
-      ],
-      "ex_id": "EX3",
-      "frame_ts": null,
-      "item_id": "item18",
-      "kind": "label",
-      "line_box": null,
-      "normalized": "Avery Linden (SAMPLE) signature",
-      "speaker": null,
-      "text_verbatim": "Avery Linden (SAMPLE) signature"
-    },
-    {
-      "box": [
-        120,
-        1114,
-        539,
-        1141
-      ],
-      "ex_id": "EX3",
-      "frame_ts": null,
-      "item_id": "item19",
-      "kind": "label",
-      "line_box": null,
-      "normalized": "Rowan Hale (SAMPLE) signature",
-      "speaker": null,
-      "text_verbatim": "Rowan Hale (SAMPLE) signature"
-    },
-    {
-      "box": [
-        0,
-        0,
-        1240,
-        36
-      ],
-      "ex_id": "EX4",
-      "frame_ts": null,
-      "item_id": "item1",
-      "kind": "watermark",
-      "line_box": null,
-      "normalized": "SAMPLE / 데모용",
-      "speaker": null,
-      "text_verbatim": "SAMPLE / 데모용"
-    },
-    {
-      "box": [
-        409,
-        86,
-        830,
-        137
-      ],
-      "ex_id": "EX4",
+      "frame_index": null,
       "frame_ts": null,
       "item_id": "item2",
-      "kind": "header",
-      "line_box": null,
-      "normalized": "Promissory Note",
-      "speaker": null,
-      "text_verbatim": "Promissory Note"
-    },
-    {
-      "box": [
-        120,
-        196,
-        214,
-        221
-      ],
-      "ex_id": "EX4",
-      "frame_ts": null,
-      "item_id": "item3",
       "kind": "label",
       "line_box": null,
       "normalized": "Lender",
       "speaker": null,
+      "speaker_role": null,
       "text_verbatim": "Lender"
     },
     {
@@ -919,260 +607,364 @@
         841,
         224
       ],
-      "ex_id": "EX4",
+      "ex_id": "EX3",
+      "frame_index": null,
       "frame_ts": null,
-      "item_id": "item4",
+      "item_id": "item3",
       "kind": "party_name",
       "line_box": null,
       "normalized": "Avery Linden (SAMPLE)",
       "speaker": null,
+      "speaker_role": null,
       "text_verbatim": "Avery Linden (SAMPLE)"
     },
     {
       "box": [
         120,
-        287,
-        248,
-        309
+        284,
+        310,
+        314
       ],
-      "ex_id": "EX4",
+      "ex_id": "EX3",
+      "frame_index": null,
+      "frame_ts": null,
+      "item_id": "item4",
+      "kind": "label",
+      "line_box": null,
+      "normalized": "Lender phone",
+      "speaker": null,
+      "speaker_role": null,
+      "text_verbatim": "Lender phone"
+    },
+    {
+      "box": [
+        470,
+        282,
+        629,
+        307
+      ],
+      "ex_id": "EX3",
+      "frame_index": null,
       "frame_ts": null,
       "item_id": "item5",
+      "kind": "phone",
+      "line_box": null,
+      "normalized": "555-0100",
+      "speaker": null,
+      "speaker_role": null,
+      "text_verbatim": "555-0100"
+    },
+    {
+      "box": [
+        120,
+        375,
+        248,
+        397
+      ],
+      "ex_id": "EX3",
+      "frame_index": null,
+      "frame_ts": null,
+      "item_id": "item6",
       "kind": "label",
       "line_box": null,
       "normalized": "Borrower",
       "speaker": null,
+      "speaker_role": null,
       "text_verbatim": "Borrower"
     },
     {
       "box": [
         470,
-        279,
+        367,
         829,
-        312
+        400
       ],
-      "ex_id": "EX4",
+      "ex_id": "EX3",
+      "frame_index": null,
       "frame_ts": null,
-      "item_id": "item6",
+      "item_id": "item7",
       "kind": "party_name",
       "line_box": null,
       "normalized": "Rowan Hale (SAMPLE)",
       "speaker": null,
+      "speaker_role": null,
       "text_verbatim": "Rowan Hale (SAMPLE)"
     },
     {
       "box": [
         120,
-        372,
-        361,
-        397
+        460,
+        344,
+        490
       ],
-      "ex_id": "EX4",
-      "frame_ts": null,
-      "item_id": "item7",
-      "kind": "label",
-      "line_box": null,
-      "normalized": "Borrower address",
-      "speaker": null,
-      "text_verbatim": "Borrower address"
-    },
-    {
-      "box": [
-        470,
-        367,
-        1048,
-        400
-      ],
-      "ex_id": "EX4",
+      "ex_id": "EX3",
+      "frame_index": null,
       "frame_ts": null,
       "item_id": "item8",
-      "kind": "address",
-      "line_box": null,
-      "normalized": "0 Sample St, Sample City, CA 90000",
-      "speaker": null,
-      "text_verbatim": "0 Sample St, Sample City, CA 90000"
-    },
-    {
-      "box": [
-        120,
-        463,
-        234,
-        485
-      ],
-      "ex_id": "EX4",
-      "frame_ts": null,
-      "item_id": "item9",
       "kind": "label",
       "line_box": null,
-      "normalized": "Amount",
+      "normalized": "Borrower phone",
       "speaker": null,
-      "text_verbatim": "Amount"
+      "speaker_role": null,
+      "text_verbatim": "Borrower phone"
     },
     {
       "box": [
         470,
-        454,
-        637,
-        488
+        458,
+        629,
+        483
       ],
-      "ex_id": "EX4",
+      "ex_id": "EX3",
+      "frame_index": null,
       "frame_ts": null,
-      "item_id": "item10",
-      "kind": "amount",
+      "item_id": "item9",
+      "kind": "phone",
       "line_box": null,
-      "normalized": 500000,
+      "normalized": "555-0111",
       "speaker": null,
-      "text_verbatim": "$5,000.00"
+      "speaker_role": null,
+      "text_verbatim": "555-0111"
     },
     {
       "box": [
         120,
         548,
-        360,
-        575
+        361,
+        573
       ],
-      "ex_id": "EX4",
+      "ex_id": "EX3",
+      "frame_index": null,
       "frame_ts": null,
-      "item_id": "item11",
+      "item_id": "item10",
       "kind": "label",
       "line_box": null,
-      "normalized": "Amount in words",
+      "normalized": "Borrower address",
       "speaker": null,
-      "text_verbatim": "Amount in words"
+      "speaker_role": null,
+      "text_verbatim": "Borrower address"
     },
     {
       "box": [
         470,
         543,
-        803,
-        573
+        1048,
+        576
       ],
-      "ex_id": "EX4",
+      "ex_id": "EX3",
+      "frame_index": null,
       "frame_ts": null,
-      "item_id": "item12",
-      "kind": "amount",
+      "item_id": "item11",
+      "kind": "address",
       "line_box": null,
-      "normalized": 500000,
+      "normalized": "0 Sample St, Sample City, CA 90000",
       "speaker": null,
-      "text_verbatim": "Five thousand dollars"
+      "speaker_role": null,
+      "text_verbatim": "0 Sample St, Sample City, CA 90000"
     },
     {
       "box": [
         120,
-        636,
-        256,
+        639,
+        234,
         661
       ],
-      "ex_id": "EX4",
+      "ex_id": "EX3",
+      "frame_index": null,
       "frame_ts": null,
-      "item_id": "item13",
+      "item_id": "item12",
       "kind": "label",
       "line_box": null,
-      "normalized": "Loan date",
+      "normalized": "Amount",
       "speaker": null,
-      "text_verbatim": "Loan date"
+      "speaker_role": null,
+      "text_verbatim": "Amount"
     },
     {
       "box": [
         470,
-        633,
-        746,
+        630,
+        637,
         664
       ],
-      "ex_id": "EX4",
+      "ex_id": "EX3",
+      "frame_index": null,
       "frame_ts": null,
-      "item_id": "item14",
-      "kind": "date",
+      "item_id": "item13",
+      "kind": "amount",
       "line_box": null,
-      "normalized": "2026-01-10",
+      "normalized": 500000,
       "speaker": null,
-      "text_verbatim": "January 10, 2026"
+      "speaker_role": null,
+      "text_verbatim": "$5,000.00"
     },
     {
       "box": [
         120,
         724,
-        245,
-        749
+        360,
+        751
       ],
-      "ex_id": "EX4",
+      "ex_id": "EX3",
+      "frame_index": null,
       "frame_ts": null,
-      "item_id": "item15",
+      "item_id": "item14",
       "kind": "label",
       "line_box": null,
-      "normalized": "Due date",
+      "normalized": "Amount in words",
       "speaker": null,
-      "text_verbatim": "Due date"
+      "speaker_role": null,
+      "text_verbatim": "Amount in words"
     },
     {
       "box": [
         470,
         719,
-        700,
-        752
+        803,
+        749
       ],
-      "ex_id": "EX4",
+      "ex_id": "EX3",
+      "frame_index": null,
+      "frame_ts": null,
+      "item_id": "item15",
+      "kind": "amount",
+      "line_box": null,
+      "normalized": 500000,
+      "speaker": null,
+      "speaker_role": null,
+      "text_verbatim": "Five thousand dollars"
+    },
+    {
+      "box": [
+        120,
+        812,
+        256,
+        837
+      ],
+      "ex_id": "EX3",
+      "frame_index": null,
       "frame_ts": null,
       "item_id": "item16",
+      "kind": "label",
+      "line_box": null,
+      "normalized": "Loan date",
+      "speaker": null,
+      "speaker_role": null,
+      "text_verbatim": "Loan date"
+    },
+    {
+      "box": [
+        470,
+        809,
+        746,
+        840
+      ],
+      "ex_id": "EX3",
+      "frame_index": null,
+      "frame_ts": null,
+      "item_id": "item17",
+      "kind": "date",
+      "line_box": null,
+      "normalized": "2026-01-10",
+      "speaker": null,
+      "speaker_role": null,
+      "text_verbatim": "January 10, 2026"
+    },
+    {
+      "box": [
+        120,
+        900,
+        245,
+        925
+      ],
+      "ex_id": "EX3",
+      "frame_index": null,
+      "frame_ts": null,
+      "item_id": "item18",
+      "kind": "label",
+      "line_box": null,
+      "normalized": "Due date",
+      "speaker": null,
+      "speaker_role": null,
+      "text_verbatim": "Due date"
+    },
+    {
+      "box": [
+        470,
+        895,
+        700,
+        928
+      ],
+      "ex_id": "EX3",
+      "frame_index": null,
+      "frame_ts": null,
+      "item_id": "item19",
       "kind": "date",
       "line_box": null,
       "normalized": "2026-04-10",
       "speaker": null,
+      "speaker_role": null,
       "text_verbatim": "April 10, 2026"
     },
     {
       "box": [
         120,
-        816,
+        992,
         294,
-        843
+        1019
       ],
-      "ex_id": "EX4",
+      "ex_id": "EX3",
+      "frame_index": null,
       "frame_ts": null,
-      "item_id": "item17",
+      "item_id": "item20",
       "kind": "label",
       "line_box": null,
       "normalized": "No interest",
       "speaker": null,
+      "speaker_role": null,
       "text_verbatim": "No interest"
     },
     {
       "box": [
         120,
-        924,
+        1070,
         551,
-        951
+        1097
       ],
-      "ex_id": "EX4",
+      "ex_id": "EX3",
+      "frame_index": null,
       "frame_ts": null,
-      "item_id": "item18",
+      "item_id": "item21",
       "kind": "label",
       "line_box": null,
       "normalized": "Avery Linden (SAMPLE) signature",
       "speaker": null,
+      "speaker_role": null,
       "text_verbatim": "Avery Linden (SAMPLE) signature"
     },
     {
       "box": [
         120,
-        1114,
+        1280,
         539,
-        1141
+        1307
       ],
-      "ex_id": "EX4",
+      "ex_id": "EX3",
+      "frame_index": null,
       "frame_ts": null,
-      "item_id": "item19",
+      "item_id": "item22",
       "kind": "label",
       "line_box": null,
       "normalized": "Rowan Hale (SAMPLE) signature",
       "speaker": null,
+      "speaker_role": null,
       "text_verbatim": "Rowan Hale (SAMPLE) signature"
     }
   ],
   "redaction_targets": [
     {
       "ex_id": "EX2",
-      "item_id": "item6",
+      "item_id": "item5",
       "keep_box": [
         337,
         208,
@@ -1189,7 +981,7 @@
     },
     {
       "ex_id": "EX2",
-      "item_id": "item10",
+      "item_id": "item9",
       "keep_box": [
         337,
         352,
@@ -1206,17 +998,17 @@
     }
   ],
   "utterance_tags": {
-    "EX1:item13": [
+    "EX1:item12": [
       "amount_mention"
     ],
-    "EX1:item5": [
+    "EX1:item4": [
       "loan_request",
       "amount_mention"
     ],
-    "EX1:item7": [
+    "EX1:item6": [
       "other"
     ],
-    "EX1:item9": [
+    "EX1:item8": [
       "amount_mention",
       "repay_promise"
     ]
@@ -1231,6 +1023,7 @@
       ],
       "ex_id": "EX1",
       "frame_box": null,
+      "frame_index": null,
       "frame_ts": null,
       "item_id": null,
       "target": "face"
@@ -1244,8 +1037,9 @@
       ],
       "ex_id": "EX1",
       "frame_box": null,
+      "frame_index": null,
       "frame_ts": null,
-      "item_id": "item5",
+      "item_id": "item4",
       "target": "chat_bubble"
     },
     {
@@ -1257,8 +1051,9 @@
       ],
       "ex_id": "EX1",
       "frame_box": null,
+      "frame_index": null,
       "frame_ts": null,
-      "item_id": "item7",
+      "item_id": "item6",
       "target": "chat_bubble"
     },
     {
@@ -1270,8 +1065,9 @@
       ],
       "ex_id": "EX1",
       "frame_box": null,
+      "frame_index": null,
       "frame_ts": null,
-      "item_id": "item9",
+      "item_id": "item8",
       "target": "chat_bubble"
     },
     {
@@ -1283,80 +1079,49 @@
       ],
       "ex_id": "EX1",
       "frame_box": null,
+      "frame_index": null,
       "frame_ts": null,
-      "item_id": "item13",
+      "item_id": "item12",
       "target": "chat_bubble"
     },
     {
       "box": [
-        492,
-        926,
-        928,
-        1012
-      ],
-      "ex_id": "EX3",
-      "frame_box": [
-        470,
-        893,
-        950,
-        1043
-      ],
-      "frame_ts": null,
-      "item_id": null,
-      "target": "signature"
-    },
-    {
-      "box": [
-        492,
-        1116,
-        928,
+        518,
+        1153,
+        780,
         1202
       ],
       "ex_id": "EX3",
       "frame_box": [
         470,
-        1083,
+        1109,
         950,
-        1233
+        1239
       ],
+      "frame_index": null,
       "frame_ts": null,
       "item_id": null,
+      "strokes": 4,
       "target": "signature"
     },
     {
       "box": [
-        492,
-        926,
-        928,
-        1012
+        515,
+        1361,
+        754,
+        1415
       ],
-      "ex_id": "EX4",
+      "ex_id": "EX3",
       "frame_box": [
         470,
-        893,
+        1319,
         950,
-        1043
+        1449
       ],
+      "frame_index": null,
       "frame_ts": null,
       "item_id": null,
-      "target": "signature"
-    },
-    {
-      "box": [
-        492,
-        1116,
-        928,
-        1202
-      ],
-      "ex_id": "EX4",
-      "frame_box": [
-        470,
-        1083,
-        950,
-        1233
-      ],
-      "frame_ts": null,
-      "item_id": null,
+      "strokes": 4,
       "target": "signature"
     }
   ]

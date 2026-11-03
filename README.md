@@ -1,53 +1,37 @@
-# ClaimBack-AI ⚖️
+# ClaimBack-AI
 
-> **Meta Global AI Developer Hackathon (Theme 1: Build for Your World)**  
-> Pro Se Visual Evidence Forensics & Deterministic Dual-Court Auto-Packager
+> **Meta Global AI Developer Hackathon (Theme 1: Build for Your World)**
+> Free self-help tool that organizes your own evidence for an unpaid small loan and fills standard court forms with facts you confirm.
 
-ClaimBack-AI is a 100% free, open-source self-help tool that organizes your own evidence for an unpaid small loan and fills standard court forms with facts you confirm. It combines **SAM 3.1 visual forensics**, **Muse Spark 1.3 (`muse-spark-1.3`) chronology extraction**, and a **deterministic Python verification gate** for both **South Korea (전자소송 / 내용증명)** and the **United States (California Small Claims Form SC-100)**.
-
----
-
-## 🌟 Key Features
-
-1. **Agent 1. Forensic Visual Agent (SAM 3.1)**:
-   - Segmentation of loan amounts, repay promises (`repay_promise` utterances), and handwritten signatures.
-   - Automated PII redaction (account numbers, resident registration numbers).
-   - exhibit labels(갑 제N호증, Exhibit A).
-
-2. **Agent 2. Fact-Timeline Chronology Agent (Muse Spark 1.3)**:
-   - Chronological fact timeline extraction from messy messenger screenshots and transfer receipts.
-   - Dual-jurisdiction statutory pleading drafting (지급명령 청구원인 / SC-100 Statement of Facts).
-
-3. **Agent 3. Financial Auditor Agent (Deterministic Python Gate)**:
-   - Multi-year daily interest calculator crossing leap years with 0-day drift.
-   - Verified-values-only: if numbers differ from confirmed values, document generation is blocked.
-
-4. **Agent 4. Judicial Form Filler Agent (AcroForm & PDF Packager)**:
-   - Direct AcroForm injection for California Judicial Council **Form SC-100 (Rev. Jan 1, 2026)** with all 6 required checkboxes and Item 11 declaration signature.
-   - Post-office standard **내용증명 PDF** generation with embedded NanumGothic Korean fonts.
-   - 대한민국 법원 전자소송(ecourt.scourt.go.kr) 1:1 one-click clipboard packets.
+이 저장소의 코드는 Meta Global AI Developer Hackathon 기간(2026-10-27~11-04)에 만들었습니다. Muse Code로 구현하고 Claude Code로 지시·리뷰했습니다.
 
 ---
 
-## 🚀 Quick Start (Zero Build Step)
+## What it does
 
-### 1. Run the Backend & Interactive UI
+1. **Forensic Visual**: finds boxes for amounts, dates, signatures, and seals in your evidence images, and burns PII redaction (account numbers, resident registration numbers) into the pixels before building PDFs. Labels exhibits (갑 제N호증, Exhibit A).
+2. **Fact-Timeline Chronology**: orders messenger and receipt text into a fact timeline, and drafts claim text (지급명령 청구원인 / SC-100 statement of facts) only from facts you confirm.
+3. **Financial Auditor**: deterministic calculator for interest and totals; blocks document generation when numbers differ from your confirmed values.
+4. **Judicial Form Filler**: fills 내용증명 and payment-order packets and SC-100 fields from your confirmed facts. You review everything and sign the declaration yourself.
+
+---
+
+## Quick Start
+
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 cd backend
-..\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000
+..\.venv\Scripts\python.exe -m uvicorn app.main:app --port 8000
 ```
-Open **`http://localhost:8000`** in any web browser to access the 3-panel interactive forensic dashboard!
 
-### 2. Standalone Frontend Mode
-The frontend is a lightweight, zero-build modern SPA. You can also open `frontend/index.html` directly in your browser with offline fallback presets included!
+Open **`http://localhost:8000`**. The first screen walks through the case flow: upload evidence, check the readings, confirm facts, then review the drafts.
 
-### 3. Run Verification Tests
+Run the offline test suite (no API key needed):
+
 ```powershell
 cd backend
 ..\.venv\Scripts\python.exe -m pytest -q
 ```
-The offline unit and regression suite runs with pytest as shown above; no API key is needed for it.
 
 ---
 

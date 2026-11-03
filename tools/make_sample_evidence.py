@@ -6,20 +6,28 @@ Creates (deterministically - same command yields identical bytes):
   sample_evidence/kr/chat_02_scroll.mp4 (640x960 scroll video, 7s)
   sample_evidence/kr/transfer_loan.png  (loan transfer receipt)
   sample_evidence/kr/transfer_repay.png (partial repayment receipt)
-  sample_evidence/kr/iou.pdf            (1-page IOU, reportlab invariant=1)
-  sample_evidence/kr/iou.png            (same content, 150 DPI A4 render)
+  sample_evidence/kr/iou.pdf            (1-page IOU: PNG embedded full-page)
+  sample_evidence/kr/iou.png            (preview of iou.pdf, 150 DPI A4 render)
   sample_evidence/en/chat_01.png
   sample_evidence/en/wire_receipt.png
-  sample_evidence/en/promissory_note.pdf (+ .png)
+  sample_evidence/en/promissory_note.pdf (+ .png preview)
   backend/tests/golden/kr_truth.json    (test-only golden answers)
   backend/tests/golden/en_truth.json    (test-only golden answers)
 and updates sample_evidence/manifest.json (keeps existing text entries,
 recomputes their hashes, adds new file hashes).
 
+Evidence numbering follows specs/case-api-contract.md section 2: KR EX1..EX6
+(the PDF iou.pdf is EX6 with boxes in iou.png preview pixels declared via
+coord_basis; iou.png itself is not a separate evidence). EN EX1..EX3
+likewise (EX3 is the PDF with coord_basis at its PNG preview).
+
 All people, apps, banks, numbers are fictional. Every image/PDF/video frame
-carries a "SAMPLE / demo" margin band recorded as ignore_regions in truth.
-Truth boxes come straight from the drawing coordinates (Pillow textbbox);
-no eyeballing.
+carries a "SAMPLE / demo" margin band recorded only as ignore_regions in
+truth (never as an item). Truth boxes come straight from the drawing
+coordinates (Pillow textbbox); no eyeballing. Video items reference the
+first fully visible frame (frame_index, frame_ts = index / FPS) and the
+per-frame scroll offsets used while rendering are recorded on the video
+evidence entry.
 
 Only Pillow, reportlab and ffmpeg are used. PNGs are saved without
 metadata, the PDF uses reportlab invariant mode, ffmpeg runs with bitexact
@@ -207,55 +215,49 @@ def draw_face(draw: ImageDraw.ImageDraw, cx: int, cy: int, r: int) -> list[int]:
     return [cx - r, cy - r, cx + r, cy + r]
 
 
-def multi_stroke_signature(draw: ImageDraw.ImageDraw, box: list[int],
-                           seed_phase: float) -> list[int]:
-    """Pen-like signature: 4 overlapping sine curves with varying widths.
+# Handwriting-like scribble programs, one per signer. Each stroke is
+# (pen width, [(rx, ry), ...]) with coordinates relative to the inner box.
+# Every program lifts the pen between strokes (4 separate strokes), uses
+# irregular lengths and heights, and stays inside part of the box so the ink
+# stays clearly smaller than the signature frame (IoU <= 0.4). Hand-written
+# coordinates only - no wave functions. Deterministic by construction.
+SIGNATURE_PROGRAMS: tuple[tuple[tuple[int, list[tuple[float, float]]], ...], ...] = (
+    (  # Signer 0: tall zigzag, hook, underline flourish, short tick.
+        (3, [(0.06, 0.66), (0.16, 0.30), (0.24, 0.52), (0.33, 0.26),
+             (0.40, 0.60)]),
+        (2, [(0.44, 0.38), (0.50, 0.70), (0.57, 0.55), (0.62, 0.66)]),
+        (4, [(0.08, 0.82), (0.30, 0.74), (0.52, 0.80)]),
+        (2, [(0.58, 0.30), (0.66, 0.34), (0.64, 0.46)]),
+    ),
+    (  # Signer 1: peak with tail, m-shape, low underline, dot tick.
+        (4, [(0.10, 0.55), (0.22, 0.24), (0.34, 0.58), (0.30, 0.74)]),
+        (2, [(0.38, 0.62), (0.46, 0.36), (0.55, 0.60), (0.60, 0.44)]),
+        (3, [(0.12, 0.80), (0.36, 0.86), (0.58, 0.78)]),
+        (2, [(0.05, 0.40), (0.09, 0.52)]),
+    ),
+)
 
-    Returns the ink bounding box (tracks every plotted point). Deterministic:
-    pure math, no random numbers.
+
+def draw_signature(draw: ImageDraw.ImageDraw, box: list[int],
+                   signer_index: int) -> tuple[list[int], int]:
+    """Draw one signer's scribble program. Returns (ink box, stroke count).
+
+    The ink box tracks every plotted point plus half the pen width.
     """
-    import math
-
     x1, y1, x2, y2 = box
-    strokes = [
-        {"amp": 0.30, "freq": 5.0, "phase": seed_phase, "width": 2,
-         "dy": -0.10},
-        {"amp": 0.22, "freq": 8.0, "phase": seed_phase + 1.3, "width": 4,
-         "dy": 0.12},
-        {"amp": 0.34, "freq": 3.0, "phase": seed_phase + 2.6, "width": 3,
-         "dy": 0.02},
-        {"amp": 0.16, "freq": 11.0, "phase": seed_phase + 4.1, "width": 2,
-         "dy": -0.04},
-    ]
-    mid_y = (y1 + y2) / 2
-    span = y2 - y1
+    w, h = x2 - x1, y2 - y1
+    program = SIGNATURE_PROGRAMS[signer_index % len(SIGNATURE_PROGRAMS)]
     ink = [x2, y2, x1, y1]  # minx, miny, maxx, maxy
-    for st in strokes:
-        pts: list[tuple[float, float]] = []
-        steps = 90
-        for i in range(steps + 1):
-            t = i / steps
-            x = x1 + (x2 - x1) * t
-            y = (mid_y + st["dy"] * span
-                 + math.sin(t * st["freq"] * math.pi + st["phase"])
-                 * span * st["amp"])
-            pts.append((x, y))
-            hw = st["width"] / 2
+    for width, rel in program:
+        pts = [(x1 + rx * w, y1 + ry * h) for rx, ry in rel]
+        draw.line(pts, fill=SIG_INK, width=width, joint="curve")
+        hw = width / 2
+        for x, y in pts:
             ink[0] = min(ink[0], x - hw)
             ink[1] = min(ink[1], y - hw)
             ink[2] = max(ink[2], x + hw)
             ink[3] = max(ink[3], y + hw)
-        draw.line(pts, fill=SIG_INK, width=st["width"], joint="curve")
-    # One rising underline flourish crossing the strokes.
-    ul = [(x1 + 6, y2 - 8), (x1 + (x2 - x1) * 0.4, y2 - 16),
-          (x2 - 10, y1 + 10)]
-    draw.line(ul, fill=SIG_INK, width=2, joint="curve")
-    for x, y in ul:
-        ink[0] = min(ink[0], x - 1)
-        ink[1] = min(ink[1], y - 1)
-        ink[2] = max(ink[2], x + 1)
-        ink[3] = max(ink[3], y + 1)
-    return [int(round(v)) for v in ink]
+    return [int(round(v)) for v in ink], len(program)
 
 
 # ---------------------------------------------------------------------------
@@ -294,7 +296,7 @@ def render_chat(path: Path, width: int, height: int, header_title: str,
     counter = [0]
 
     def add_item(kind: str, text: str, norm, box: list[int],
-                 line_box=None, speaker=None) -> str:
+                 line_box=None, speaker=None, speaker_role=None) -> str:
         assert kind in KINDS, kind
         counter[0] += 1
         item_id = f"item{counter[0]}"
@@ -303,10 +305,11 @@ def render_chat(path: Path, width: int, height: int, header_title: str,
                       "box": [int(v) for v in box],
                       "line_box": ([int(v) for v in line_box]
                                    if line_box else None),
-                      "speaker": speaker, "frame_ts": None})
+                      "speaker": speaker, "speaker_role": speaker_role,
+                      "frame_ts": None, "frame_index": None})
         return item_id
 
-    add_item("watermark", WATERMARK, WATERMARK, band_box)
+    # The SAMPLE band lives only in ignore_regions, never as an item.
 
     # Header row.
     header_y = BAND_H + 12
@@ -370,12 +373,13 @@ def render_chat(path: Path, width: int, height: int, header_title: str,
             fill = BUBBLE_LEFT if side == "left" else BUBBLE_RIGHT
             draw.rounded_rectangle([bx, by, bx + m["bw"], by + m["bh"]],
                                    radius=14, fill=fill)
+            role = "creditor" if side == "right" else "debtor"
             if m["face"]:
                 fbox = draw_face(draw, margin + face_r,
                                  by + m["bh"] // 2, face_r)
                 vision.append({"target": "face", "box": fbox,
                                "frame_box": None, "item_id": None,
-                               "frame_ts": None})
+                               "frame_ts": None, "frame_index": None})
             if side == "left":
                 nx, ny = bx + 2, by - 20
                 draw.text((nx, ny), m["speaker"], font=f_name, fill=GRAY)
@@ -390,12 +394,12 @@ def render_chat(path: Path, width: int, height: int, header_title: str,
                 line_origin.append((lx, ly))
             utt_id = add_item("utterance", m["text"], m["text"],
                               [bx, by, bx + m["bw"], by + m["bh"]],
-                              speaker=m["speaker"])
+                              speaker=m["speaker"], speaker_role=role)
             tags[utt_id] = list(m["tags"])
             vision.append({"target": "chat_bubble",
                            "box": [bx, by, bx + m["bw"], by + m["bh"]],
                            "frame_box": None, "item_id": utt_id,
-                           "frame_ts": None})
+                           "frame_ts": None, "frame_index": None})
             # In-sentence tokens: each must sit on exactly one line.
             for substr, kind, norm in m["tokens"]:
                 found = None
@@ -407,7 +411,7 @@ def render_chat(path: Path, width: int, height: int, header_title: str,
                         break
                 assert found, f"token not on one line: {substr!r} in {m['text']!r}"
                 add_item(kind, substr, norm, found[0], line_box=found[1],
-                         speaker=m["speaker"])
+                         speaker=m["speaker"], speaker_role=role)
         y += m["h"] + gap
 
     save_png(img, path)
@@ -448,10 +452,11 @@ def render_receipt(path: Path, width: int, height: int, title: str,
         items.append({"item_id": item_id, "kind": kind,
                       "text_verbatim": text, "normalized": norm,
                       "box": [int(v) for v in box], "line_box": None,
-                      "speaker": None, "frame_ts": None})
+                      "speaker": None, "speaker_role": None,
+                      "frame_ts": None, "frame_index": None})
         return item_id
 
-    add_item("watermark", WATERMARK, WATERMARK, band_box)
+    # The SAMPLE band lives only in ignore_regions, never as an item.
 
     ty = BAND_H + 26
     draw.text((margin, ty), title, font=f_title, fill=INK)
@@ -477,6 +482,8 @@ def render_receipt(path: Path, width: int, height: int, title: str,
         item_id = add_item(vkind, value, norm, list(vb))
         if vkind == "account_number":
             # mask_box: front part to hide; keep_box: last 4 digits to keep.
+            # No redaction margin on the keep side: mask and keep tile the
+            # account box end to end (mask end == keep start).
             last4 = value[-4:]
             pre = value[:-4]
             pre_w = float(draw.textlength(pre, font=f_value))
@@ -499,7 +506,7 @@ def render_receipt(path: Path, width: int, height: int, title: str,
 
 
 # ---------------------------------------------------------------------------
-# IOU / promissory note renderers (PNG truth basis + same-content PDF)
+# IOU / promissory note renderers (PNG truth basis + PDF with PNG embedded)
 # ---------------------------------------------------------------------------
 
 IOU_W, IOU_H = 1240, 1754  # A4 at 150 DPI
@@ -538,10 +545,11 @@ def render_iou_png(path: Path, title: str,
         items.append({"item_id": item_id, "kind": kind,
                       "text_verbatim": text, "normalized": norm,
                       "box": [int(v) for v in box], "line_box": None,
-                      "speaker": None, "frame_ts": None})
+                      "speaker": None, "speaker_role": None,
+                      "frame_ts": None, "frame_index": None})
         return item_id
 
-    add_item("watermark", WATERMARK, WATERMARK, band_box)
+    # The SAMPLE band lives only in ignore_regions, never as an item.
 
     tw = float(draw.textlength(title, font=f_title))
     tx = (IOU_W - tw) / 2
@@ -588,22 +596,25 @@ def render_iou_png(path: Path, title: str,
                            "keep_box": None})
         y += row_h
 
-    # Signature frames with multi-stroke signatures.
+    # Signature frames with per-signer scribbles. The name label sits above
+    # its frame so it never overlaps the signature ink.
     sig_frames: list[list[int]] = []
     for si, signer in enumerate(signers):
         lab = f"{signer} 서명" if stamp_text else f"{signer} signature"
-        draw.text((margin, y + 30), lab, font=f_small, fill=INK)
-        sb = draw.textbbox((margin, y + 30), lab, font=f_small)
+        draw.text((margin, y), lab, font=f_small, fill=INK)
+        sb = draw.textbbox((margin, y), lab, font=f_small)
         add_item("label", lab, lab, list(sb))
-        frame = [value_x, y, value_x + 480, y + 150]
+        frame = [value_x, y + 40, value_x + 480, y + 170]
         draw.rectangle(frame, outline=(120, 126, 132), width=2)
-        ink = multi_stroke_signature(
+        ink, strokes = draw_signature(
             draw, [frame[0] + 24, frame[1] + 24, frame[2] - 24, frame[3] - 24],
-            seed_phase=0.7 + si * 2.2)
+            si)
         vision.append({"target": "signature", "box": ink, "frame_box": frame,
-                       "item_id": None, "frame_ts": None})
+                       "item_id": None, "frame_ts": None, "frame_index": None,
+                       "strokes": strokes})
         sig_frames.append(frame)
-        y += 190
+        y += 210
+    assert y <= IOU_H - 30, "IOU content overflows the page"
 
     # Red seal with the debtor name (KR only), right of the last frame.
     if stamp_text is not None:
@@ -627,7 +638,8 @@ def render_iou_png(path: Path, title: str,
         stb = draw.textbbox((cx, cy), st_txt, font=f_stamp)
         add_item("party_name", st_txt, st_txt, list(stb))
         vision.append({"target": "stamp", "box": [sx1, sy1, sx2, sy2],
-                       "frame_box": None, "item_id": None, "frame_ts": None})
+                       "frame_box": None, "item_id": None, "frame_ts": None,
+                       "frame_index": None})
 
     save_png(img, path)
     return {"items": items, "vision": vision, "tags": {}, "redactions": redactions,
@@ -635,111 +647,24 @@ def render_iou_png(path: Path, title: str,
             "sig_frames": sig_frames}
 
 
-def render_iou_pdf(path: Path, title: str,
-                   rows: list[tuple[str, str, str, object]],
-                   note_line: str, id_label: str | None, id_value: str | None,
-                   signers: list[str], stamp_short: str | None) -> None:
-    """Same-content PDF twin of the IOU PNG (reportlab, invariant mode).
+def render_iou_pdf(path: Path, png_path: Path) -> None:
+    """PDF twin of the IOU PNG: the preview PNG embedded on one full page.
 
-    Truth coordinates always use the PNG pixel basis (see coord_basis), so
-    the PDF only needs the same strings, not the same layout metrics.
+    Embedding keeps the PDF layout identical to the PNG (same band, rows,
+    signatures, stamp) by construction. Truth coordinates always use the PNG
+    pixel basis (see coord_basis), so no text layer is needed; readers score
+    against the preview image. reportlab invariant mode keeps the bytes
+    deterministic.
     """
     from reportlab.lib.pagesizes import A4
-    from reportlab.pdfbase import pdfmetrics
-    from reportlab.pdfbase.ttfonts import TTFont
     from reportlab.pdfgen import canvas
 
-    pdfmetrics.registerFont(TTFont("Nanum", str(FONT_REG)))
-    pdfmetrics.registerFont(TTFont("NanumB", str(FONT_BOLD)))
+    assert png_path.is_file(), f"preview must be rendered first: {png_path}"
     c = canvas.Canvas(str(path), pagesize=A4, invariant=1)
     w, h = A4
-    margin = 56.0
-
-    # Margin band.
-    c.setFillColorRGB(200 / 255, 30 / 255, 30 / 255)
-    c.rect(0, h - BAND_H, w, BAND_H, stroke=0, fill=1)
-    c.setFillColorRGB(1, 1, 1)
-    c.setFont("NanumB", 13)
-    c.drawCentredString(w / 2, h - 25, WATERMARK)
-
-    c.setFillColorRGB(0, 0, 0)
-    c.setFont("NanumB", 26)
-    c.drawCentredString(w / 2, h - 80, title)
-    c.setStrokeColorRGB(140 / 255, 146 / 255, 152 / 255)
-    c.setLineWidth(1.5)
-    y = h - 100
-    c.line(margin, y, w - margin, y)
-
-    y -= 34
-    for label, value, _vkind, _norm in rows:
-        c.setFont("Nanum", 11)
-        c.setFillColorRGB(110 / 255, 116 / 255, 122 / 255)
-        c.drawString(margin, y, label)
-        c.setFont("Nanum", 13)
-        c.setFillColorRGB(0, 0, 0)
-        c.drawString(margin + 170, y, value)
-        y -= 30
-
-    c.setFont("Nanum", 13)
-    c.drawString(margin, y, note_line)
-    y -= 30
-
-    if id_label is not None and id_value is not None:
-        c.setFont("Nanum", 11)
-        c.setFillColorRGB(110 / 255, 116 / 255, 122 / 255)
-        c.drawString(margin, y, id_label)
-        c.setFont("Nanum", 13)
-        c.setFillColorRGB(0, 0, 0)
-        vx = margin + 170
-        vw = pdfmetrics.stringWidth(id_value, "Nanum", 13)
-        c.roundRect(vx - 8, y - 7, vw + 16, 26, 5, stroke=1, fill=0)
-        c.drawString(vx, y, id_value)
-        y -= 34
-
-    # Signature frames with multi-stroke ink (same math as the PNG).
-    import math
-
-    for si, signer in enumerate(signers):
-        lab = f"{signer} 서명" if stamp_short else f"{signer} signature"
-        c.setFont("Nanum", 12)
-        c.setFillColorRGB(0, 0, 0)
-        c.drawString(margin, y - 44, lab)
-        fx, fy, fw, fh = margin + 170, y - 78, 250, 80
-        c.rect(fx, fy, fw, fh, stroke=1, fill=0)
-        ix1, iy1, ix2, iy2 = fx + 14, fy + 14, fx + fw - 14, fy + fh - 14
-        mid = (iy1 + iy2) / 2
-        span = iy2 - iy1
-        strokes = [(0.30, 5.0, 0.7 + si * 2.2, 1.2, -0.10),
-                   (0.22, 8.0, 2.0 + si * 2.2, 2.2, 0.12),
-                   (0.34, 3.0, 3.3 + si * 2.2, 1.6, 0.02),
-                   (0.16, 11.0, 4.8 + si * 2.2, 1.2, -0.04)]
-        c.setStrokeColorRGB(30 / 255, 40 / 255, 130 / 255)
-        for amp, freq, phase, lw, dy in strokes:
-            p = c.beginPath()
-            for i in range(91):
-                t = i / 90
-                x = ix1 + (ix2 - ix1) * t
-                yy = mid + dy * span + math.sin(t * freq * math.pi + phase) * span * amp
-                if i == 0:
-                    p.moveTo(x, yy)
-                else:
-                    p.lineTo(x, yy)
-            c.setLineWidth(lw)
-            c.drawPath(p, stroke=1, fill=0)
-        c.setStrokeColorRGB(0, 0, 0)
-        y -= 100
-
-    if stamp_short is not None:
-        cx, cy, rr = w - margin - 52, y + 128, 46
-        c.setStrokeColorRGB(200 / 255, 30 / 255, 30 / 255)
-        c.setLineWidth(4)
-        c.circle(cx, cy, rr, stroke=1, fill=0)
-        c.setLineWidth(1)
-        c.circle(cx, cy, rr - 9, stroke=1, fill=0)
-        c.setFont("NanumB", 20)
-        c.setFillColorRGB(200 / 255, 30 / 255, 30 / 255)
-        c.drawCentredString(cx, cy - 8, stamp_short)
-
+    # The PNG is A4 at 150 DPI, so it covers the page exactly (72/150 scale).
+    c.drawImage(str(png_path), 0, 0, width=w, height=h,
+                preserveAspectRatio=True, anchor="c")
     c.showPage()
     c.save()
 
@@ -754,17 +679,24 @@ VIDEO_FRAMES = int(VIDEO_FPS * VIDEO_SECONDS)
 VIDEO_W, VIDEO_H = 640, 960
 
 
-def first_full_offset(top: int, bottom: int, max_off: int) -> int:
-    """Smallest scroll offset where [top, bottom] is fully inside the
-    viewport below the fixed band."""
-    off = max(0, bottom - VIDEO_H)
-    assert off <= top - BAND_H, f"item never fully visible: {(top, bottom)}"
-    return min(off, max_off)
+def frame_offset(frame_index: int, max_off: int) -> int:
+    """Scroll offset actually used when rendering one video frame."""
+    return int(round(max_off * frame_index / (VIDEO_FRAMES - 1)))
+
+
+def first_full_frame(top: int, bottom: int, offsets: list[int]) -> int:
+    """First frame where [top, bottom] is fully inside the viewport below
+    the fixed SAMPLE band."""
+    for i, off in enumerate(offsets):
+        if top - off >= BAND_H and bottom - off <= VIDEO_H:
+            return i
+    raise AssertionError(f"item never fully visible: {(top, bottom)}")
 
 
 def build_video(tall_path: Path, out_path: Path, tall_truth: dict) -> dict:
     """Render the scroll video and mirror the tall truth into viewport
-    coordinates at each item's first-fully-visible time (frame_ts, seconds).
+    coordinates at each item's first-fully-visible frame (frame_index,
+    frame_ts = index / FPS, seconds).
     """
     if shutil.which("ffmpeg") is None:
         raise RuntimeError("ffmpeg is required to build chat_02_scroll.mp4")
@@ -773,12 +705,15 @@ def build_video(tall_path: Path, out_path: Path, tall_truth: dict) -> dict:
     assert (tw, th) == (640, 2400), tall.size
     max_off = th - VIDEO_H
     assert max_off == 1440
+    # The exact per-frame offsets used below; recorded on the truth so
+    # tests can map tall boxes to frame boxes without recomputing.
+    offsets = [frame_offset(i, max_off) for i in range(VIDEO_FRAMES)]
 
     tmp = Path(tempfile.mkdtemp(prefix="m3_frames_"))
     try:
         fnt = font(18, bold=True)
         for i in range(VIDEO_FRAMES):
-            off = int(round(max_off * i / (VIDEO_FRAMES - 1)))
+            off = offsets[i]
             frame = tall.crop((0, off, VIDEO_W, off + VIDEO_H))
             fd = ImageDraw.Draw(frame)
             fd.rectangle([0, 0, VIDEO_W, BAND_H], fill=BAND_FILL)
@@ -808,29 +743,28 @@ def build_video(tall_path: Path, out_path: Path, tall_truth: dict) -> dict:
 
     items: list[dict] = []
     for it in tall_truth["items"]:
-        if it["kind"] == "watermark":
-            items.append({**it, "box": [0, 0, VIDEO_W, BAND_H],
-                          "frame_ts": 0.0})
-            continue
         y1, y2 = it["box"][1], it["box"][3]
-        off = first_full_offset(y1, y2, max_off)
-        ts = round(off / max_off * VIDEO_SECONDS, 3)
-        items.append({**it, "box": shift(it["box"], off),
-                      "line_box": shift(it["line_box"], off),
-                      "frame_ts": ts})
+        fi = first_full_frame(y1, y2, offsets)
+        items.append({**it, "box": shift(it["box"], offsets[fi]),
+                      "line_box": shift(it["line_box"], offsets[fi]),
+                      "frame_ts": round(fi / VIDEO_FPS, 3),
+                      "frame_index": fi})
     vision: list[dict] = []
     for v in tall_truth["vision"]:
         y1, y2 = v["box"][1], v["box"][3]
-        off = first_full_offset(y1, y2, max_off)
-        ts = round(off / max_off * VIDEO_SECONDS, 3)
-        vision.append({**v, "box": shift(v["box"], off), "frame_ts": ts})
+        fi = first_full_frame(y1, y2, offsets)
+        vision.append({**v, "box": shift(v["box"], offsets[fi]),
+                       "frame_ts": round(fi / VIDEO_FPS, 3),
+                       "frame_index": fi})
     # At least one bubble must appear only after scrolling starts.
     late = [it for it in items
             if it["kind"] == "utterance" and (it["frame_ts"] or 0) > 1.0]
     assert late, "no bubble appears late in the scroll video"
     return {"items": items, "vision": vision, "tags": dict(tall_truth["tags"]),
             "redactions": [], "ignore": [[0, 0, VIDEO_W, BAND_H]],
-            "size": [VIDEO_W, VIDEO_H]}
+            "size": [VIDEO_W, VIDEO_H],
+            "video": {"fps": VIDEO_FPS, "frames": VIDEO_FRAMES,
+                      "frame_offsets": offsets}}
 
 
 # ---------------------------------------------------------------------------
@@ -866,7 +800,7 @@ KR_CHAT_02: list[tuple] = [
     ("msg", KR_DEBTOR, "left",
      "죄송해요. 4월 25일까지 꼭 갚을게요.",
      ["repay_promise"], [("4월 25일", "date", None)]),
-    ("divider", "2026년 4월 25일", "2026-04-25"),
+    ("divider", "2026년 4월 26일", "2026-04-26"),
     ("msg", KR_CREDITOR, "right",
      "4월 25일이 지났어요. 언제 보내주실 수 있나요?",
      ["reminder"], [("4월 25일", "date", None)]),
@@ -909,9 +843,11 @@ KR_IOU_ROWS: list[tuple[str, str, str, object]] = [
     ("채권자", KR_CREDITOR, "party_name", KR_CREDITOR),
     ("채권자 주소", "서울특별시 샘플구 데모로 0", "address",
      "서울특별시 샘플구 데모로 0"),
+    ("채권자 연락처", "010-0000-0001", "phone", "010-0000-0001"),
     ("채무자", KR_DEBTOR, "party_name", KR_DEBTOR),
     ("채무자 주소", "경기도 샘플시 데모동 0", "address",
      "경기도 샘플시 데모동 0"),
+    ("채무자 연락처", "010-0000-0002", "phone", "010-0000-0002"),
     ("금액", "5,000,000원", "amount", 5000000),
     ("금액(한글)", "금 오백만 원", "amount", 5000000),
     ("대여일", "2026-03-10", "date", "2026-03-10"),
@@ -947,7 +883,9 @@ EN_WIRE_ROWS: list[tuple[str, str, str, object]] = [
 
 EN_NOTE_ROWS: list[tuple[str, str, str, object]] = [
     ("Lender", EN_CREDITOR, "party_name", EN_CREDITOR),
+    ("Lender phone", "555-0100", "phone", "555-0100"),
     ("Borrower", EN_DEBTOR, "party_name", EN_DEBTOR),
+    ("Borrower phone", "555-0111", "phone", "555-0111"),
     ("Borrower address", "0 Sample St, Sample City, CA 90000", "address",
      "0 Sample St, Sample City, CA 90000"),
     ("Amount", "$5,000.00", "amount", 500000),
@@ -957,9 +895,9 @@ EN_NOTE_ROWS: list[tuple[str, str, str, object]] = [
 ]
 
 KR_CASE = {
-    "creditor": {"name": KR_CREDITOR, "phone": "010-0000-0000",
+    "creditor": {"name": KR_CREDITOR, "phone": "010-0000-0001",
                  "address": "서울특별시 샘플구 데모로 0"},
-    "debtor": {"name": KR_DEBTOR, "phone": "010-0000-0000",
+    "debtor": {"name": KR_DEBTOR, "phone": "010-0000-0002",
                "address": "경기도 샘플시 데모동 0"},
     "currency": "KRW",
     "transaction_kind": "civil",
@@ -981,12 +919,12 @@ EN_CASE = {
     "currency": "USD",
     "transaction_kind": "civil",
     "contract_form": "written",
-    "principal_amount": 5000,
+    "principal_amount": "5000.00",
     "loan_date": "2026-01-10",
     "due_date": "2026-04-10",
     "agreed_interest_rate": None,
     "repayments": [],
-    "remaining_principal": 5000,
+    "remaining_principal": "5000.00",
     "accrual_start_date": "2026-04-11",
 }
 
@@ -995,12 +933,21 @@ EN_CASE = {
 # Truth assembly + manifest
 # ---------------------------------------------------------------------------
 
+KR_AMOUNT_UNIT = "KRW: case amounts and item normalized are integer won."
+EN_AMOUNT_UNIT = ("USD: item normalized are integer cents; case "
+                 "principal_amount/remaining_principal are "
+                 "decimal-dollar strings.")
+
+
 def assemble_truth(case: dict, files: list[tuple[str, Path, dict]],
-                   coord_basis: dict[str, str | None]) -> dict:
+                   coord_basis: dict[str, str | None],
+                   amount_unit: str) -> dict:
     """Combine per-file render results into one golden truth document.
 
     files: (ex_id, path, render_result). coord_basis maps ex_id to the file
     whose pixels the boxes use (PDF entries point at their PNG twin).
+    Video render results carry their per-frame scroll offsets ("video"),
+    which are recorded on the video evidence entry.
     """
     evidences: list[dict] = []
     items: list[dict] = []
@@ -1011,12 +958,15 @@ def assemble_truth(case: dict, files: list[tuple[str, Path, dict]],
         basis = coord_basis.get(ex_id)
         w, h = res["size"]  # PDF entries reuse their PNG twin's pixels
         rel = path.relative_to(SAMPLE_DIR).as_posix()
-        evidences.append({"ex_id": ex_id, "file": rel,
-                          "sha256": sha256_of(path),
-                          "width": w, "height": h,
-                          "coord_system": "pixel",
-                          "coord_basis": basis,
-                          "ignore_regions": res["ignore"]})
+        entry: dict = {"ex_id": ex_id, "file": rel,
+                       "sha256": sha256_of(path),
+                       "width": w, "height": h,
+                       "coord_system": "pixel",
+                       "coord_basis": basis,
+                       "ignore_regions": res["ignore"]}
+        if "video" in res:
+            entry["video"] = res["video"]
+        evidences.append(entry)
         for it in res["items"]:
             items.append({"ex_id": ex_id, **it})
         for item_id, tgs in res.get("tags", {}).items():
@@ -1027,6 +977,7 @@ def assemble_truth(case: dict, files: list[tuple[str, Path, dict]],
             redaction_targets.append({"ex_id": ex_id, **r})
     return {
         "_note": "test-only golden answers. Never pass to runtime agents.",
+        "amount_unit": amount_unit,
         "case": case,
         "evidences": evidences,
         "items": items,
@@ -1054,10 +1005,9 @@ def build_kr() -> None:
     r7 = render_iou_png(KR_DIR / "iou.png", "차 용 증", KR_IOU_ROWS,
                         "이자 약정 없음", KR_ID_NUMBER,
                         [KR_CREDITOR, KR_DEBTOR], "탁나루")
-    render_iou_pdf(KR_DIR / "iou.pdf", "차 용 증", KR_IOU_ROWS,
-                   "이자 약정 없음", "주민등록번호", KR_ID_NUMBER,
-                   [KR_CREDITOR, KR_DEBTOR], "탁나루")
+    render_iou_pdf(KR_DIR / "iou.pdf", KR_DIR / "iou.png")
     # The PDF twin reuses the PNG pixel boxes (declared via coord_basis).
+    # iou.png stays on disk as the EX6 preview but is not an evidence.
     r6 = {"items": [dict(it) for it in r7["items"]],
           "vision": [dict(v) for v in r7["vision"]], "tags": {},
           "redactions": [dict(r) for r in r7["redactions"]],
@@ -1069,9 +1019,8 @@ def build_kr() -> None:
          ("EX3", KR_DIR / "chat_02_scroll.mp4", r3),
          ("EX4", KR_DIR / "transfer_loan.png", r4),
          ("EX5", KR_DIR / "transfer_repay.png", r5),
-         ("EX6", KR_DIR / "iou.pdf", r6),
-         ("EX7", KR_DIR / "iou.png", r7)],
-        {"EX6": "kr/iou.png"})
+         ("EX6", KR_DIR / "iou.pdf", r6)],
+        {"EX6": "kr/iou.png"}, KR_AMOUNT_UNIT)
     dump_json(truth, GOLDEN_DIR / "kr_truth.json")
 
 
@@ -1083,9 +1032,9 @@ def build_en() -> None:
     r4 = render_iou_png(EN_DIR / "promissory_note.png", "Promissory Note",
                         EN_NOTE_ROWS, "No interest", None,
                         [EN_CREDITOR, EN_DEBTOR], None)
-    render_iou_pdf(EN_DIR / "promissory_note.pdf", "Promissory Note",
-                   EN_NOTE_ROWS, "No interest", None, None,
-                   [EN_CREDITOR, EN_DEBTOR], None)
+    render_iou_pdf(EN_DIR / "promissory_note.pdf", EN_DIR / "promissory_note.png")
+    # The PDF reuses the PNG pixel boxes; the PNG stays on disk as the EX3
+    # preview but is not an evidence.
     r3 = {"items": [dict(it) for it in r4["items"]],
           "vision": [dict(v) for v in r4["vision"]], "tags": {},
           "redactions": [dict(r) for r in r4["redactions"]],
@@ -1094,9 +1043,8 @@ def build_en() -> None:
         EN_CASE,
         [("EX1", EN_DIR / "chat_01.png", r1),
          ("EX2", EN_DIR / "wire_receipt.png", r2),
-         ("EX3", EN_DIR / "promissory_note.pdf", r3),
-         ("EX4", EN_DIR / "promissory_note.png", r4)],
-        {"EX3": "en/promissory_note.png"})
+         ("EX3", EN_DIR / "promissory_note.pdf", r3)],
+        {"EX3": "en/promissory_note.png"}, EN_AMOUNT_UNIT)
     dump_json(truth, GOLDEN_DIR / "en_truth.json")
 
 

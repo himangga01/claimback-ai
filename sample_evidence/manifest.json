@@ -6,11 +6,11 @@
     },
     "promissory_note.pdf": {
       "file": "en/promissory_note.pdf",
-      "sha256": "287c100e632b89bc05441f5eb4d2e0bdf21ecc3463dfdd8017519fd0cce18785"
+      "sha256": "d5f49315f4bfbd3ba6958ceed292f223f45adef846e8551cdf497f0a7e20fe75"
     },
     "promissory_note.png": {
       "file": "en/promissory_note.png",
-      "sha256": "485acd9ef5bc24c84866010ddf4efc0fb6577da438d442102e10564e6fac2976"
+      "sha256": "56125fe621e086b4834fb90b3b6bf203ee429bfd4d1f3d8be0dd5212123118f4"
     },
     "wire_receipt.png": {
       "file": "en/wire_receipt.png",
@@ -34,19 +34,19 @@
     },
     "chat_02_scroll.mp4": {
       "file": "kr/chat_02_scroll.mp4",
-      "sha256": "021bf97f57823ac130aeb11b1d2fe4ac7f41cf3c6ab0ad623987381d60a750ed"
+      "sha256": "ce00a81140648d7182d1e91428389512ffe7535ae8a14b370b5e2799bbdb487b"
     },
     "chat_02_tall.png": {
       "file": "kr/chat_02_tall.png",
-      "sha256": "1895b682c0c13e93695725000d8e45200d237b83772ec21615990ea72379f54f"
+      "sha256": "e37dd9564688ab41508176428f586b7e3997c65aeca7ef49eda9d4ece8c3c4c0"
     },
     "iou.pdf": {
       "file": "kr/iou.pdf",
-      "sha256": "00fa48803f3d374dc11c16ee870aa716bb13ee7884925e75a5bee03d53ee1e06"
+      "sha256": "68928a19cb65468df4084524d5a80a9682febd13464080d876a8fcabc06d8e14"
     },
     "iou.png": {
       "file": "kr/iou.png",
-      "sha256": "bc160472494ac638ef77d04c37c539cebe95a70d59efde100d949acac3c2dd58"
+      "sha256": "16b98a41bd0e55ecf38f3f59f14ef2c5dabb77eeb0d191c59a8c723cdcf9ec6e"
     },
     "transfer_loan.png": {
       "file": "kr/transfer_loan.png",
