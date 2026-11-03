@@ -1,4 +1,6 @@
-from typing import List
+import re
+import unicodedata
+from typing import List, Tuple
 
 
 DISCLAIMER_KO = (
@@ -50,32 +52,103 @@ FORBIDDEN = [
     "입증할",
 ]
 
+_DRAFT_PATTERNS: List[Tuple[str, str]] = [
+    ("debt-admission", r"채무\s*[를을]?\s*(?:인정|승인)"),
+    ("legal-service", r"법률\s*(?:자문|대리)"),
+    ("lawyer-ko", r"변\s*호\s*사"),
+    ("legal-scrivener", r"법\s*무\s*사"),
+    ("law-office", r"법률\s*사무소"),
+    ("law-firm-ko", r"법무\s*법인"),
+    ("lawfirm-short", r"로\s*펌"),
+    ("lawyer", r"\blawyer\b"),
+    ("attorney", r"\battorney\b"),
+    ("law-firm", r"\blaw[\s-]+firm\b"),
+    ("paralegal", r"\bparalegal\b"),
+    ("legal-assistant", r"\blegal\s+assistant\b"),
+    ("counsel", r"\bcounsel\b"),
+    ("legal-advice", r"\blegal[\s-]+advice\b"),
+    ("win-ko", r"승\s*소"),
+    ("lose-ko", r"패\s*소"),
+    ("you-win", r"\byou(?:'ll| will| are likely to)\s+win\b"),
+    ("win-case", r"\bwin\s+your\s+case\b"),
+    ("chance-winning", r"\bchance\s+of\s+winning\b"),
+    ("debt-ack", r"\bdebt\s+acknowledgment\b"),
+    ("ack-debt", r"\backnowledgment\s+of\s+debt\b"),
+    ("promissory", r"\bpromissory\s+admission\b"),
+    ("just-cause", r"정당한\s*사유\s*없이"),
+    ("claim-right", r"청구권이\s*발생"),
+    ("legal-claim", r"법적\s*청구\s*대상"),
+    ("elements-lack", r"요건사실\s*결손"),
+    ("prove-future", r"입증할"),
+    ("can-win", r"이길\s*수"),
+    ("wins", r"이깁니다"),
+    ("win-chance", r"승산"),
+    ("recoverable", r"돌려받을\s*수\s*있"),
+    ("clearly-illegal", r"명백한\s*불법"),
+]
+
+_DOC_ONLY_PATTERNS: List[Tuple[str, str]] = [
+    ("final-demand", r"최종\s*(?:변제|독촉|통고|경고)"),
+    ("urge", r"촉구"),
+]
+
+_DRAFT_RES = [(name, re.compile(pat, re.IGNORECASE)) for name, pat in _DRAFT_PATTERNS]
+_DOC_RES = [(name, re.compile(pat, re.IGNORECASE)) for name, pat in (_DRAFT_PATTERNS + _DOC_ONLY_PATTERNS)]
+
+
+def normalize_text(text: str) -> str:
+    t = unicodedata.normalize("NFKC", text)
+    t = "".join(ch for ch in t if unicodedata.category(ch) != "Cf")
+    t = re.sub(r"\s+", " ", t)
+    return t.strip()
+
 
 def _remove_allowlist(text: str) -> str:
     out = text
     for allow in ALLOWLIST:
-        if allow and allow in out:
-            out = out.replace(allow, " ")
+        norm_allow = normalize_text(allow) if allow else ""
+        if norm_allow and norm_allow in out:
+            out = out.replace(norm_allow, " ")
     return out
 
 
-def _is_ascii_phrase(phrase: str) -> bool:
-    return any("a" <= ch <= "z" or "A" <= ch <= "Z" for ch in phrase)
+def _find_with(patterns, text: str) -> List[str]:
+    cleaned = _remove_allowlist(normalize_text(text))
+    found: List[str] = []
+    for _name, rx in patterns:
+        for m in rx.finditer(cleaned):
+            s = m.group(0).strip()
+            if s:
+                found.append(s)
+    return found
 
 
 def find_forbidden(text: str) -> List[str]:
-    cleaned = _remove_allowlist(text)
-    lowered = cleaned.lower()
-    found: List[str] = []
-    for phrase in FORBIDDEN:
-        if _is_ascii_phrase(phrase):
-            if phrase.lower() in lowered:
-                found.append(phrase)
-        else:
-            if phrase in cleaned:
-                found.append(phrase)
-    return found
+    return _find_with(_DOC_RES, text)
 
 
 def check_text(text: str) -> List[str]:
     return find_forbidden(text)
+
+
+def find_forbidden_draft(text: str) -> List[str]:
+    return _find_with(_DRAFT_RES, text)
+
+
+def check_draft(slot_draft):
+    from app.services.draft_gates import GateResult, Finding
+
+    findings = []
+    for s in slot_draft.sentences:
+        hits = _find_with(_DRAFT_RES, s.text_with_slots)
+        if hits:
+            findings.append(
+                Finding(
+                    sentence_id=s.sentence_id,
+                    field="text_with_slots",
+                    message=f"초안에 쓸 수 없는 표현이 있습니다: {hits[0]}",
+                    fix_hint="사실대로 고쳐 쓰세요.",
+                )
+            )
+    status = "fail" if findings else "pass"
+    return GateResult(gate="NAMING", status=status, findings=findings)
