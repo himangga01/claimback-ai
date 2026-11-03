@@ -222,6 +222,62 @@ def _run_sequence(case: Dict[str, Any], phases: List[Any]) -> None:
 CASES: Dict[str, Dict[str, Any]] = {}
 CASES_LOCK = threading.Lock()
 
+# redaction-confirm: E2E switch for the redaction data a new case gets.
+# "none" keeps the original stub (GET /redactions 404, privacy skipped);
+# "flagged" serves two flagged copies (EX4, EX5) the user must confirm.
+REDACTION_SCENARIOS = ("none", "flagged")
+REDACTION_SCENARIO = {"name": "none"}
+FLAGGED_REASONS = {
+    "EX4": "계좌번호 끝 4자리 유지; 가림 상자가 판독 위치에서 한 줄 이상 옮겨져 확인 필요",
+    "EX5": (
+        "계좌번호 끝 4자리 유지; 가린 줄이 판독한 번호와 맞는지 확인할 수 없어 확인 필요; "
+        "판독한 번호와 같은 모양의 줄이 가려지지 않았을 수 있음"
+    ),
+}
+FLAGGED_PLAN = [
+    ("EX1", "face1", "face"), ("EX2", "face1", "face"),
+    ("EX4", "item6", "account_number"), ("EX4", "item10", "account_number"),
+    ("EX5", "item6", "account_number"), ("EX5", "item10", "account_number"),
+    ("EX6", "item13", "id_number"),
+]
+
+
+def _flagged_redactions(case_id: str) -> Dict[str, Any]:
+    """Shape of GET /redactions after a run with two wrong-line masks.
+
+    Stub stand-in: the preview URL is the sample image itself (no pixels
+    are burned here), the same trick the M6 show-path test uses.
+    """
+    plan = []
+    for ex_id, item_id, kind in FLAGGED_PLAN:
+        flagged = ex_id in FLAGGED_REASONS and kind == "account_number"
+        plan.append({
+            "ex_id": ex_id, "item_id": item_id, "kind": kind,
+            "mask_box": {"x1": 10, "y1": 10, "x2": 60, "y2": 30,
+                         "system": "pixel", "ref_w": 640, "ref_h": 960},
+            "keep_box": None,
+            "reason": FLAGGED_REASONS[ex_id] if flagged else "얼굴 가림",
+            "needs_review": flagged,
+        })
+    previews = []
+    for ex_id in ("EX1", "EX2", "EX4", "EX5", "EX6"):
+        previews.append({
+            "ex_id": ex_id,
+            "url": f"/api/cases/{case_id}/evidence/{ex_id}/preview",
+            "status": "redacted",
+            "reason": FLAGGED_REASONS.get(ex_id),
+            "needs_review": ex_id in FLAGGED_REASONS,
+        })
+    return {
+        "plan": plan,
+        "previews": previews,
+        "leak_check": {"status": "review", "findings": [{
+            "ex_id": "EX5", "item_id": "item10",
+            "message": "판독한 번호와 같은 모양의 줄이 가려지지 않았을 수 있음",
+            "warning": True,
+        }]},
+    }
+
 
 def _new_case(jurisdiction: str, with_sample: bool) -> Dict[str, Any]:
     case_id = "case_" + secrets.token_hex(6)
@@ -234,6 +290,7 @@ def _new_case(jurisdiction: str, with_sample: bool) -> Dict[str, Any]:
         "evidence": _sample_evidence(case_id) if with_sample else [],
         "uploads": {},
         "confirmed": None,
+        "redaction_scenario": REDACTION_SCENARIO["name"],
         "drafts": copy.deepcopy(DRAFTS_EXAMPLE),
         "lock": threading.RLock(),
         "run_lock": threading.Lock(),
@@ -293,6 +350,16 @@ app = FastAPI(title="ClaimBack-AI M2b stub server")
 @app.get("/health")
 def health() -> Dict[str, Any]:
     return {"status": "healthy", "stub": True}
+
+
+@app.put("/__stub/scenario")
+def set_scenario(body: Dict[str, Any]) -> Dict[str, Any]:
+    """Test-only switch: redaction data for cases created after this call."""
+    name = body.get("redactions", "none")
+    if name not in REDACTION_SCENARIOS:
+        raise _err(400, "bad_request", f"알 수 없는 시나리오입니다: {name}")
+    REDACTION_SCENARIO["name"] = name
+    return {"redactions": name}
 
 
 @app.post("/api/cases")
@@ -405,6 +472,12 @@ def run_case(case_id: str) -> Dict[str, Any]:
         with case["lock"]:
             state = case["state"]
         if state == "INTAKE":
+            flagged = case["redaction_scenario"] == "flagged"
+            privacy = (
+                ("ORGANIZING", "privacy", "done",
+                 f"가림 {len(FLAGGED_PLAN)}개, 확인 필요 증거 {len(FLAGGED_REASONS)}개")
+                if flagged else ("ORGANIZING", "privacy", "skipped", "")
+            )
             _run_sequence(
                 case,
                 [
@@ -412,7 +485,7 @@ def run_case(case_id: str) -> Dict[str, Any]:
                     ("READING", "reading", "done", "5개 판독, 1개 건너뜀(영상)"),
                     ("READING", "vision", "skipped", ""),
                     ("ORGANIZING", "organizing", "done", "필드 11개, 충돌 0, 질문 1"),
-                    ("ORGANIZING", "privacy", "skipped", ""),
+                    privacy,
                     ("CHECKPOINT_1", "checkpoint_1", "running", ""),
                 ],
             )
@@ -465,7 +538,12 @@ def get_readings(case_id: str) -> Any:
 
 @app.get("/api/cases/{case_id}/redactions")
 def get_redactions(case_id: str) -> Any:
-    _get_case(case_id)
+    case = _get_case(case_id)
+    with case["lock"]:
+        flagged = (case["redaction_scenario"] == "flagged"
+                   and STATE_ORDER.index(case["state"]) >= STATE_ORDER.index("CHECKPOINT_1"))
+    if flagged:
+        return _flagged_redactions(case_id)
     raise _err(404, "not_found", "가림 미리보기가 없습니다.")
 
 
@@ -500,6 +578,15 @@ def put_facts(case_id: str, body: Dict[str, Any]) -> Dict[str, Any]:
                     "missing_requirements": missing,
                 },
             )
+        # Contract 6d: true|false|null or a list of known ex_ids.
+        confirmed = body.get("redaction_confirmed")
+        known = {e["ex_id"] for e in case["evidence"]}
+        if confirmed is not None and not isinstance(confirmed, bool) and not (
+            isinstance(confirmed, list)
+            and all(isinstance(x, str) and x in known for x in confirmed)
+        ):
+            raise _err(400, "bad_request",
+                       "redaction_confirmed는 true|false 또는 증거 번호 목록이어야 합니다.")
         case["confirmed"] = copy.deepcopy(body)
         case["drafts"] = copy.deepcopy(DRAFTS_EXAMPLE)
         case["state"] = "CALCULATING"
@@ -582,6 +669,21 @@ def get_package(case_id: str) -> Any:
         pkg = copy.deepcopy(PACKAGE_EXAMPLE)
         for f in pkg["files"]:
             f["url"] = f"/api/cases/{case_id}/files/{f['name']}"
+        if case["redaction_scenario"] == "flagged":
+            # Like packager.build_package: flagged copies the user did not
+            # include are G1b notes (image left out), not failures.
+            confirmed = (case["confirmed"] or {}).get("redaction_confirmed")
+            notes = []
+            for ex_id in sorted(FLAGGED_REASONS):
+                if confirmed is True or (isinstance(confirmed, list)
+                                         and ex_id in confirmed):
+                    continue
+                notes.append(
+                    f"exhibits.pdf: 갑 제{ex_id[2:]}호증({ex_id})의 가림 확인이 "
+                    f"필요해 이미지를 넣지 않았습니다.")
+            pkg["gate_results"] = [
+                {"gate": "G1b", "status": "pass", "findings": [], "notes": notes}
+            ]
         return pkg
 
 

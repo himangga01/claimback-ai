@@ -15,6 +15,8 @@ const S = {
   putting: false,
   redactions: null,
   segments: null,
+  // Per flagged exhibit: "confirmed" or "excluded", only from a click.
+  redactionChoice: {},
 };
 
 const AGENTS = [
@@ -221,9 +223,12 @@ const BACKEND_EN_PARTS = [
   [/^필드 (\d+)개$/, "$1 fields"],
   [/^충돌 (\d+)$/, "conflicts: $1"],
   [/^질문 (\d+)$/, "questions: $1"],
-  [/^가림 (\d+)개$/, "$1 redactions"],
+  [/^가림 (\d+)개$/, (_, n) => (n === "1" ? "1 mask" : `${n} masks`)],
   [/^누출 검사 통과$/, "leak check passed"],
   [/^누출 검사 실패$/, "leak check failed"],
+  [/^누출 검사 확인 필요$/, "leak check needs review"],
+  [/^확인 필요 증거 (\d+)개$/, (_, n) => exhibitsNeedCheck(n)],
+  [/^가린 사본 없는 증거 (\d+)개$/, (_, n) => exhibitsWithoutCopy(n)],
   [/^남은 원금 ([\d,]+)원$/, "principal left ₩$1"],
   [/^(\d+)개 문장$/, "$1 sentences"],
   [/^(\d+)회 수정 후 통과$/, "passed after $1 revisions"],
@@ -233,9 +238,24 @@ const BACKEND_EN_PARTS = [
   [/^갑 제(\d+)호증$/, "Exhibit $1"],
 ];
 
+function exhibitsNeedCheck(n) {
+  return n === "1" ? "1 exhibit needs your check" : `${n} exhibits need your check`;
+}
+
+function exhibitsWithoutCopy(n) {
+  return n === "1" ? "1 exhibit without a redacted copy" : `${n} exhibits without a redacted copy`;
+}
+
+// The privacy note when copies are flagged or missing (contract 6d) reads
+// "7 masks · 2 exhibits need your check" in English.
+const PRIVACY_REVIEW_NOTE_RE = /^가림 \d+개(, (확인 필요 증거|가린 사본 없는 증거) \d+개)+$/;
+
 function tx(text) {
   if (LANG !== "en" || typeof text !== "string" || !text) return text;
   if (Object.prototype.hasOwnProperty.call(BACKEND_EN, text)) return BACKEND_EN[text];
+  if (PRIVACY_REVIEW_NOTE_RE.test(text)) {
+    return text.split(", ").map((p) => tx(p)).join(" · ");
+  }
   const parts = text.split(", ");
   const out = parts.map((p) => {
     for (const [re, en] of BACKEND_EN_PARTS) {
@@ -517,6 +537,7 @@ function setRunningUI(on) {
   }
   // Unlock sentence controls that a language switch redrew during the run.
   if (!on && S.drafts && !S.putting) restoreDraftInputs();
+  refreshRedactionUi();
 }
 
 async function loadSample() {
@@ -547,6 +568,7 @@ function resetCaseState(view) {
   S.selectedEx = null;
   S.redactions = null;
   S.segments = null;
+  S.redactionChoice = {};
 }
 
 async function runCase() {
@@ -628,6 +650,7 @@ async function deleteCase() {
   S.selectedEx = null;
   S.redactions = null;
   S.segments = null;
+  S.redactionChoice = {};
   $("btn-delete").disabled = true;
   $("btn-run").disabled = true;
   for (const id of ["board-section", "checkpoint-section", "calc-section",
@@ -795,6 +818,11 @@ function renderBoard() {
       if (noteText) {
         const note = document.createElement("div");
         note.className = "step-note";
+        note.dataset.testid = `step-note-${s.key}`;
+        // Flagged or missing redacted copies stand out on the board.
+        if (s.key === "privacy" && /확인 필요|사본 없는/.test(s.note || "")) {
+          note.classList.add("is-review");
+        }
         note.textContent = noteText;
         row.appendChild(note);
       }
@@ -883,6 +911,10 @@ async function loadCheckpoint1(opts) {
   S.review = rv.data;
   S.redactions = red.ok ? red.data : null;
   S.segments = seg.ok ? seg.data : null;
+  // A choice only stands for a copy that is still flagged.
+  for (const exId of Object.keys(S.redactionChoice)) {
+    if (redactionFlag(exId) !== "review") delete S.redactionChoice[exId];
+  }
   renderCheckpoint();
   revealSection("checkpoint-section", opts && opts.reveal === false ? null : "checkpoint-title");
 }
@@ -898,11 +930,305 @@ function readingSide(exId, itemId) {
   return it ? it.side : null;
 }
 
-function redactionPreviewUrl(exId) {
+function redactionPreview(exId) {
   const previews = S.redactions && S.redactions.previews;
   if (!Array.isArray(previews)) return null;
-  const p = previews.find((x) => x && x.ex_id === exId);
+  return previews.find((x) => x && x.ex_id === exId) || null;
+}
+
+function redactionPreviewUrl(exId) {
+  const p = redactionPreview(exId);
   return p ? p.url : null;
+}
+
+/* ---------- flagged redaction copies ---------- */
+
+// "review": a redacted copy the backend flagged (needs_review); it stays out
+// of exhibits.pdf until the user confirms it. "missing": no copy at all.
+function redactionFlag(exId) {
+  const p = redactionPreview(exId);
+  if (!p) return null;
+  if (p.status === "not_redacted") return "missing";
+  if (p.needs_review === true && p.url) return "review";
+  return null;
+}
+
+// review | confirmed | excluded | missing | null
+function redactionState(exId) {
+  const flag = redactionFlag(exId);
+  if (flag !== "review") return flag;
+  return S.redactionChoice[exId] || "review";
+}
+
+// The choice goes out with the confirmed facts, so it locks once they are
+// sent. It stays locked in a later HOLD too: a fix through PUT /drafts would
+// never carry a changed choice, and the notice must not claim otherwise.
+function redactionLocked() {
+  if (S.running || S.putting || !S.caseView) return true;
+  return S.caseView.state !== "CHECKPOINT_1";
+}
+
+// Flagged copies the user has not decided on yet (they stay out).
+function undecidedRedactionExIds() {
+  const ids = [];
+  for (const e of ((S.caseView && S.caseView.evidence) || [])) {
+    if (redactionState(e.ex_id) === "review") ids.push(e.ex_id);
+  }
+  return ids;
+}
+
+// Plan masks flagged for review on this exhibit (outlined on the copy).
+function flaggedMaskBoxes(exId) {
+  const plan = S.redactions && S.redactions.plan;
+  if (!Array.isArray(plan)) return [];
+  return plan.filter((x) => x && x.ex_id === exId && x.needs_review === true
+    && x.mask_box && x.mask_box.ref_w && x.mask_box.ref_h).map((x) => x.mask_box);
+}
+
+function confirmedRedactionExIds() {
+  const ids = Object.keys(S.redactionChoice).filter((exId) =>
+    S.redactionChoice[exId] === "confirmed" && redactionFlag(exId) === "review");
+  ids.sort((a, b) => exNum(a) - exNum(b));
+  return ids;
+}
+
+const REDACTION_KIND_PREFIX = {
+  "계좌번호 끝 4자리 유지": ["계좌번호", "Account number"],
+  "주민번호 뒷 7자리 가림": ["주민번호", "ID number"],
+  "전화번호 가운데 4자리 가림": ["전화번호", "Phone number"],
+};
+
+// Fixed reason texts from services/redaction.py and agents/privacy_guard.py.
+const REDACTION_REASON_EN = {
+  "가림 상자 밖에 글자가 남아 있을 수 있음": "Characters may remain outside the mask",
+  "판독 상자 밖에 글자가 남아 있을 수 있음": "Characters may remain outside the box that was read",
+  "가림 상자가 판독 위치에서 한 줄 이상 옮겨져 확인 필요": "The mask moved a full line or more from where the number was read",
+  "가린 줄이 판독한 번호와 맞는지 확인할 수 없어 확인 필요": "Could not confirm that the masked line holds the number that was read",
+  "다른 번호와 같은 줄을 가려 확인 필요": "Two different numbers were masked on the same line",
+  "글자 위치를 확인할 수 없어 확인 필요": "Could not find where the characters are on the image",
+  "판독한 번호와 같은 모양의 줄이 가려지지 않았을 수 있음": "A line shaped like the number that was read may still be visible",
+  "판독한 번호가 가려졌는지 확인할 수 없음": "Could not check that the number that was read is hidden",
+  "문장 안 숫자: 줄 단위로 넓게 가림, 확인 필요": "Number inside a sentence: the whole line is masked",
+  "남긴 영역이 원본과 다릅니다.": "The part left visible differs from the original.",
+  "원본 가림 영역이 비어 있어 박스 확인이 필요합니다.": "The masked area is blank in the original, so the box may be off.",
+  "미리보기가 없어 가린 사본을 만들 수 없음": "There is no preview, so no redacted copy could be made",
+  "판독이 보류되어 가림 대상을 알 수 없음": "Reading is on hold, so it is unknown what to mask",
+};
+
+const REDACTION_REASON_EN_PARTS = [
+  [/^시각 감식에 실패해 얼굴 가림을 확인할 수 없음(.*)$/, "The visual check failed, so faces could not be checked$1"],
+  [/^가림 계획이 없어\((.*)\)$/, "No redaction plan for $1"],
+];
+
+function reasonText(ko) {
+  if (LANG !== "en") return ko;
+  if (Object.prototype.hasOwnProperty.call(REDACTION_REASON_EN, ko)) return REDACTION_REASON_EN[ko];
+  for (const [re, en] of REDACTION_REASON_EN_PARTS) {
+    if (re.test(ko)) return ko.replace(re, en);
+  }
+  return ko;
+}
+
+// The preview reason joins entries with " / " and an entry's parts with
+// "; " (first part names the kind). One bullet per reason, kind first.
+function redactionReasonLines(reason) {
+  const lines = [];
+  for (const group of String(reason || "").split(" / ")) {
+    const parts = group.split("; ").map((t) => t.trim()).filter(Boolean);
+    if (parts.length === 0) continue;
+    let label = null;
+    const kind = REDACTION_KIND_PREFIX[parts[0]];
+    if (kind) {
+      label = L(kind[0], kind[1]);
+      parts.shift();
+    }
+    for (const part of parts) {
+      const text = reasonText(part);
+      const line = label ? `${label}: ${text}` : text;
+      if (!lines.includes(line)) lines.push(line);
+    }
+  }
+  return lines;
+}
+
+function redactionListText(state) {
+  return {
+    review: L("가림 확인 필요", "Redaction to check"),
+    confirmed: L("묶음에 넣음", "Included"),
+    excluded: L("묶음에서 뺌", "Left out"),
+    missing: L("가린 사본 없음", "No redacted copy"),
+  }[state] || "";
+}
+
+function redactionNoticeBody(state, locked) {
+  if (state === "review") {
+    return locked
+      ? L("묶음에 넣기를 고르지 않아 이 증거의 이미지는 갑호증 묶음(exhibits.pdf)에 들어가지 않습니다.",
+        "You did not include it, so this exhibit's image stays out of the exhibit bundle (exhibits.pdf).")
+      : L("고르기 전까지 이 증거의 이미지는 갑호증 묶음(exhibits.pdf)에 들어가지 않습니다. 아래 가린 사본에서 계좌·주민번호·전화번호가 모두 가려졌는지 보고 고르세요.",
+        "Until you choose, this exhibit's image stays out of the exhibit bundle (exhibits.pdf). Look at the redacted copy below. If every number is fully covered, include it; if not, leave it out.");
+  }
+  if (state === "confirmed") {
+    return locked
+      ? L("가린 사본을 확인했습니다. 이 가린 사본이 갑호증 묶음에 들어갑니다.",
+        "You checked the redacted copy. It goes into the exhibit bundle.")
+      : L("가린 사본을 확인했습니다. '확인하고 계속'을 누르면 이 가린 사본이 갑호증 묶음에 들어갑니다.",
+        "You checked the redacted copy. When you press Confirm and continue, it goes into the exhibit bundle.");
+  }
+  if (state === "excluded") {
+    return L("이 증거의 이미지는 갑호증 묶음에 넣지 않습니다. 그 쪽에는 안내 한 줄만 들어갑니다.",
+      "This exhibit's image stays out of the exhibit bundle. Its page holds a one-line note instead.");
+  }
+  return L("가린 사본을 만들지 못해 이 증거의 이미지는 갑호증 묶음(exhibits.pdf)에 들어가지 않습니다.",
+    "No redacted copy could be made, so this exhibit's image stays out of the exhibit bundle (exhibits.pdf).");
+}
+
+// Whether this state ends with the image out of the bundle.
+function redactionLeftOut(state, locked) {
+  return state === "excluded" || state === "missing" || (state === "review" && locked);
+}
+
+function redactionNextStep() {
+  return L("서류에는 이 증거가 계속 인용됩니다. 직접 가린 사본을 만들어 제출 전에 더하세요.",
+    "The documents still cite this exhibit. Mask it yourself and add it before filing.");
+}
+
+function renderRedactionNotice(exId) {
+  const box = $("redaction-notice");
+  if (!box) return;
+  box.innerHTML = "";
+  const state = redactionState(exId);
+  if (!state) {
+    box.hidden = true;
+    delete box.dataset.state;
+    return;
+  }
+  const p = redactionPreview(exId);
+  const locked = redactionLocked();
+  box.hidden = false;
+  box.dataset.state = state;
+  const title = document.createElement("p");
+  title.className = "redaction-notice-title";
+  title.dataset.testid = "redaction-notice-title";
+  title.textContent = {
+    review: L("가림 확인 필요", "Check this redaction"),
+    confirmed: L("묶음에 넣음", "Included in the bundle"),
+    excluded: L("묶음에서 뺌", "Left out of the bundle"),
+    missing: L("가린 사본 없음", "No redacted copy"),
+  }[state];
+  box.appendChild(title);
+  const lines = redactionReasonLines(p && p.reason);
+  if (lines.length === 0 && state !== "missing") {
+    lines.push(L("가림 결과를 사람이 확인해야 합니다.", "A person needs to check this redaction."));
+  }
+  if (lines.length > 0) {
+    const ul = document.createElement("ul");
+    ul.className = "redaction-reasons";
+    ul.dataset.testid = "redaction-reasons";
+    for (const line of lines) {
+      const li = document.createElement("li");
+      li.textContent = line;
+      ul.appendChild(li);
+    }
+    box.appendChild(ul);
+  }
+  const body = document.createElement("p");
+  body.className = "redaction-notice-body";
+  body.dataset.testid = "redaction-notice-body";
+  body.textContent = redactionNoticeBody(state, locked);
+  box.appendChild(body);
+  if (redactionLeftOut(state, locked)) {
+    const next = document.createElement("p");
+    next.className = "redaction-notice-body redaction-next-step";
+    next.dataset.testid = "redaction-next-step";
+    next.textContent = redactionNextStep();
+    box.appendChild(next);
+  }
+  if (p && p.url) {
+    const extra = document.createElement("p");
+    extra.className = "redaction-notice-body";
+    if (flaggedMaskBoxes(exId).length > 0) {
+      extra.appendChild(document.createTextNode(
+        L("빨간 테두리는 확인이 필요한 가림 상자입니다. ", "Red outlines mark the masks to check. ")));
+    }
+    const open = document.createElement("a");
+    open.href = p.url;
+    open.target = "_blank";
+    open.rel = "noopener";
+    open.className = "redaction-open";
+    open.dataset.testid = "redaction-open";
+    open.textContent = L("가린 사본 크게 보기", "Open the redacted copy full size");
+    extra.appendChild(open);
+    box.appendChild(extra);
+  }
+  if (state === "missing") return;
+  const actions = document.createElement("div");
+  actions.className = "redaction-actions";
+  for (const [choice, testid, ko, en] of [
+    ["confirmed", "redaction-confirm", "묶음에 넣기", "Include it"],
+    ["excluded", "redaction-leave-out", "묶음에서 빼기", "Leave it out"],
+  ]) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.dataset.testid = testid;
+    btn.textContent = L(ko, en);
+    btn.setAttribute("aria-pressed", state === choice ? "true" : "false");
+    btn.disabled = locked;
+    btn.addEventListener("click", () => chooseRedaction(exId, choice, testid));
+    actions.appendChild(btn);
+  }
+  box.appendChild(actions);
+}
+
+// One explicit click per exhibit; nothing is confirmed automatically.
+function chooseRedaction(exId, choice, testid) {
+  if (redactionLocked() || redactionFlag(exId) !== "review") return;
+  S.redactionChoice[exId] = choice;
+  renderEvidenceList();
+  renderRedaction(exId);
+  const again = document.querySelector(`#redaction-notice [data-testid="${testid}"]`);
+  if (again) again.focus();
+}
+
+function refreshRedactionUi() {
+  if (!S.review || !S.caseView || $("checkpoint-section").hidden) return;
+  renderEvidenceList();
+  if (S.selectedEx) renderRedaction(S.selectedEx);
+}
+
+// One line above "확인하고 계속" while flagged copies are still undecided.
+function renderRedactionPending() {
+  const el = $("redaction-pending");
+  if (!el) return;
+  const ids = redactionLocked() ? [] : undecidedRedactionExIds();
+  if (ids.length === 0) {
+    el.hidden = true;
+    el.textContent = "";
+    return;
+  }
+  const names = ids.map(exLabel).join(", ");
+  el.hidden = false;
+  el.textContent = L(
+    `확인 필요 증거 ${ids.length}개(${names})가 아직 남아 있어 묶음에서 빠집니다.`,
+    ids.length === 1
+      ? `1 exhibit (${names}) still needs a redaction check and will be left out.`
+      : `${ids.length} exhibits (${names}) still need a redaction check and will be left out.`);
+}
+
+function renderRedactionBoxes(exId) {
+  const layer = $("redaction-box-layer");
+  if (!layer) return;
+  layer.innerHTML = "";
+  for (const box of flaggedMaskBoxes(exId)) {
+    const div = document.createElement("div");
+    div.className = "redaction-flag-box";
+    div.dataset.testid = `redaction-flag-box-${exId}`;
+    div.style.left = (box.x1 / box.ref_w * 100) + "%";
+    div.style.top = (box.y1 / box.ref_h * 100) + "%";
+    div.style.width = (Math.max(box.x2 - box.x1, 1) / box.ref_w * 100) + "%";
+    div.style.height = (Math.max(box.y2 - box.y1, 1) / box.ref_h * 100) + "%";
+    layer.appendChild(div);
+  }
 }
 
 function segmentsFor(exId) {
@@ -934,11 +1260,15 @@ function renderEvidenceList() {
     const evStatus = (LANG === "en"
       ? { ok: "Read", hold: "On hold", skipped: "Skipped" }
       : { ok: "읽음", hold: "보류", skipped: "건너뜀" })[e.status] || e.status;
-    btn.textContent = `${tx(e.label)} · ${(e.sha256 || "").slice(0, 8)} · ${evStatus}`;
+    const red = redactionState(e.ex_id);
+    if (red) btn.dataset.redaction = red;
+    const redText = red ? ` · ${redactionListText(red)}` : "";
+    btn.textContent = `${tx(e.label)} · ${(e.sha256 || "").slice(0, 8)} · ${evStatus}${redText}`;
     btn.addEventListener("click", () => selectEvidence(e.ex_id));
     li.appendChild(btn);
     ul.appendChild(li);
   }
+  renderRedactionPending();
 }
 
 function selectEvidence(exId) {
@@ -1013,13 +1343,24 @@ function renderRedaction(exId) {
   const img = $("redaction-img");
   if (!col || !img) return;
   const url = redactionPreviewUrl(exId);
-  if (!url) {
+  const missing = redactionFlag(exId) === "missing";
+  renderRedactionNotice(exId);
+  renderRedactionBoxes(url ? exId : null);
+  if (!url && !missing) {
     col.hidden = true;
     img.removeAttribute("src");
     return;
   }
   col.hidden = false;
-  img.src = url;
+  const viewer = $("redaction-viewer");
+  if (url) {
+    img.src = url;
+    if (viewer) viewer.hidden = false;
+  } else {
+    // No copy: the notice says why, and there is no picture to show.
+    img.removeAttribute("src");
+    if (viewer) viewer.hidden = true;
+  }
 }
 
 function blinkBox(exId, itemId) {
@@ -1289,7 +1630,11 @@ function gatherFacts() {
     const el = document.querySelector(`[data-testid="highlight-${u.ex_id}-${u.item_id}"]`);
     if (el && el.checked) highlight.push(`${u.ex_id}:${u.item_id}`);
   }
-  return { fields, evidence_roles, highlight, as_of: $("asof").value };
+  const body = { fields, evidence_roles, highlight, as_of: $("asof").value };
+  // Contract 6d: only the flagged exhibits the user confirmed one by one.
+  const confirmedEx = confirmedRedactionExIds();
+  if (confirmedEx.length > 0) body.redaction_confirmed = confirmedEx;
+  return body;
 }
 
 function clearFactsErrors() {
@@ -1322,6 +1667,7 @@ async function confirmFacts() {
   clearFactsErrors();
   S.putting = true;
   $("btn-confirm").disabled = true;
+  refreshRedactionUi();
   try {
     const body = gatherFacts();
     const put = await api("PUT", `/api/cases/${S.caseId}/facts`, body);
@@ -1337,6 +1683,7 @@ async function confirmFacts() {
   } finally {
     S.putting = false;
     $("btn-confirm").disabled = false;
+    refreshRedactionUi();
   }
   await runWithPolling();
   if (S.caseView && S.caseView.state === "DRAFT_APPROVAL") {
@@ -1799,7 +2146,58 @@ function renderPackage() {
     for (const g of results) {
       gateList.appendChild(gateRow(g));
     }
+    renderLeftOut(results);
   }
+}
+
+// G1b notes name exhibits whose image stayed out of exhibits.pdf.
+const LEFT_OUT_NOTE_RE = /^exhibits\.pdf: 갑 제(\d+)호증\((EX\d+)\)의 (.+)$/;
+const LEFT_OUT_WHY_EN = [
+  [/^가림 확인이 필요해 이미지를 넣지 않았습니다\.$/, "redaction not confirmed"],
+  [/^가림 사본이 원본과 같아 이미지를 넣지 않았습니다\.$/, "the redacted copy equals the original"],
+  [/^가림 사본\(.*\)이 없어 이미지를 넣지 않았습니다\.$/, "no redacted copy"],
+];
+
+function leftOutNoteText(note) {
+  const m = LEFT_OUT_NOTE_RE.exec(note || "");
+  if (LANG !== "en" || !m) return note;
+  for (const [re, why] of LEFT_OUT_WHY_EN) {
+    if (re.test(m[3])) return `exhibits.pdf: Exhibit ${m[1]}, image left out (${why}).`;
+  }
+  return note;
+}
+
+function renderLeftOut(results) {
+  const box = $("pkg-left-out");
+  if (!box) return;
+  box.innerHTML = "";
+  const notes = [];
+  for (const g of results) {
+    for (const n of (g.notes || [])) {
+      if (typeof n === "string" && n && !notes.includes(n)) notes.push(n);
+    }
+  }
+  box.hidden = notes.length === 0;
+  if (notes.length === 0) return;
+  const title = document.createElement("p");
+  title.className = "redaction-notice-title";
+  title.textContent = L("갑호증 묶음에서 이미지를 뺀 증거", "Left out of the exhibit bundle (image)");
+  box.appendChild(title);
+  const ul = document.createElement("ul");
+  ul.className = "redaction-reasons";
+  for (const n of notes) {
+    const li = document.createElement("li");
+    const m = LEFT_OUT_NOTE_RE.exec(n);
+    if (m) li.dataset.testid = `pkg-left-out-${m[2]}`;
+    li.textContent = leftOutNoteText(n);
+    ul.appendChild(li);
+  }
+  box.appendChild(ul);
+  const next = document.createElement("p");
+  next.className = "redaction-notice-body";
+  next.textContent = L("서류에는 이 증거가 계속 인용됩니다. 직접 가린 사본을 만들어 제출 전에 더하세요.",
+    "The documents still cite these exhibits. Mask them yourself and add them before filing.");
+  box.appendChild(next);
 }
 
 async function copyBlock(preId, btn) {

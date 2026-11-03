@@ -263,6 +263,23 @@ code { font: 12px/1.5 Consolas, "Malgun Gothic", monospace; }
 .legend { display: flex; align-items: center; gap: 6px; margin: 6px 0 0; font-size: 11px; color: var(--muted); }
 .legend-swatch, .legend-swatch-segment { display: inline-block; width: 20px; height: 12px; border: 2px solid var(--blue); background: rgba(65, 98, 217, .18); }
 .legend-swatch-segment { border-color: #e55749; background: rgba(229, 87, 73, .16); }
+/* flagged redaction copies: the user confirms or leaves out each one */
+.redaction-notice { margin: 6px 0 8px; padding: 10px 12px; border: 1px solid #e9b2aa; border-left: 3px solid var(--stamp); border-radius: 3px; background: var(--stamp-soft); font-size: 12px; }
+.redaction-notice[data-state="confirmed"] { border-color: var(--blue-line); border-left-color: var(--blue); background: var(--blue-soft); }
+.redaction-notice[data-state="excluded"] { border-color: var(--line); border-left-color: var(--muted); background: #f3f3ee; }
+.redaction-notice-title { font-weight: 700; color: var(--stamp); }
+.redaction-notice[data-state="confirmed"] .redaction-notice-title { color: var(--blue-ink); }
+.redaction-notice[data-state="excluded"] .redaction-notice-title { color: var(--ink); }
+.redaction-reasons { margin: 4px 0; padding-left: 18px; }
+.redaction-notice-body { margin-top: 4px; }
+.redaction-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.file-paper .redaction-actions button[aria-pressed="true"] { border-color: var(--blue); background: var(--blue-soft); color: var(--blue-ink); font-weight: 700; }
+.file-paper .evidence-list button[data-redaction="review"], .file-paper .evidence-list button[data-redaction="missing"] { box-shadow: inset 3px 0 var(--stamp); }
+.step-note.is-review { color: var(--stamp); font-weight: 600; }
+.redaction-flag-box { position: absolute; border: 3px solid #e55749; box-shadow: 0 0 0 2px #fff; border-radius: 2px; }
+.redaction-open { color: var(--blue-ink); text-decoration: underline; text-underline-offset: 2px; }
+.redaction-pending { margin: 18px 0 0; padding: 8px 12px; border-left: 3px solid var(--stamp); background: var(--stamp-soft); color: var(--stamp); font-size: 12px; font-weight: 700; }
+.pkg-left-out { margin-top: 12px; }
 
 .fields-table, .calc-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .fields-table th, .calc-table th { padding: 8px 10px; border-bottom: 1px solid #b9bcb2; text-align: left; font-size: 11px; font-weight: 500; color: var(--muted); }

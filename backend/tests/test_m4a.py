@@ -499,7 +499,8 @@ def test_leak_check_failure_paths(tmp_path):
              "mask_box": {"x1": 10, "y1": 10, "x2": 30, "y2": 20},
              "keep_box": {"x1": 40, "y1": 25, "x2": 55, "y2": 35}}]
     checked = redact_mod.check_leak(orig_path, red_path, plan)
-    assert checked["status"] == "pass"
+    # redaction-confirm: warnings read "review", not "pass" (still no HOLD).
+    assert checked["status"] == "review"
     assert any(f.get("warning") for f in checked["findings"])
 
 

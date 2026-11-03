@@ -184,10 +184,21 @@ def load_redaction_previews(state: CaseState) -> Dict[str, Dict[str, Any]]:
     return out
 
 
-def is_redaction_confirmed(state: CaseState) -> bool:
-    """True only when the user set redaction_confirmed: true."""
+def is_redaction_confirmed(state: CaseState,
+                           ex_id: Optional[str] = None) -> bool:
+    """True when the user confirmed this exhibit's flagged copy.
+
+    ``redaction_confirmed: true`` confirms every flagged copy (demo input);
+    a list of ex_ids (contract 6d, the screen) confirms only those. Without
+    ``ex_id`` only the case-wide ``true`` counts.
+    """
     confirmed = state.confirmed_facts or {}
-    return confirmed.get("redaction_confirmed") is True
+    value = confirmed.get("redaction_confirmed")
+    if value is True:
+        return True
+    if ex_id is not None and isinstance(value, list):
+        return str(ex_id) in {str(entry) for entry in value}
+    return False
 
 
 def _pixel_hash(path: Path) -> Optional[str]:
@@ -219,7 +230,6 @@ def get_redaction_status(
     files_base = files_dir(state.case_id)
     evidence_base = evidence_dir(state.case_id)
     previews = load_redaction_previews(state)
-    confirmed = is_redaction_confirmed(state)
     valid: Dict[str, str] = {}
     needs_review: set = set()
     identical: set = set()
@@ -237,10 +247,14 @@ def get_redaction_status(
         except OSError:
             continue
         preview = previews.get(ex_id, {})
-        if (
-            preview.get("needs_review") is True
-            or preview.get("status") == "not_redacted"
-        ) and not confirmed:
+        # Contract 6d: a not_redacted preview never enters, confirmed or
+        # not. A stale redacted_{ex}.png can survive a failed delete
+        # (privacy_guard ignores OSError), so the file alone proves nothing.
+        if preview.get("status") == "not_redacted":
+            needs_review.add(ex_id)
+            continue
+        if (preview.get("needs_review") is True
+                and not is_redaction_confirmed(state, ex_id)):
             needs_review.add(ex_id)
             continue
         red_hash = _pixel_hash(candidate)

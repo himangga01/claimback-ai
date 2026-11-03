@@ -159,9 +159,11 @@
                   </div>
                   <div id="redaction-col" data-testid="redaction-col" class="viewer-col" hidden>
                     <p class="legend" data-testid="redaction-legend" data-en="Redacted copy">가린 사본</p>
-                    <div class="viewer">
+                    <div id="redaction-notice" data-testid="redaction-notice" class="redaction-notice" hidden></div>
+                    <div id="redaction-viewer" class="viewer">
                       <div class="viewer-inner">
                         <img id="redaction-img" data-testid="redaction-img" alt="가림 미리보기" data-en-alt="Redaction preview">
+                        <div id="redaction-box-layer" data-testid="redaction-box-layer" class="box-layer"></div>
                       </div>
                     </div>
                   </div>
@@ -182,6 +184,7 @@
                 <ul id="utterance-list" data-testid="utterance-list" class="plain-list"></ul>
                 <h3 data-en="Evidence roles">증거 역할</h3>
                 <ul id="role-list" data-testid="role-list" class="plain-list"></ul>
+                <p id="redaction-pending" data-testid="redaction-pending" class="redaction-pending" hidden></p>
                 <div class="row paper-actions">
                   <label class="asof-label"><span data-en="As of">기준일</span> <input id="asof" data-testid="asof" type="date" value="2026-06-01" aria-label="계산 기준일" data-en-aria-label="Calculation date"></label>
                   <button id="btn-confirm" data-testid="confirm-facts" type="button" class="primary" data-en="Confirm and continue">확인하고 계속</button>
@@ -244,6 +247,7 @@
             <div id="pkg-gates" data-testid="pkg-gates" hidden>
               <h3 data-en="Document checks">서류 검사</h3>
               <div id="pkg-gate-list" data-testid="pkg-gate-list" class="gate-summary"></div>
+              <div id="pkg-left-out" data-testid="pkg-left-out" class="redaction-notice pkg-left-out" hidden></div>
             </div>
             <div id="parties-wrap" class="copy-wrap" hidden>
               <h3 data-en="Parties (당사자)">당사자</h3>

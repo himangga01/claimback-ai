@@ -1282,8 +1282,10 @@ def _run_privacy_flow(state: CaseState) -> CaseState:
         save_case(state)
         return _hold(state, "privacy", "privacy_leak",
                       "가린 사본에서 누출 검사가 실패했습니다.")
+    # redaction-confirm: the note says how many exhibits need a check
+    # instead of "누출 검사 통과" whenever a copy is flagged or missing.
     _mark_done(privacy_step, _privacy_latency, 1, 0.0,
-               f"가림 {_plan_count}개, 누출 검사 통과")
+               privacy_mod.privacy_note(_privacy_out))
     save_case(state)
     checkpoint = state.step("checkpoint_1")
     checkpoint.status = "running"
@@ -1932,18 +1934,47 @@ def _validate_facts_body(
     full_roles = {record.ex_id: "other" for record in state.evidence}
     full_roles.update({str(key): str(value) for key, value in roles.items()})
     # M4a 6a: optional redaction confirmation (default False).
-    redaction_confirmed = body.get("redaction_confirmed", False)
-    if redaction_confirmed is None:
-        redaction_confirmed = False
-    if not isinstance(redaction_confirmed, bool):
-        raise BadRequest("bad_request", "redaction_confirmed는 true|false여야 합니다.")
+    # redaction-confirm (contract 6d): or a list of ex_ids, one explicit
+    # confirmation per flagged exhibit (the screen sends this form).
+    redaction_confirmed = _validate_redaction_confirmed(
+        body.get("redaction_confirmed", False), known_ex)
     return {
         "fields": cleaned_fields,
         "evidence_roles": full_roles,
         "highlight": [str(ref) for ref in highlight],
         "as_of": str(as_of).strip(),
-        "redaction_confirmed": bool(redaction_confirmed),
+        "redaction_confirmed": redaction_confirmed,
     }
+
+
+def _validate_redaction_confirmed(value: Any, known_ex: set) -> Any:
+    """``true|false|null`` or a list of known ex_ids (contract 6d).
+
+    A list keeps the confirmation per exhibit: only the listed flagged
+    copies enter exhibits.pdf. Duplicates collapse, the order follows the
+    exhibit number, and an empty list is stored as ``False``.
+    """
+    if value is None:
+        return False
+    if isinstance(value, bool):
+        return value
+    if not isinstance(value, list):
+        raise BadRequest(
+            "bad_request",
+            "redaction_confirmed는 true|false 또는 증거 번호 목록이어야 합니다.")
+    picked: List[str] = []
+    for entry in value:
+        if not isinstance(entry, str):
+            raise BadRequest(
+                "bad_request",
+                "redaction_confirmed 목록에는 증거 번호(예: EX4)만 쓸 수 있습니다.")
+        if entry not in known_ex:
+            raise BadRequest("bad_request", f"알 수 없는 증거입니다: {entry}")
+        if entry not in picked:
+            picked.append(entry)
+    if not picked:
+        return False
+    return sorted(picked, key=lambda ex_id: (deps.ex_num(ex_id), ex_id))
 
 
 def apply_facts(case_id: str, body: Any) -> CaseState:
