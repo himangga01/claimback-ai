@@ -18,10 +18,10 @@ const S = {
 };
 
 const AGENTS = [
-  { group: "Forensic Visual", desc: "증거 접수와 목록 정리" },
-  { group: "Fact-Timeline Chronology", desc: "증거 읽기와 사실 정리" },
-  { group: "Financial Auditor", desc: "계산과 숫자 대조" },
-  { group: "Judicial Form Filler", desc: "서류 묶음 만들기" },
+  { group: "Forensic Visual", desc: "증거 접수와 목록 정리", descEn: "Takes in the evidence and lists it" },
+  { group: "Fact-Timeline Chronology", desc: "증거 읽기와 사실 정리", descEn: "Reads the evidence and organizes the facts" },
+  { group: "Financial Auditor", desc: "계산과 숫자 대조", descEn: "Calculates and cross-checks the numbers" },
+  { group: "Judicial Form Filler", desc: "서류 묶음 만들기", descEn: "Builds the document package" },
 ];
 
 const STATE_KO = {
@@ -38,6 +38,20 @@ const STATE_KO = {
   HOLD: "보류",
 };
 
+const STATE_EN = {
+  INTAKE: "Intake",
+  READING: "Reading",
+  ORGANIZING: "Organizing facts",
+  CHECKPOINT_1: "Waiting for your fact check",
+  CALCULATING: "Calculating",
+  DRAFTING: "Drafting",
+  VERIFYING: "Verifying",
+  DRAFT_APPROVAL: "Waiting for draft approval",
+  PACKAGING: "Packaging",
+  CHECKPOINT_2: "Final check",
+  HOLD: "On hold",
+};
+
 const STATE_ORDER = [
   "INTAKE", "READING", "ORGANIZING", "CHECKPOINT_1", "CALCULATING",
   "DRAFTING", "VERIFYING", "DRAFT_APPROVAL", "PACKAGING", "CHECKPOINT_2",
@@ -51,12 +65,28 @@ const STATUS_KO = {
   skipped: "건너뜀",
 };
 
+const STATUS_EN = {
+  waiting: "Waiting",
+  running: "Running",
+  done: "Done",
+  hold: "On hold",
+  skipped: "Skipped",
+};
+
 const TAG_KO = {
   loan_request: "빌려 달라는 말",
   amount_mention: "금액 언급",
   repay_promise: "갚겠다는 말",
   reminder: "갚아 달라는 말",
   other: "기타",
+};
+
+const TAG_EN = {
+  loan_request: "Asks to borrow",
+  amount_mention: "Mentions an amount",
+  repay_promise: "Promises to repay",
+  reminder: "Asks for repayment",
+  other: "Other",
 };
 
 const GATE_KO = {
@@ -69,14 +99,236 @@ const GATE_KO = {
   DRAFT: "문안 규칙 검사",
 };
 
+const GATE_EN = {
+  G1a: "Numbers and names only from your confirmed values",
+  G1b: "Final document check",
+  G3: "Evidence on every sentence",
+  G2: "Required fields",
+  G4: "Amount range",
+  NAMING: "Banned wording check",
+  DRAFT: "Drafting rules",
+};
+
 const ROLE_OPTIONS = [
-  ["loan_transfer", "대여 이체"],
-  ["repayment", "변제 입금"],
-  ["loan_agreement", "차용증"],
-  ["other", "기타"],
+  ["loan_transfer", "대여 이체", "Loan transfer"],
+  ["repayment", "변제 입금", "Repayment received"],
+  ["loan_agreement", "차용증", "IOU"],
+  ["other", "기타", "Other"],
 ];
 
 const KNOWN_ROLES = new Set(ROLE_OPTIONS.map(([val]) => val));
+
+/* ---------- language ---------- */
+
+const LANG_KEY = "claimback:lang";
+let LANG = pickLang();
+
+function saveLang(lang) {
+  try {
+    window.localStorage.setItem(LANG_KEY, lang);
+  } catch {
+    /* storage blocked: the choice lasts for this page only */
+  }
+}
+
+// ?lang= wins (and is saved like a click, so links without it keep the
+// language), then the saved choice, then the browser's first language.
+function pickLang() {
+  try {
+    const q = new URLSearchParams(window.location.search).get("lang");
+    if (q === "ko" || q === "en") {
+      saveLang(q);
+      return q;
+    }
+  } catch {
+    /* no query string */
+  }
+  try {
+    const saved = window.localStorage.getItem(LANG_KEY);
+    if (saved === "ko" || saved === "en") return saved;
+  } catch {
+    /* storage blocked */
+  }
+  const first = (navigator.languages && navigator.languages.length
+    ? navigator.languages[0] : navigator.language) || "ko";
+  return String(first).toLowerCase().startsWith("ko") ? "ko" : "en";
+}
+
+function L(ko, en) {
+  return LANG === "en" ? en : ko;
+}
+
+function stateName(st) {
+  return (LANG === "en" ? STATE_EN : STATE_KO)[st] || st;
+}
+
+function statusName(status) {
+  return (LANG === "en" ? STATUS_EN : STATUS_KO)[status] || status;
+}
+
+function tagName(tag) {
+  return (LANG === "en" ? TAG_EN : TAG_KO)[tag] || tag;
+}
+
+// Fixed backend texts shown on screen (step names, notes, field and file
+// labels). Case content such as names, chats and the court text stays as is.
+const BACKEND_EN = {
+  "접수 담당": "Intake",
+  "판독 담당": "Reader",
+  "시각 감식 담당": "Visual check (SAM)",
+  "사실 정리 담당": "Fact organizer",
+  "개인정보 보호 담당": "Privacy",
+  "사용자 확인": "Your fact check",
+  "계산 담당": "Calculator",
+  "문안 작성 담당": "Drafter",
+  "검증 담당(G1a·G3)": "Verifier (G1a·G3)",
+  "사용자 문장 승인": "Your sentence approval",
+  "편철 담당": "Packager",
+  "사용자 최종 확인": "Your final check",
+  "사실값 확인과 강조할 발화 선택": "Confirm the facts and pick statements to highlight",
+  "문장별 수정·승인": "Edit and approve each sentence",
+  "최종 서류 확인": "Final document check",
+  "채권자 이름": "Creditor name",
+  "채권자 주소": "Creditor address",
+  "채권자 연락처": "Creditor phone",
+  "채무자 이름": "Debtor name",
+  "채무자 주소": "Debtor address",
+  "원금": "Principal",
+  "대여일": "Loan date",
+  "변제기": "Due date",
+  "약정 이율(연 %)": "Agreed interest rate (% per year)",
+  "거래 종류": "Transaction type",
+  "받은 돈": "Repayments received",
+  "약정 없음": "None agreed",
+  "정확한 표기를 확인해 주세요.": "Please confirm the exact spelling.",
+  "지연손해금": "Late-payment interest",
+  "충당 시 이자 합계": "Interest at repayment",
+  "기준일 이자 합계": "Interest as of the date",
+  "내용증명": "Demand letter (내용증명)",
+  "갑호증": "Exhibit bundle (갑호증)",
+  "증거 목록": "Evidence list (증거목록)",
+};
+
+const BACKEND_EN_PARTS = [
+  [/^증거 (\d+)개$/, "$1 files"],
+  [/^SHA-256 기록$/, "SHA-256 recorded"],
+  [/^(\d+)개 판독$/, "$1 read"],
+  [/^(\d+)개 건너뜀\(영상\)$/, "$1 skipped (video)"],
+  [/^(\d+)개 보류$/, "$1 on hold"],
+  [/^(\d+)개 검출$/, "$1 found"],
+  [/^(\d+)개 미검출$/, "$1 not found"],
+  [/^(\d+)개 오류$/, "$1 errors"],
+  [/^필드 (\d+)개$/, "$1 fields"],
+  [/^충돌 (\d+)$/, "conflicts: $1"],
+  [/^질문 (\d+)$/, "questions: $1"],
+  [/^가림 (\d+)개$/, "$1 redactions"],
+  [/^누출 검사 통과$/, "leak check passed"],
+  [/^누출 검사 실패$/, "leak check failed"],
+  [/^남은 원금 ([\d,]+)원$/, "principal left ₩$1"],
+  [/^(\d+)개 문장$/, "$1 sentences"],
+  [/^(\d+)회 수정 후 통과$/, "passed after $1 revisions"],
+  [/^G1a·G3·명칭·DRAFT 통과$/, "G1a·G3·NAMING·DRAFT passed"],
+  [/^내용증명 PDF$/, "demand letter PDF"],
+  [/^전자소송 문구$/, "e-Court text"],
+  [/^갑 제(\d+)호증$/, "Exhibit $1"],
+];
+
+function tx(text) {
+  if (LANG !== "en" || typeof text !== "string" || !text) return text;
+  if (Object.prototype.hasOwnProperty.call(BACKEND_EN, text)) return BACKEND_EN[text];
+  const parts = text.split(", ");
+  const out = parts.map((p) => {
+    for (const [re, en] of BACKEND_EN_PARTS) {
+      if (re.test(p)) return p.replace(re, en);
+    }
+    return null;
+  });
+  return out.every((p) => p !== null) ? out.join(", ") : text;
+}
+
+const LANG_ATTRS = ["aria-label", "alt", "content"];
+
+// Korean is the markup; English lives in data-en (markup) and data-en-<attr>.
+function applyStaticLang() {
+  document.documentElement.lang = LANG;
+  document.querySelectorAll("[data-en]").forEach((el) => {
+    if (el.dataset.ko === undefined) el.dataset.ko = el.innerHTML;
+    el.innerHTML = LANG === "en" ? el.dataset.en : el.dataset.ko;
+  });
+  for (const attr of LANG_ATTRS) {
+    document.querySelectorAll(`[data-en-${attr}]`).forEach((el) => {
+      const koAttr = `data-ko-${attr}`;
+      if (!el.hasAttribute(koAttr)) el.setAttribute(koAttr, el.getAttribute(attr) || "");
+      el.setAttribute(attr, LANG === "en"
+        ? el.getAttribute(`data-en-${attr}`) : el.getAttribute(koAttr));
+    });
+  }
+  document.querySelectorAll("[data-lang]").forEach((btn) => {
+    btn.setAttribute("aria-pressed", btn.dataset.lang === LANG ? "true" : "false");
+  });
+}
+
+function setLang(next) {
+  if ((next !== "ko" && next !== "en") || next === LANG) return;
+  LANG = next;
+  saveLang(next);
+  applyStaticLang();
+  rerenderForLang();
+}
+
+// Which sentence views are open (edit box, slot view) and which notices show,
+// so a redraw can bring them back.
+function draftUiState() {
+  const ui = {};
+  document.querySelectorAll('#sentence-list [data-testid^="sentence-"]').forEach((box) => {
+    const sid = box.dataset.testid.slice("sentence-".length);
+    const edit = box.querySelector(`[data-testid="edit-${sid}"]`);
+    const slots = box.querySelector(`[data-testid="slots-${sid}"]`);
+    const notice = box.querySelector(`[data-testid="notice-${sid}"]`);
+    ui[sid] = {
+      editOpen: !!edit && !edit.hidden,
+      slotsOpen: !!slots && !slots.hidden,
+      notice: notice && !notice.hidden
+        ? { kind: notice.dataset.kind || "", text: notice.textContent } : null,
+    };
+  });
+  return ui;
+}
+
+// Redraw what is on screen from state, keeping what the user typed or ticked.
+function rerenderForLang() {
+  if (!S.caseView) return;
+  const kept = {};
+  document.querySelectorAll(".paper-stack input[data-testid], .paper-stack select[data-testid], .paper-stack textarea[data-testid]")
+    .forEach((el) => { kept[el.dataset.testid] = { value: el.value, checked: el.checked }; });
+  const draftUi = draftUiState();
+  renderCaseMeta();
+  renderBoard();
+  if (S.review && !$("checkpoint-section").hidden) {
+    renderFields();
+    renderConflicts();
+    renderUtterances();
+    renderRoles();
+    if (S.selectedEx) selectEvidence(S.selectedEx);
+    else renderEvidenceList();
+  }
+  const draftsRedrawn = !!(S.drafts && !$("calc-section").hidden);
+  if (draftsRedrawn) {
+    renderCalc();
+    renderDrafts(draftUi);
+  }
+  if (S.pkg && !$("package-section").hidden) renderPackage();
+  document.querySelectorAll(".paper-stack input[data-testid], .paper-stack select[data-testid], .paper-stack textarea[data-testid]")
+    .forEach((el) => {
+      const k = kept[el.dataset.testid];
+      if (!k) return;
+      if (el.type === "checkbox") el.checked = k.checked;
+      else el.value = k.value;
+    });
+  // A save or run still in flight: the redrawn approve and re-check controls
+  // stay locked until it finishes and restoreDraftInputs() unlocks them.
+  if (draftsRedrawn && (S.putting || S.running)) setDraftInputsDisabled(true);
+}
 
 function $(id) {
   return document.getElementById(id);
@@ -94,7 +346,7 @@ function errText(data) {
     let msg = data.detail.message || "";
     const miss = data.detail.missing_requirements;
     if (Array.isArray(miss) && miss.length > 0) {
-      msg += ` (필요: ${miss.join(", ")})`;
+      msg += L(` (필요: ${miss.join(", ")})`, ` (needed: ${miss.join(", ")})`);
     }
     return msg;
   }
@@ -121,27 +373,29 @@ async function api(method, path, body) {
 }
 
 function fmtLatency(ms) {
-  return (ms / 1000).toFixed(1) + "초";
+  return (ms / 1000).toFixed(1) + L("초", "s");
 }
 
+// Korean: "2026. 6. 1."; English: ISO "2026-06-01".
 function fmtDateDots(iso) {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || "");
   if (!m) return iso || "";
+  if (LANG === "en") return m[0];
   return `${m[1]}. ${Number(m[2])}. ${Number(m[3])}.`;
 }
 
 function exLabel(exId) {
   const m = /^EX(\d+)$/.exec(exId || "");
-  return m ? `갑 제${m[1]}호증` : exId;
+  return m ? L(`갑 제${m[1]}호증`, `Exhibit ${m[1]}`) : exId;
 }
 
 function sentenceNo(sid) {
   const m = /^s(\d+)$/.exec(sid || "");
-  return m ? `문장 ${Number(m[1])}` : `문장 ${sid}`;
+  return L("문장 ", "Sentence ") + (m ? Number(m[1]) : sid);
 }
 
 function gateName(g) {
-  return GATE_KO[g] || g;
+  return (LANG === "en" ? GATE_EN : GATE_KO)[g] || g;
 }
 
 function esc(s) {
@@ -162,8 +416,68 @@ document.addEventListener("DOMContentLoaded", () => {
   document.querySelectorAll(".copy-btn").forEach((btn) => {
     btn.addEventListener("click", () => copyBlock(btn.dataset.copy, btn));
   });
+  document.querySelectorAll("[data-lang]").forEach((btn) => {
+    btn.addEventListener("click", () => setLang(btn.dataset.lang));
+  });
+  applyStaticLang();
+  initChrome();
   checkServer();
 });
+
+/* ---------- portal chrome: step dividers and guide ---------- */
+
+const PAPERS = ["board-section", "checkpoint-section", "calc-section",
+  "drafts-section", "package-section"];
+
+function reduceMotion() {
+  return !!(window.matchMedia
+    && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+}
+
+// A divider opens once its paper is shown; the last shown paper is the current step.
+function syncDividers() {
+  let current = null;
+  for (const id of PAPERS) {
+    const btn = document.querySelector(`[data-goto="${id}"]`);
+    const open = !$(id).hidden;
+    if (btn) btn.disabled = !open;
+    if (open) current = id;
+  }
+  document.querySelectorAll("[data-goto]").forEach((btn) => {
+    const on = btn.dataset.goto === current;
+    btn.parentElement.classList.toggle("file-selected", on);
+    if (on) btn.setAttribute("aria-current", "step");
+    else btn.removeAttribute("aria-current");
+  });
+}
+
+function initChrome() {
+  document.querySelectorAll("[data-goto]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const paper = $(btn.dataset.goto);
+      if (paper && !paper.hidden) {
+        paper.scrollIntoView({ block: "start", behavior: reduceMotion() ? "auto" : "smooth" });
+      }
+    });
+  });
+  const watch = new MutationObserver(syncDividers);
+  for (const id of PAPERS) watch.observe($(id), { attributes: true, attributeFilter: ["hidden"] });
+  syncDividers();
+  const guide = $("guide-dialog");
+  document.querySelectorAll("[data-open-guide]").forEach((btn) => {
+    btn.addEventListener("click", () => guide.showModal());
+  });
+  $("guide-close").addEventListener("click", () => guide.close());
+  // Clicks on the dialog's own padding also target it; close only on the
+  // backdrop, which lies outside the dialog box.
+  guide.addEventListener("click", (ev) => {
+    if (ev.target !== guide) return;
+    const r = guide.getBoundingClientRect();
+    const outside = ev.clientX < r.left || ev.clientX > r.right
+      || ev.clientY < r.top || ev.clientY > r.bottom;
+    if (outside) guide.close();
+  });
+}
 
 async function checkServer() {
   try {
@@ -184,9 +498,8 @@ function revealSection(sectionId, titleId) {
   const t = titleId ? $(titleId) : null;
   if (t) {
     t.focus({ preventScroll: true });
-    const reduce = window.matchMedia
-      && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    t.scrollIntoView({ block: "start", behavior: reduce ? "auto" : "smooth" });
+    // Scroll the whole paper so its running head stays in view.
+    $(sectionId).scrollIntoView({ block: "start", behavior: reduceMotion() ? "auto" : "smooth" });
   }
 }
 
@@ -202,6 +515,8 @@ function setRunningUI(on) {
       el.disabled = on;
     }
   }
+  // Unlock sentence controls that a language switch redrew during the run.
+  if (!on && S.drafts && !S.putting) restoreDraftInputs();
 }
 
 async function loadSample() {
@@ -209,7 +524,7 @@ async function loadSample() {
   setStatus("");
   const res = await api("POST", "/api/cases/sample", { set: "kr" });
   if (!res.ok) {
-    setStatus("사건을 불러오지 못했습니다. " + errText(res.data));
+    setStatus(L("사건을 불러오지 못했습니다. ", "Could not load the case. ") + errText(res.data));
     return;
   }
   resetCaseState(res.data);
@@ -277,7 +592,7 @@ async function runWithPolling() {
     const res = await api("POST", `/api/cases/${S.caseId}/run`, {});
     if (gen !== S.runGen) return false;
     if (!res.ok) {
-      setStatus("실행하지 못했습니다. " + errText(res.data));
+      setStatus(L("실행하지 못했습니다. ", "Could not run. ") + errText(res.data));
     } else {
       S.caseView = res.data;
     }
@@ -301,7 +616,7 @@ async function deleteCase() {
   if (!S.caseId || S.running) return;
   const res = await api("DELETE", `/api/cases/${S.caseId}`);
   if (!res.ok && res.status !== 404) {
-    setStatus("삭제하지 못했습니다. " + errText(res.data));
+    setStatus(L("삭제하지 못했습니다. ", "Could not delete. ") + errText(res.data));
     return;
   }
   S.caseId = null;
@@ -322,7 +637,7 @@ async function deleteCase() {
   document.querySelector(".case-meta").hidden = true;
   $("stub-banner").hidden = true;
   $("replay-badge").hidden = true;
-  setStatus("사건을 삭제했습니다.", "neutral");
+  setStatus(L("사건을 삭제했습니다.", "Case deleted."), "neutral");
 }
 
 async function uploadFiles(ev) {
@@ -331,7 +646,7 @@ async function uploadFiles(ev) {
   if (!S.caseId) {
     const created = await api("POST", "/api/cases", { jurisdiction: "KR" });
     if (!created.ok) {
-      setStatus("사건을 만들지 못했습니다. " + errText(created.data));
+      setStatus(L("사건을 만들지 못했습니다. ", "Could not create the case. ") + errText(created.data));
       return;
     }
     resetCaseState(created.data);
@@ -346,7 +661,7 @@ async function uploadFiles(ev) {
     });
     const data = await res.json();
     if (!res.ok) {
-      setStatus("올리지 못했습니다. " + errText(data));
+      setStatus(L("올리지 못했습니다. ", "Could not upload. ") + errText(data));
       return;
     }
     S.caseView = data;
@@ -354,7 +669,7 @@ async function uploadFiles(ev) {
     renderBoard();
     setStatus("");
   } catch {
-    setStatus("올리지 못했습니다.");
+    setStatus(L("올리지 못했습니다.", "Could not upload."));
   }
   ev.target.value = "";
 }
@@ -367,7 +682,7 @@ function renderCaseMeta() {
   document.querySelector(".case-meta").hidden = false;
   $("case-id").textContent = v.case_id;
   const st = $("case-state");
-  st.textContent = STATE_KO[v.state] || v.state;
+  st.textContent = stateName(v.state);
   st.setAttribute("data-state", v.state);
   $("stub-banner").hidden = !v.stub;
   $("replay-badge").hidden = v.meta_mode !== "replay";
@@ -381,10 +696,10 @@ function stepOrder(v, s) {
 }
 
 function modelBadgeText(s) {
-  const base = s.model || "규칙";
+  const base = s.model || L("규칙", "rules");
   if (s.key === "reading" && s.substeps && s.substeps.length > 0) {
     const n = s.substeps.filter((x) => x.status === "done").length;
-    return `${base} · 판독 ${n}건`;
+    return L(`${base} · 판독 ${n}건`, `${base} · ${n} read`);
   }
   return base;
 }
@@ -414,8 +729,9 @@ function renderBoardSummary(v) {
   const el = $("board-summary");
   const calls = countModelCalls(v);
   const cost = v.run_cost_usd || "0";
-  const mode = v.meta_mode === "replay" ? "(재생)" : "실제 호출";
-  el.textContent = `Meta 모델 호출 ${calls}회 · $${cost} · ${mode}`;
+  const mode = v.meta_mode === "replay" ? L("(재생)", "(replay)") : L("실제 호출", "live calls");
+  el.textContent = L(`Meta 모델 호출 ${calls}회 · $${cost} · ${mode}`,
+    `Meta model calls: ${calls} · $${cost} · ${mode}`);
   el.dataset.calls = String(calls);
 }
 
@@ -437,7 +753,7 @@ function renderBoard() {
     card.appendChild(h);
     const d = document.createElement("p");
     d.className = "agent-desc";
-    d.textContent = a.desc;
+    d.textContent = L(a.desc, a.descEn);
     card.appendChild(d);
     for (const s of steps) {
       const row = document.createElement("div");
@@ -453,7 +769,7 @@ function renderBoard() {
       head.appendChild(order);
       const agent = document.createElement("span");
       agent.className = "step-agent";
-      agent.textContent = s.agent;
+      agent.textContent = tx(s.agent);
       head.appendChild(agent);
       const model = document.createElement("span");
       model.className = "model-badge";
@@ -462,7 +778,7 @@ function renderBoard() {
       const st = document.createElement("span");
       st.className = "step-status";
       st.dataset.status = s.status;
-      st.textContent = STATUS_KO[s.status] || s.status;
+      st.textContent = statusName(s.status);
       head.appendChild(st);
       if (s.status !== "waiting" && s.status !== "skipped") {
         const meta = document.createElement("span");
@@ -474,8 +790,8 @@ function renderBoard() {
       }
       row.appendChild(head);
       const noteText = s.status === "skipped"
-        ? "이 버전에서는 사용하지 않음"
-        : (s.note || "");
+        ? L("이 버전에서는 사용하지 않음", "Not used in this version")
+        : tx(s.note || "");
       if (noteText) {
         const note = document.createElement("div");
         note.className = "step-note";
@@ -488,8 +804,8 @@ function renderBoard() {
         for (const sub of s.substeps) {
           const li = document.createElement("li");
           li.textContent = v.meta_mode === "replay"
-            ? `${exLabel(sub.ex_id)} · ${STATUS_KO[sub.status] || sub.status}`
-            : `${exLabel(sub.ex_id)} · ${STATUS_KO[sub.status] || sub.status} · ${fmtLatency(sub.latency_ms || 0)}`;
+            ? `${exLabel(sub.ex_id)} · ${statusName(sub.status)}`
+            : `${exLabel(sub.ex_id)} · ${statusName(sub.status)} · ${fmtLatency(sub.latency_ms || 0)}`;
           ul.appendChild(li);
         }
         row.appendChild(ul);
@@ -512,15 +828,15 @@ function renderUserStrip(v) {
   strip.hidden = false;
   const label = document.createElement("span");
   label.className = "user-strip-label";
-  label.textContent = "사용자 확인";
+  label.textContent = L("사용자 확인", "Your checks");
   strip.appendChild(label);
   for (const s of users) {
     const chip = document.createElement("span");
     chip.className = "user-chip";
     chip.dataset.testid = `step-${s.key}`;
     chip.dataset.status = s.status;
-    const label = s.status === "running" ? "확인 기다림" : (STATUS_KO[s.status] || s.status);
-    chip.textContent = `${stepOrder(v, s)}. ${s.agent} · ${label}`;
+    const label = s.status === "running" ? L("확인 기다림", "Waiting for you") : statusName(s.status);
+    chip.textContent = `${stepOrder(v, s)}. ${tx(s.agent)} · ${label}`;
     strip.appendChild(chip);
   }
 }
@@ -538,9 +854,9 @@ function renderHold(v) {
     check.type = "checkbox";
     check.dataset.testid = `hold-check-${i}`;
     const msgText = r.code === "replay_fixture_missing"
-      ? "기록된 응답이 없는 입력입니다"
+      ? L("기록된 응답이 없는 입력입니다", "No recorded response for this input")
       : (r.message || r.code || "");
-    check.setAttribute("aria-label", `보류 사유 확인: ${msgText}`);
+    check.setAttribute("aria-label", L(`보류 사유 확인: ${msgText}`, `Mark hold reason as read: ${msgText}`));
     label.appendChild(check);
     const msg = document.createElement("span");
     msg.textContent = " " + msgText;
@@ -560,7 +876,7 @@ async function loadCheckpoint1(opts) {
     api("GET", `/api/cases/${S.caseId}/segments`),
   ]);
   if (!rd.ok || !rv.ok) {
-    setStatus("사실 확인 자료를 불러오지 못했습니다.");
+    setStatus(L("사실 확인 자료를 불러오지 못했습니다.", "Could not load the fact check."));
     return;
   }
   S.readings = rd.data;
@@ -615,8 +931,10 @@ function renderEvidenceList() {
     btn.type = "button";
     btn.dataset.testid = `evidence-${e.ex_id}`;
     btn.setAttribute("aria-pressed", S.selectedEx === e.ex_id ? "true" : "false");
-    const evStatus = { ok: "읽음", hold: "보류", skipped: "건너뜀" }[e.status] || e.status;
-    btn.textContent = `${e.label} · ${(e.sha256 || "").slice(0, 8)} · ${evStatus}`;
+    const evStatus = (LANG === "en"
+      ? { ok: "Read", hold: "On hold", skipped: "Skipped" }
+      : { ok: "읽음", hold: "보류", skipped: "건너뜀" })[e.status] || e.status;
+    btn.textContent = `${tx(e.label)} · ${(e.sha256 || "").slice(0, 8)} · ${evStatus}`;
     btn.addEventListener("click", () => selectEvidence(e.ex_id));
     li.appendChild(btn);
     ul.appendChild(li);
@@ -631,14 +949,14 @@ function selectEvidence(exId) {
   const layer = $("box-layer");
   const empty = $("viewer-empty");
   layer.innerHTML = "";
-  $("viewer-title").textContent = e ? e.label : "증거 보기";
+  $("viewer-title").textContent = e ? tx(e.label) : L("증거 보기", "View evidence");
   $("viewer-meta").textContent = e ? `${(e.sha256 || "").slice(0, 8)} · ${e.filename}` : "";
   const items = readingsFor(exId);
   if (!e || !e.preview_url) {
     img.hidden = true;
     img.removeAttribute("src");
     empty.hidden = false;
-    empty.textContent = "미리보기가 없습니다.";
+    empty.textContent = L("미리보기가 없습니다.", "No preview.");
     $("reading-note").textContent = "";
     const legend = $("segment-legend");
     if (legend) legend.hidden = true;
@@ -649,12 +967,12 @@ function selectEvidence(exId) {
   img.hidden = false;
   img.src = e.preview_url;
   if (items.length === 0) {
-    $("reading-note").textContent = "판독 결과 없음";
+    $("reading-note").textContent = L("판독 결과 없음", "No readings");
     renderSegments(exId, layer);
     renderRedaction(exId);
     return;
   }
-  $("reading-note").textContent = `판독 ${items.length}개`;
+  $("reading-note").textContent = L(`판독 ${items.length}개`, `${items.length} readings`);
   for (const item of items) {
     const box = item.box;
     if (!box || !box.ref_w || !box.ref_h) continue;
@@ -723,7 +1041,7 @@ function displayHint(f) {
   const hint = document.createElement("span");
   hint.className = "display-hint";
   hint.dataset.testid = `display-field-${f.field}`;
-  hint.textContent = f.display;
+  hint.textContent = tx(f.display);
   return hint;
 }
 
@@ -733,7 +1051,7 @@ function renderFields() {
   for (const f of S.review.fields) {
     const tr = document.createElement("tr");
     const th = document.createElement("td");
-    th.textContent = f.label + (f.conflict ? " (충돌)" : "");
+    th.textContent = tx(f.label) + (f.conflict ? L(" (충돌)", " (conflict)") : "");
     tr.appendChild(th);
     const tdVal = document.createElement("td");
     if (f.field === "repayments" && Array.isArray(f.value)) {
@@ -744,12 +1062,12 @@ function renderFields() {
         d.type = "date";
         d.value = r.date || "";
         d.dataset.testid = `field-repayments-${i}-date`;
-        d.setAttribute("aria-label", `받은 돈 ${i + 1} 날짜`);
+        d.setAttribute("aria-label", L(`받은 돈 ${i + 1} 날짜`, `Repayment ${i + 1} date`));
         const a = document.createElement("input");
         a.type = "text";
         a.value = r.amount || "";
         a.dataset.testid = `field-repayments-${i}-amount`;
-        a.setAttribute("aria-label", `받은 돈 ${i + 1} 금액`);
+        a.setAttribute("aria-label", L(`받은 돈 ${i + 1} 금액`, `Repayment ${i + 1} amount`));
         wrap.appendChild(d);
         wrap.appendChild(a);
         const aErr = document.createElement("span");
@@ -764,8 +1082,9 @@ function renderFields() {
     } else if (f.field === "transaction_kind") {
       const sel = document.createElement("select");
       sel.dataset.testid = "field-transaction_kind";
-      sel.setAttribute("aria-label", f.label);
-      for (const [val, label] of [["civil", "개인 간 거래"], ["commercial", "사업 거래"]]) {
+      sel.setAttribute("aria-label", tx(f.label));
+      for (const [val, label] of [["civil", L("개인 간 거래", "Personal (not business)")],
+        ["commercial", L("사업 거래", "Business")]]) {
         const opt = document.createElement("option");
         opt.value = val;
         opt.textContent = label;
@@ -778,7 +1097,7 @@ function renderFields() {
       input.type = "text";
       input.value = f.value ?? "";
       input.dataset.testid = `field-${f.field}`;
-      input.setAttribute("aria-label", f.label);
+      input.setAttribute("aria-label", tx(f.label));
       tdVal.appendChild(input);
       const hint = displayHint(f);
       if (hint) tdVal.appendChild(hint);
@@ -810,7 +1129,7 @@ function conflictText(c) {
   if (typeof c === "string") return c || null;
   if (c && typeof c === "object" && !Array.isArray(c)) {
     const labels = {};
-    for (const f of ((S.review && S.review.fields) || [])) labels[f.field] = f.label || f.field;
+    for (const f of ((S.review && S.review.fields) || [])) labels[f.field] = tx(f.label) || f.field;
     let names = "";
     if (Array.isArray(c.fields)) {
       names = c.fields.map((f) => labels[f] || f).join(", ");
@@ -832,10 +1151,12 @@ function renderConflicts() {
     const t = conflictText(c);
     if (t) items.push(t);
   }
-  for (const q of ((S.review && S.review.questions) || [])) items.push(q.question || `${q.field} 입력 필요`);
+  for (const q of ((S.review && S.review.questions) || [])) {
+    items.push(tx(q.question) || L(`${q.field} 입력 필요`, `${q.field} needed`));
+  }
   if (items.length === 0) {
     const li = document.createElement("li");
-    li.textContent = "없음";
+    li.textContent = L("없음", "None");
     ul.appendChild(li);
     return;
   }
@@ -851,9 +1172,9 @@ function speakerLabel(u) {
     return u.speaker;
   }
   const side = readingSide(u.ex_id, u.item_id);
-  if (side === "right") return "오른쪽 말풍선";
-  if (side === "left") return "왼쪽 말풍선";
-  return "말한 사람 모름";
+  if (side === "right") return L("오른쪽 말풍선", "Right bubble");
+  if (side === "left") return L("왼쪽 말풍선", "Left bubble");
+  return L("말한 사람 모름", "Speaker unknown");
 }
 
 function exNum(exId) {
@@ -885,17 +1206,18 @@ function renderUtterances() {
     const check = document.createElement("input");
     check.type = "checkbox";
     check.dataset.testid = `highlight-${u.ex_id}-${u.item_id}`;
-    check.setAttribute("aria-label", `강조: ${who}: ${u.text}`);
+    check.setAttribute("aria-label", L(`강조: ${who}: ${u.text}`, `Highlight: ${who}: ${u.text}`));
     if (firstPromise === `${u.ex_id}:${u.item_id}`) check.checked = true;
     label.appendChild(check);
     li.appendChild(label);
     const body = document.createElement("span");
+    body.lang = "ko";
     body.textContent = `${who}: ${u.text} `;
     li.appendChild(body);
     for (const tag of (u.tags || [])) {
       const chip = document.createElement("span");
       chip.className = "tag";
-      chip.textContent = TAG_KO[tag] || tag;
+      chip.textContent = tagName(tag);
       li.appendChild(chip);
     }
     ul.appendChild(li);
@@ -911,12 +1233,12 @@ function renderRoles() {
     label.textContent = `${exLabel(r.ex_id)} `;
     const sel = document.createElement("select");
     sel.dataset.testid = `role-${r.ex_id}`;
-    sel.setAttribute("aria-label", `${exLabel(r.ex_id)} 역할`);
+    sel.setAttribute("aria-label", L(`${exLabel(r.ex_id)} 역할`, `${exLabel(r.ex_id)} role`));
     const current = KNOWN_ROLES.has(r.suggested_role) ? r.suggested_role : "other";
-    for (const [val, name] of ROLE_OPTIONS) {
+    for (const [val, name, nameEn] of ROLE_OPTIONS) {
       const opt = document.createElement("option");
       opt.value = val;
-      opt.textContent = name;
+      opt.textContent = L(name, nameEn);
       if (current === val) opt.selected = true;
       sel.appendChild(opt);
     }
@@ -1005,7 +1327,7 @@ async function confirmFacts() {
     const put = await api("PUT", `/api/cases/${S.caseId}/facts`, body);
     if (!put.ok) {
       const msg = errText(put.data);
-      setStatus("확정값을 저장하지 못했습니다. " + msg);
+      setStatus(L("확정값을 저장하지 못했습니다. ", "Could not save the confirmed facts. ") + msg);
       if (put.status === 400) showFactsErrorsFor(msg);
       return;
     }
@@ -1027,7 +1349,7 @@ async function confirmFacts() {
 async function loadDrafts(opts) {
   const res = await api("GET", `/api/cases/${S.caseId}/drafts`);
   if (!res.ok) {
-    setStatus("초안을 불러오지 못했습니다. " + errText(res.data));
+    setStatus(L("초안을 불러오지 못했습니다. ", "Could not load the drafts. ") + errText(res.data));
     return;
   }
   S.drafts = res.data;
@@ -1042,14 +1364,15 @@ async function loadDrafts(opts) {
 function fmtWon(amountStr) {
   const n = Number(String(amountStr).split(".")[0]);
   if (!Number.isFinite(n)) return String(amountStr);
-  return n.toLocaleString("ko-KR") + "원";
+  return L(n.toLocaleString("ko-KR") + "원", "₩" + n.toLocaleString("en-US"));
 }
 
 function renderCalc() {
   const calc = S.drafts.calculation;
   const ref = calc.reference_total || {};
-  $("calc-title").textContent =
-    `4. 입력한 사실 기준 계산(기준일 ${fmtDateDots(ref.as_of)})`;
+  $("calc-title").textContent = L(
+    `입력한 사실 기준 계산 (기준일 ${fmtDateDots(ref.as_of)})`,
+    `Calculation from your confirmed facts (as of ${fmtDateDots(ref.as_of)})`);
   const body = $("alloc-body");
   body.innerHTML = "";
   for (const a of (calc.allocations || [])) {
@@ -1071,7 +1394,7 @@ function renderCalc() {
   ol.innerHTML = "";
   for (const s of (calc.calculation_steps || [])) {
     const li = document.createElement("li");
-    li.textContent = `${s.label}: ${s.formula}`;
+    li.textContent = `${tx(s.label)}: ${s.formula}`;
     ol.appendChild(li);
   }
 }
@@ -1093,12 +1416,13 @@ function slotChips(text) {
   return frag;
 }
 
-function renderDrafts() {
+function renderDrafts(ui) {
   const d = S.drafts;
   const rev = $("revision-note");
   if (d.revisions && d.revisions.length > 0) {
     rev.hidden = false;
-    rev.textContent = `문안 작성 → 검증 → 수정 ${d.revision_rounds}회`;
+    rev.textContent = L(`문안 작성 → 검증 → 수정 ${d.revision_rounds}회`,
+      `Draft → check → revise: ${d.revision_rounds} round(s)`);
   } else {
     rev.hidden = true;
   }
@@ -1106,8 +1430,21 @@ function renderDrafts() {
   const list = $("sentence-list");
   list.innerHTML = "";
   for (const s of (d.sentences || [])) {
-    list.appendChild(sentenceEl(s, d.gate_results || []));
+    list.appendChild(sentenceEl(s, d.gate_results || [], ui && ui[s.sentence_id]));
   }
+}
+
+function noticeText(kind) {
+  if (kind === "blocked") return L("지적이 있어 승인할 수 없습니다.", "Fix the issues before approving.");
+  return null;
+}
+
+function slotsToggleText(open) {
+  return open ? L("문장 보기", "Show sentence") : L("슬롯 보기", "Show slots");
+}
+
+function editToggleText(open) {
+  return open ? L("접기", "Close") : L("고치기", "Edit");
 }
 
 function showGate(g) {
@@ -1120,14 +1457,17 @@ function gateRow(g) {
   row.dataset.testid = `gate-${g.gate}`;
   row.dataset.gate = g.gate;
   row.dataset.status = g.status;
-  const state = g.status === "pass" ? "✓ 통과"
-    : g.status === "fail" ? "지적 있음"
-    : g.status === "skipped" ? "건너뜀" : g.status;
+  const state = g.status === "pass" ? L("✓ 통과", "✓ passed")
+    : g.status === "fail" ? L("지적 있음", "issues found")
+    : g.status === "skipped" ? L("건너뜀", "skipped") : g.status;
   row.textContent = `${gateName(g.gate)} (${g.gate}): ${state}`;
   return row;
 }
 
-function sentenceEl(s, gateResults) {
+// ui (optional): { editOpen, slotsOpen, notice: { kind, text } } kept from
+// before a language redraw.
+function sentenceEl(s, gateResults, ui) {
+  const st = ui || {};
   const box = document.createElement("div");
   box.className = "sentence";
   box.dataset.testid = `sentence-${s.sentence_id}`;
@@ -1142,37 +1482,40 @@ function sentenceEl(s, gateResults) {
   for (const ex of (s.ex_refs || [])) {
     const tag = document.createElement("span");
     tag.className = "tag";
-    tag.textContent = ex === "USER" ? "(사용자 진술)" : `[${exLabel(ex)}]`;
+    tag.textContent = ex === "USER" ? L("(사용자 진술)", "(your statement)") : `[${exLabel(ex)}]`;
     head.appendChild(tag);
   }
   const toggle = document.createElement("button");
   toggle.type = "button";
   toggle.dataset.testid = `slots-toggle-${s.sentence_id}`;
-  toggle.textContent = "슬롯 보기";
+  toggle.textContent = slotsToggleText(!!st.slotsOpen);
   head.appendChild(toggle);
   const editToggle = document.createElement("button");
   editToggle.type = "button";
   editToggle.dataset.testid = `edit-toggle-${s.sentence_id}`;
-  editToggle.textContent = "고치기";
+  editToggle.textContent = editToggleText(!!st.editOpen);
   head.appendChild(editToggle);
   box.appendChild(head);
 
   const rendered = document.createElement("p");
   rendered.className = "rendered-text";
   rendered.dataset.testid = `rendered-${s.sentence_id}`;
+  rendered.lang = "ko";
   rendered.textContent = s.rendered_text;
+  rendered.hidden = !!st.slotsOpen;
   box.appendChild(rendered);
 
   const slots = document.createElement("p");
   slots.className = "slots-view";
   slots.dataset.testid = `slots-${s.sentence_id}`;
-  slots.hidden = true;
+  slots.lang = "ko";
+  slots.hidden = !st.slotsOpen;
   slots.appendChild(slotChips(s.text_with_slots));
   box.appendChild(slots);
   toggle.addEventListener("click", () => {
     slots.hidden = !slots.hidden;
     rendered.hidden = !slots.hidden;
-    toggle.textContent = slots.hidden ? "슬롯 보기" : "문장 보기";
+    toggle.textContent = slotsToggleText(!slots.hidden);
   });
 
   const findings = document.createElement("div");
@@ -1185,17 +1528,24 @@ function sentenceEl(s, gateResults) {
   notice.className = "sentence-notice";
   notice.dataset.testid = `notice-${s.sentence_id}`;
   notice.hidden = true;
+  if (st.notice) {
+    // Known notices are redrawn in the new language; others keep their text.
+    if (st.notice.kind) notice.dataset.kind = st.notice.kind;
+    notice.textContent = noticeText(st.notice.kind) || st.notice.text;
+    notice.hidden = false;
+  }
   box.appendChild(notice);
 
   const edit = document.createElement("textarea");
   edit.dataset.testid = `edit-${s.sentence_id}`;
-  edit.hidden = true;
+  edit.lang = "ko";
+  edit.hidden = !st.editOpen;
   edit.value = s.text_with_slots;
-  edit.setAttribute("aria-label", `${sentenceNo(s.sentence_id)} 고치기`);
+  edit.setAttribute("aria-label", L(`${sentenceNo(s.sentence_id)} 고치기`, `Edit ${sentenceNo(s.sentence_id)}`));
   box.appendChild(edit);
   editToggle.addEventListener("click", () => {
     edit.hidden = !edit.hidden;
-    editToggle.textContent = edit.hidden ? "고치기" : "접기";
+    editToggle.textContent = editToggleText(!edit.hidden);
   });
 
   const row = document.createElement("div");
@@ -1203,7 +1553,7 @@ function sentenceEl(s, gateResults) {
   const update = document.createElement("button");
   update.type = "button";
   update.dataset.testid = `update-${s.sentence_id}`;
-  update.textContent = "다시 검사";
+  update.textContent = L("다시 검사", "Re-check");
   row.appendChild(update);
   const approveLabel = document.createElement("label");
   approveLabel.className = "approve-label";
@@ -1212,9 +1562,9 @@ function sentenceEl(s, gateResults) {
   approve.dataset.testid = `approve-${s.sentence_id}`;
   approve.checked = !!s.approved;
   approve.disabled = (s.findings || []).length > 0;
-  approve.setAttribute("aria-label", `${sentenceNo(s.sentence_id)} 승인`);
+  approve.setAttribute("aria-label", L(`${sentenceNo(s.sentence_id)} 승인`, `Approve ${sentenceNo(s.sentence_id)}`));
   approveLabel.appendChild(approve);
-  approveLabel.appendChild(document.createTextNode(" 승인"));
+  approveLabel.appendChild(document.createTextNode(L(" 승인", " Approve")));
   row.appendChild(approveLabel);
   box.appendChild(row);
 
@@ -1227,7 +1577,7 @@ function renderFindings(el, s, gateResults) {
   el.innerHTML = "";
   const mine = s.findings || [];
   if (mine.length === 0) {
-    el.textContent = "지적 없음";
+    el.textContent = L("지적 없음", "No issues");
     el.dataset.status = "pass";
     el.classList.remove("is-bad");
     el.classList.add("is-ok");
@@ -1252,7 +1602,7 @@ function renderFindings(el, s, gateResults) {
     line.dataset.gate = gate;
     const name = document.createElement("span");
     name.className = "gate-name";
-    name.textContent = gate === "검사" ? "검사: " : `${gateName(gate)} (${gate}): `;
+    name.textContent = gate === "검사" ? L("검사: ", "Check: ") : `${gateName(gate)} (${gate}): `;
     line.appendChild(name);
     const items = byGate[gate] || mine;
     line.appendChild(document.createTextNode(
@@ -1289,7 +1639,7 @@ function restoreDraftInputs() {
 async function refreshSentence(sid) {
   const res = await api("GET", `/api/cases/${S.caseId}/drafts`);
   if (!res.ok) {
-    setStatus("초안을 불러오지 못했습니다. " + errText(res.data));
+    setStatus(L("초안을 불러오지 못했습니다. ", "Could not load the drafts. ") + errText(res.data));
     return;
   }
   S.drafts = res.data;
@@ -1325,17 +1675,20 @@ async function updateSentence(sid) {
       sentences: [{ sentence_id: sid, text_with_slots: text }],
     });
     if (!res.ok) {
-      setStatus("다시 검사하지 못했습니다. " + errText(res.data));
+      setStatus(L("다시 검사하지 못했습니다. ", "Could not re-check. ") + errText(res.data));
       return;
     }
     S.drafts = res.data;
     await refreshSentence(sid);
     const s = S.drafts.sentences.find((x) => x.sentence_id === sid);
-    const notice = box.querySelector(`[data-testid="notice-${sid}"]`);
-    if (s && (s.findings || []).length > 0) {
-      notice.textContent = "지적이 있어 승인할 수 없습니다.";
+    // Look the notice up again: a language switch may have redrawn the box.
+    const notice = document.querySelector(`[data-testid="notice-${sid}"]`);
+    if (notice && s && (s.findings || []).length > 0) {
+      notice.dataset.kind = "blocked";
+      notice.textContent = noticeText("blocked");
       notice.hidden = false;
     } else if (notice) {
+      delete notice.dataset.kind;
       notice.hidden = true;
     }
   } finally {
@@ -1363,7 +1716,7 @@ async function approveSentence(sid) {
       sentences: [{ sentence_id: sid, approved: want }],
     });
     if (!res.ok) {
-      setStatus("승인하지 못했습니다. " + errText(res.data));
+      setStatus(L("승인하지 못했습니다. ", "Could not approve. ") + errText(res.data));
       return;
     }
     S.drafts = res.data;
@@ -1385,7 +1738,7 @@ async function approveAndContinue() {
     const res = await api("POST", `/api/cases/${S.caseId}/run`, {});
     if (gen !== S.runGen) return;
     if (!res.ok) {
-      setStatus("계속하지 못했습니다. " + errText(res.data));
+      setStatus(L("계속하지 못했습니다. ", "Could not continue. ") + errText(res.data));
       return;
     }
     S.caseView = res.data;
@@ -1408,17 +1761,22 @@ async function approveAndContinue() {
 async function loadPackage(opts) {
   const res = await api("GET", `/api/cases/${S.caseId}/package`);
   if (!res.ok) {
-    setStatus("서류 묶음을 불러오지 못했습니다. " + errText(res.data));
+    setStatus(L("서류 묶음을 불러오지 못했습니다. ", "Could not load the package. ") + errText(res.data));
     return;
   }
   S.pkg = res.data;
+  renderPackage();
+  revealSection("package-section", opts && opts.reveal === false ? null : "package-title");
+}
+
+function renderPackage() {
   const files = $("file-list");
   files.innerHTML = "";
   for (const f of (S.pkg.files || [])) {
     const li = document.createElement("li");
     const a = document.createElement("a");
     a.href = f.url;
-    a.textContent = f.label;
+    a.textContent = tx(f.label);
     a.dataset.testid = `file-${f.name}`;
     li.appendChild(a);
     files.appendChild(li);
@@ -1442,7 +1800,6 @@ async function loadPackage(opts) {
       gateList.appendChild(gateRow(g));
     }
   }
-  revealSection("package-section", opts && opts.reveal === false ? null : "package-title");
 }
 
 async function copyBlock(preId, btn) {
@@ -1462,6 +1819,6 @@ async function copyBlock(preId, btn) {
     ta.remove();
   }
   const orig = btn.textContent;
-  btn.textContent = "복사 완료";
+  btn.textContent = L("복사 완료", "Copied");
   setTimeout(() => { btn.textContent = orig; }, 1200);
 }

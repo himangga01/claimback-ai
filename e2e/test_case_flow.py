@@ -31,7 +31,7 @@ sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(ROOT / "backend"))
 
 from stub_server import app as stub_app  # noqa: E402
-from app.services.naming import check_text  # noqa: E402
+from app.services.naming import NOTICE_EN, check_text  # noqa: E402
 
 ARTIFACTS = HERE / "artifacts"
 CONFIRMED_EXAMPLE = ROOT / "specs" / "case-api-examples" / "confirmed_facts_kr.json"
@@ -74,9 +74,11 @@ def base_url():
 
 @pytest.fixture(scope="session")
 def browser_context_args(browser_context_args):
+    # The screen picks its language from the browser; these tests read Korean.
     return {
         **browser_context_args,
         "viewport": {"width": 1920, "height": 1080},
+        "locale": "ko-KR",
     }
 
 
@@ -673,5 +675,87 @@ def test_fix1_amount_rejected(page, base_url, case_cleanup):
         "data-state", "DRAFT_APPROVAL", timeout=30000
     )
     steps.shot("fix1-amount-accepted")
+    page.get_by_test_id("delete-case").click()
+    expect(page.get_by_test_id("board-section")).to_be_hidden(timeout=15000)
+
+
+def test_english_screen(page, base_url, case_cleanup):
+    """Portal design: ?lang=en shows the English screen, and the KO/EN
+    switch redraws the case without losing what the user typed. Case
+    content and the court text stay Korean."""
+    steps = Steps(page)
+    page.goto(base_url + "/?lang=en", wait_until="networkidle")
+    expect(page.locator("html")).to_have_attribute("lang", "en")
+    expect(page.get_by_test_id("notice-badge")).to_have_text(NOTICE_EN)
+    expect(page.get_by_test_id("load-sample")).to_contain_text("Load the sample case")
+    page.get_by_test_id("load-sample").click()
+    expect(page.get_by_test_id("case-state")).to_have_attribute(
+        "data-state", "CHECKPOINT_1", timeout=30000
+    )
+    expect(page.get_by_test_id("case-state")).to_have_text("Waiting for your fact check")
+    expect(page.get_by_test_id("board-summary")).to_contain_text("Meta model calls")
+    expect(page.get_by_test_id("confirm-facts")).to_have_text("Confirm and continue")
+    page.locator(".reading-box").first.wait_for(state="visible", timeout=15000)
+    expect(page.get_by_test_id("evidence-EX4")).to_contain_text("Exhibit 4")
+    steps.shot("en-checkpoint")
+
+    first = page.locator("#fields-body input[type=text]").first
+    testid = first.get_attribute("data-testid")
+    first.fill("TYPED BEFORE SWITCH")
+    page.locator("[data-lang='ko']").click()
+    expect(page.locator("html")).to_have_attribute("lang", "ko")
+    expect(page.get_by_test_id("board-summary")).to_contain_text("Meta 모델 호출")
+    expect(page.get_by_test_id("confirm-facts")).to_have_text("확인하고 계속")
+    expect(page.get_by_test_id(testid)).to_have_value("TYPED BEFORE SWITCH")
+    page.locator("[data-lang='en']").click()
+    expect(page.get_by_test_id(testid)).to_have_value("TYPED BEFORE SWITCH")
+    page.get_by_test_id("delete-case").click()
+    expect(page.get_by_test_id("status-line")).to_contain_text("Case deleted.")
+
+
+_MEASURE_WIDTH = """() => {
+  const iw = window.innerWidth;
+  const sw = document.documentElement.scrollWidth;
+  const wide = [];
+  if (sw > iw) {
+    for (const el of document.querySelectorAll("body *")) {
+      const r = el.getBoundingClientRect();
+      if (r.width > 0 && r.right > iw + 0.5) {
+        const id = el.id ? "#" + el.id : "";
+        const cls = el.classList.length ? "." + [...el.classList].join(".") : "";
+        wide.push(`${el.tagName.toLowerCase()}${id}${cls} right=${Math.round(r.right)}`);
+        if (wide.length >= 8) break;
+      }
+    }
+  }
+  return { sw, iw, wide };
+}"""
+
+
+@pytest.mark.parametrize("lang", ["ko", "en"])
+@pytest.mark.parametrize(
+    "size", [(375, 812), (768, 1024)], ids=["phone-375", "tablet-768"]
+)
+def test_no_horizontal_scroll(page, base_url, case_cleanup, lang, size):
+    """Portal design: at phone and tablet widths, in both languages, the
+    page never scrolls sideways, before or after the sample reaches
+    CHECKPOINT_1."""
+    width, height = size
+    page.set_viewport_size({"width": width, "height": height})
+    page.goto(f"{base_url}/?lang={lang}", wait_until="networkidle")
+    expect(page.locator("html")).to_have_attribute("lang", lang)
+    expect(page.locator("#app")).to_be_visible()
+    start = page.evaluate(_MEASURE_WIDTH)
+    page.get_by_test_id("load-sample").click()
+    expect(page.get_by_test_id("case-state")).to_have_attribute(
+        "data-state", "CHECKPOINT_1", timeout=30000
+    )
+    page.locator(".reading-box").first.wait_for(state="visible", timeout=15000)
+    checkpoint = page.evaluate(_MEASURE_WIDTH)
+    for where, m in (("start", start), ("CHECKPOINT_1", checkpoint)):
+        assert m["sw"] <= m["iw"], (
+            f"{lang} {width}x{height} {where}: scrollWidth {m['sw']} > "
+            f"innerWidth {m['iw']}; wide: {m['wide']}"
+        )
     page.get_by_test_id("delete-case").click()
     expect(page.get_by_test_id("board-section")).to_be_hidden(timeout=15000)

@@ -1,11 +1,11 @@
-# ClaimBack-AI
+# ClaimBack My Money (클레임백 마이 머니)
 
 > **Meta Global AI Developer Hackathon 2026 — Build for Your World**
-> A free self-help tool that organizes your own evidence for an unpaid personal loan and fills standard Korean court-document text with facts you confirm. See the notice below.
+> A free self-help tool that organizes your own evidence for an unpaid personal loan and fills standard Korean court-document text with facts you confirm. The project and engine name is ClaimBack-AI. See the notice below.
 
-2026-11-02 기준 코드(커밋 76d9cce까지)는 대회 기간에 저장소 소유자가 작성했고, 2026-11-03 M-1부터는 Muse Code(`muse-spark-1.3`)가 구현하고 Claude Code가 명세·지시·리뷰했다.
+2026-11-02 기준 코드(커밋 76d9cce까지)는 대회 기간에 저장소 소유자가 작성했고, 2026-11-03 M-1부터 INT-3b까지는 Muse Code(`muse-spark-1.3`)가 구현하고 Claude Code가 명세·지시·리뷰했다. 같은 날 저녁 INT-3c부터(마무리 수정, 포털 화면, 영어 화면)는 사용자 요청으로 Claude Code가 직접 구현하고 서브에이전트 두 개가 교차 리뷰했다.
 
-Code up to 2026-11-02 (through commit 76d9cce) was written by the repository owner during the hackathon; from 2026-11-03 (milestone M-1) on, Muse Code (`muse-spark-1.3`) implemented every change and Claude Code wrote the specs and task briefs and reviewed each milestone.
+Code up to 2026-11-02 (through commit 76d9cce) was written by the repository owner during the hackathon. From 2026-11-03 (milestone M-1) through INT-3b, Muse Code (`muse-spark-1.3`) implemented the changes while Claude Code wrote the specs and task briefs and reviewed each milestone. From INT-3c that evening (final fixes, the portal screen, the English screen), Claude Code implemented the changes directly at the owner's request, with two subagent reviewers cross-checking each one.
 
 ---
 
@@ -56,7 +56,7 @@ $env:META_MODE = "replay"     # runs the sample case from recorded model respons
 ..\.venv\Scripts\python.exe -m uvicorn app.main:app --port 8000
 ```
 
-Open `http://localhost:8000`, press **샘플 사건 불러오기**, then **실행**, and follow the two checkpoints.
+Open `http://localhost:8000` (or `http://localhost:8000/?lang=en` for the English screen; the **KO / EN** switch in the header changes it any time). Press **샘플 사건 불러오기** (**Load the sample case**); the case runs on its own, then follow the two checkpoints.
 
 To call the Meta Model API live, set `META_MODE=live`, put your key in `MODEL_API_KEY`, and point `META_LEDGER_PATH` at an absolute path for the cost ledger (`META_LEDGER_INIT=1` the first time). Every call's cost is recorded, and a run stops before it would exceed `META_RUN_CAP_USD` (default $2).
 
@@ -74,10 +74,11 @@ cd ..
 
 - Milestone briefs: `specs/tasks/`. Muse Code reports: `reports/M*.md`, `reports/INT-*.md`. Claude Code reviews (two independent reviewers per milestone, cross-checked): `reports/*-review.md`.
 - Every live Meta API call made by the app during development is in `reports/cost_ledger.jsonl`.
+- The screen's visual style (layout, colours, Paperlogy font, folder-tab motif) is adapted from the owner's earlier project 경매노트 (auctionnote), which predates the hackathon; part of `frontend/case.css` follows its stylesheet. The case flow, the agents, the screen logic and the English screen were built during the hackathon.
 
 ## Known limits
 
-- Korean track only in this version (the US SC-100 path is partial).
+- Korean track only in this version (the US SC-100 path is partial). The screen is in Korean and English; case content and the documents stay in Korean because they are filed in Korean courts, and a few backend messages (conflict notes, hold reasons, check findings) are shown in Korean on the English screen.
 - Video evidence is stored and hashed, but frame reading is not in the case flow yet (it produced duplicates and timestamp drift in testing; see `reports/M4b-review.md`).
 - Reading boxes on very tall screenshots are still approximate; the privacy step refines boxes from the image pixels and flags anything it cannot confirm.
 - The draft-rule checker is word-based; it can still block a few harmless sentences you type yourself (for example a promise phrase next to a date slot). Review your own edits before approving (`reports/INT-3c-review.md`).
@@ -97,4 +98,5 @@ ClaimBack-AI is a free self-help tool for organizing your own evidence and filli
 
 - Source code and generated sample files: MIT (see `LICENSE`).
 - Bundled fonts (`backend/app/templates/fonts/NanumGothic-*.ttf`): SIL Open Font License 1.1 (see `backend/app/templates/fonts/OFL.txt`).
+- Screen fonts (`frontend/fonts/Paperlogy-*.woff2`, mirrored in `docs/fonts/`): SIL Open Font License 1.1 (see `frontend/fonts/OFL-Paperlogy.txt` and `frontend/fonts/README.md`).
 - `backend/app/templates/ca_sc100_blank.pdf`: a California Judicial Council Form SC-100 file included unmodified for form-filling; it is not covered by the MIT license above.
