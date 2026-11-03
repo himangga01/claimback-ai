@@ -1,6 +1,6 @@
 # M2c-fix1 전언 판정·이름 보존·증거 인용 (수정 지시서)
 
-- 작성: 2026-11-03 15:20 KST, Claude
+- 작성: 2026-11-03 15:19 KST, Claude
 - 수행: Muse Code (`muse-spark-1.3`), 같은 작업 트리 `C:\2026_project\claimback-wt\m2c`(브랜치 `m2c`, M2c 작업은 커밋 48ecf96으로 들어 있음). M4a·M4b·M6-fix1과 동시에 진행.
 - 먼저 읽을 것: `AGENTS.md`, 이 지시서, `reports/M2c.md`, `reports/M2c-review.md`(D1~D11)
 - 파일 범위: M2c와 같음(`draft_rules.py`, `drafter.py`, `fact_organizer.py`, `deps.py`, 프롬프트 v2 파일 수정 허용, 새 테스트 파일, `backend/tests/fixtures/meta/`, 원장). `coordinator.py`·`cases.py`·`reader.py`·`intake.py`·`packager.py`·`frontend/`·`e2e/`·`specs/`는 건드리지 않습니다.
