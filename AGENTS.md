@@ -38,6 +38,7 @@ verbatim in the disclaimers (`DISCLAIMER_KO`, `DISCLAIMER_EN`). The screen follo
 | `specs/case-api-contract.md`, `specs/case-api-examples/` | Case-flow API contract (v2) shared by the backend (M2a) and the UI/E2E (M2b); example responses served by the stub and checked by backend tests |
 | `reports/M<N>-review.md` | Claude reviews with subagent cross-review; `reports/M0-review.md` holds the M0 spike decisions (coordinates, video keyframes, reader model pending); `reports/M4b-review.md` holds the reader model decision (muse-spark-1.2) and why video reading is deferred; `reports/INT-3-review.md` is the latest integration review |
 | `reports/M7-live-check.md` | End-to-end run of the sample case on the live Meta API (2026-11-03 18:25 KST) |
+| `reports/fix-cost-redaction.md` | Case cost vs. ledger (reservation rows offset; reruns keep spend), wrong-line PII masks made needs_review with a stronger leak check, duplicated citations (2026-11-04) |
 | `reports/portal-review.md` | Portal redesign and English screen (2026-11-03): what changed, how the KO/EN switch works, tests, cross-review |
 | `submission/` | Demo script (`demo-script.md`), recording runbook (`runbook.md`), submission notes and form drafts (`submission-notes.md`) |
 

@@ -96,6 +96,17 @@ class StepState(BaseModel):
     cost_usd: str = "0"
     note: str = ""
     substeps: List[SubStep] = Field(default_factory=list)
+    # Internal spend accounting (fix-cost, not in the API view, see
+    # STEP_INTERNAL_FIELDS): exact USD of every run of this step (None on
+    # cases saved before the field; cost_usd is its 4-decimal display),
+    # plus the spend and model calls of earlier runs, kept when the step
+    # starts so a rerun after HOLD/rollback adds instead of overwriting.
+    spent_usd: Optional[float] = None
+    kept_usd: float = 0.0
+    kept_calls: int = 0
+
+
+STEP_INTERNAL_FIELDS = {"spent_usd", "kept_usd", "kept_calls"}
 
 
 class HoldReason(BaseModel):

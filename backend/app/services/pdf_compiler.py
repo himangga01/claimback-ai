@@ -73,7 +73,18 @@ import re as _re
 
 _BRACKET_CITE_RE = _re.compile(r"\[갑 제(\d+)호증\]")
 _PAREN_CITE_RE = _re.compile(r"\(갑 제(\d+)호증\)")
+_REPEATED_CITE_RE = _re.compile(r"(\[갑 제\d+호증\]|\(갑 제\d+호증\))(?:\s*\1)+")
 _NUMBERED_RE = _re.compile(r"^((?:[가-하]\.|\(\d+\))\s+)")
+
+
+def collapse_repeated_cites(text: str) -> str:
+    """'[갑 제1호증] [갑 제1호증]' -> '[갑 제1호증]' (fix-cost bug 3).
+
+    An immediately repeated identical citation (same form, only spaces
+    between) collapses into one. Render time only: the drafter's request
+    and replay fixtures stay the same.
+    """
+    return _REPEATED_CITE_RE.sub(r"\1", text or "")
 
 
 def _split_number_prefix(text: str):
@@ -112,10 +123,13 @@ def format_ecourt_fact(text: str) -> str:
 
     M5-fix2: multiple cites merge into one tail
     (``(갑 제1호증)(갑 제6호증).``) so no ``.(`` is left behind.
+    fix-cost bug 3: an exhibit cited twice in the sentence (mid-sentence
+    and at the end) appears once in that tail, never
+    ``(갑 제1호증)(갑 제1호증)``.
     """
     prefix, body = _split_number_prefix(text)
     body = body.replace("[[USER]]", "").replace("(사용자 진술)", "")
-    cites = _BRACKET_CITE_RE.findall(body)
+    cites = list(dict.fromkeys(_BRACKET_CITE_RE.findall(body)))
     if cites:
         body = _BRACKET_CITE_RE.sub("", body)
         body = _clean_spaces(body).strip()

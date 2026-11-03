@@ -60,6 +60,48 @@ def _face_objects(
     return found
 
 
+def _same_line(first: Dict[str, Any], second: Dict[str, Any]) -> bool:
+    """Two mask boxes on one text line (half the shorter height shared)."""
+    try:
+        ax1, ay1, ax2, ay2 = (int(first[k]) for k in ("x1", "y1", "x2", "y2"))
+        bx1, by1, bx2, by2 = (int(second[k]) for k in ("x1", "y1", "x2", "y2"))
+    except (KeyError, TypeError, ValueError):
+        return False
+    shared_h = min(ay2, by2) - max(ay1, by1)
+    shorter = max(1, min(ay2 - ay1, by2 - by1))
+    return shared_h >= 0.5 * shorter and min(ax2, bx2) > max(ax1, bx1)
+
+
+def _flag_shared_lines(
+    plan: List[Dict[str, Any]], line_texts: List[Tuple[int, str]]
+) -> None:
+    """Two different PII readings masked on one line: review both.
+
+    fix-cost-redaction review: when the reader puts the sender account's
+    box on the receiver's line (further than the leak search reaches),
+    both masks land on that line, its pattern matches, and the sender's
+    number stays visible. One line cannot hold two different numbers.
+    """
+    def _digits(text: str) -> str:
+        return "".join(ch for ch in str(text or "") if ch.isdigit())
+
+    for pos, (first, first_text) in enumerate(line_texts):
+        for second, second_text in line_texts[pos + 1:]:
+            if _digits(first_text) == _digits(second_text):
+                continue
+            if not _same_line(plan[first]["mask_box"],
+                              plan[second]["mask_box"]):
+                continue
+            for index in (first, second):
+                entry = plan[index]
+                entry["needs_review"] = True
+                reason = str(entry.get("reason", "") or "")
+                if redact_mod.SAME_LINE_REVIEW_REASON not in reason:
+                    entry["reason"] = (
+                        f"{reason}; {redact_mod.SAME_LINE_REVIEW_REASON}"
+                        if reason else redact_mod.SAME_LINE_REVIEW_REASON)
+
+
 def build_plan(
     readings: List[Dict[str, Any]],
     segments: List[Dict[str, Any]],
@@ -95,6 +137,7 @@ def build_plan(
         ref_w, ref_h = int(size[0]), int(size[1])
         bubbles = _bubble_boxes(segments or [], ex_id)
         image = (preview_images or {}).get(ex_id)
+        line_texts: List[Tuple[int, str]] = []  # (plan index, reading text)
         for item in reading.get("items", []) or []:
             kind = str(item.get("kind", ""))
             if kind not in PII_KINDS:
@@ -106,6 +149,7 @@ def build_plan(
             text = str(item.get("text_verbatim", "")
                        or item.get("normalized", "") or "")
             inline = any(_center_inside(coords, bubble) for bubble in bubbles)
+            reader_coords = list(coords)
             if not inline and image is not None:
                 mask = ink_masks.get(ex_id, "missing")
                 if mask == "missing":
@@ -145,6 +189,26 @@ def build_plan(
                     if reading_counts and max(reading_counts.values()) >= \
                             redact_mod.BAND_THRESHOLD:
                         reading_tripped = True
+            # fix-cost bug 2: the mask must sit on the reading's own line;
+            # a snap of a full line or more, or a line that does not spell
+            # the reading's number, is needs_review (fail closed). No ink
+            # mask means neither can be checked: review too.
+            review_reasons: List[str] = []
+            if reading_tripped:
+                review_reasons.append(redact_mod.READING_BAND_REVIEW_REASON)
+            line_mask = (ink_masks.get(ex_id)
+                         if not inline and image is not None else None)
+            if not inline and image is not None and line_mask is None:
+                review_reasons.append(redact_mod.INK_UNCHECKED_REVIEW_REASON)
+            if line_mask is not None:
+                if coords != reader_coords and redact_mod.line_shift_too_far(
+                        reader_coords, coords):
+                    review_reasons.append(
+                        redact_mod.LINE_SHIFT_REVIEW_REASON)
+                elif not redact_mod.pii_line_matches(line_mask, coords, text):
+                    review_reasons.append(
+                        redact_mod.LINE_MATCH_REVIEW_REASON)
+            line_texts.append((len(plan), text))
             pad = redact_mod.compute_pad(coords[3] - coords[1])
             geom = None
             if image is not None and not inline:
@@ -180,47 +244,42 @@ def build_plan(
                 mask = redact_mod.pad_box(
                     raw_mask, pad, (True, True, False, True), ref_w, ref_h)
                 keep = redact_mod.clip_box(raw_keep, ref_w, ref_h)
-                reason = "계좌번호 끝 4자리 유지"
-                if reading_tripped:
-                    reason = f"{reason}; {redact_mod.READING_BAND_REVIEW_REASON}"
+                reason = "; ".join(["계좌번호 끝 4자리 유지"] + review_reasons)
                 plan.append({
                     "ex_id": ex_id, "item_id": item_id, "kind": kind,
                     "mask_box": redact_mod._as_box_dict(mask, ref_w, ref_h),
                     "keep_box": redact_mod._as_box_dict(keep, ref_w, ref_h),
                     "reason": reason,
-                    "needs_review": reading_tripped,
+                    "needs_review": bool(review_reasons),
                     "reading_band_counts": reading_counts or {},
                 })
             elif kind == "id_number":
                 raw = redact_mod.split_id_box(coords, text, geom)
                 mask = redact_mod.pad_box(
                     raw, pad, (False, True, True, True), ref_w, ref_h)
-                reason = "주민번호 뒷 7자리 가림"
-                if reading_tripped:
-                    reason = f"{reason}; {redact_mod.READING_BAND_REVIEW_REASON}"
+                reason = "; ".join(["주민번호 뒷 7자리 가림"] + review_reasons)
                 plan.append({
                     "ex_id": ex_id, "item_id": item_id, "kind": kind,
                     "mask_box": redact_mod._as_box_dict(mask, ref_w, ref_h),
                     "keep_box": None,
                     "reason": reason,
-                    "needs_review": reading_tripped,
+                    "needs_review": bool(review_reasons),
                     "reading_band_counts": reading_counts or {},
                 })
             else:  # phone
                 raw = redact_mod.split_phone_box(coords, text, geom)
                 mask = redact_mod.pad_box(
                     raw, pad, (False, True, False, True), ref_w, ref_h)
-                reason = "전화번호 가운데 4자리 가림"
-                if reading_tripped:
-                    reason = f"{reason}; {redact_mod.READING_BAND_REVIEW_REASON}"
+                reason = "; ".join(["전화번호 가운데 4자리 가림"] + review_reasons)
                 plan.append({
                     "ex_id": ex_id, "item_id": item_id, "kind": kind,
                     "mask_box": redact_mod._as_box_dict(mask, ref_w, ref_h),
                     "keep_box": None,
                     "reason": reason,
-                    "needs_review": reading_tripped,
+                    "needs_review": bool(review_reasons),
                     "reading_band_counts": reading_counts or {},
                 })
+        _flag_shared_lines(plan, line_texts)
     for reading in readings or []:
         ex_id = str(reading.get("ex_id", ""))
         size = preview_sizes.get(ex_id)
@@ -382,15 +441,40 @@ def run_privacy(
                        if stored.exists() and expected else True)
         except OSError:
             file_ok = True
+        # fix-cost bug 2: the leak check also looks for each PII
+        # reading's number still visible near its reading box.
+        pii_items = []
+        for item in reading.get("items", []) or []:
+            coords = _box_list(item.get("box"))
+            if str(item.get("kind", "")) in PII_KINDS and coords:
+                pii_items.append({
+                    "ex_id": ex_id, "item_id": str(item.get("item_id", "")),
+                    "kind": str(item.get("kind", "")), "box": coords,
+                    "text": str(item.get("text_verbatim", "")
+                                or item.get("normalized", "") or "")})
         checked = redact_mod.check_leak(
-            Path(original), redacted_path, entries, expected_sha256=None)
+            Path(original), redacted_path, entries, expected_sha256=None,
+            pii_items=pii_items)
         if not file_ok:
             checked = {"status": "fail", "findings": list(
                 checked.get("findings", [])) + [{
                     "ex_id": ex_id, "item_id": "",
                     "message": "원본 파일이 바뀌었습니다."}]}
+        item_reasons = (redact_mod.UNMASKED_LINE_REASON,
+                        redact_mod.LEAK_UNCHECKED_REASON)
         for finding in checked.get("findings", []) or []:
             leak_findings.append(finding)
+            message = finding.get("message")
+            if message not in item_reasons:
+                continue
+            for entry in entries:
+                if str(entry.get("item_id", "")) != finding.get("item_id"):
+                    continue
+                entry["needs_review"] = True
+                reason = str(entry.get("reason", "") or "")
+                if message not in reason:
+                    entry["reason"] = (f"{reason}; {message}"
+                                       if reason else message)
         if checked.get("status") == "fail":
             status = "fail"
         # L1 bands: glyph outside a mask flags the entry and its preview
@@ -412,9 +496,11 @@ def run_privacy(
                     entry["reason"] = (
                         f"{reason}; {redact_mod.LEAK_REVIEW_REASON}"
                         if reason else redact_mod.LEAK_REVIEW_REASON)
+        # Per-item leak warnings already ride on their entry's reason.
         warn_msgs = [
             str(f.get("message", "")) for f in checked.get("findings", [])
-            if f.get("warning") and f.get("message")]
+            if f.get("warning") and f.get("message")
+            and f.get("message") not in item_reasons]
         reason_parts = ([redact_mod.LEAK_REVIEW_REASON] if band_hit else [])
         reason_parts.extend(pre_reasons)
         reason_parts.extend(warn_msgs)

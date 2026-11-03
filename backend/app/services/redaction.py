@@ -336,6 +336,69 @@ def reading_band_counts(
 READING_BAND_REVIEW_REASON = "판독 상자 밖에 글자가 남아 있을 수 있음"
 
 
+def _ink_bands(window: Any) -> List[Tuple[int, int]]:
+    """Single text lines of a mask window as (top, bottom) row offsets.
+
+    Rule rows (table/cell borders: long dense ink runs) are not text;
+    small gaps inside a line are merged; bands outside the single-line
+    height limits are dropped (INT-3 1a, shared by refine and the
+    unmasked-line check).
+    """
+    row_counts = _mask_row_counts(window)
+    is_rule = [False] * len(row_counts)
+    for offset, total in enumerate(row_counts):
+        if total < 40:
+            continue
+        span = _mask_row_span(window, offset)
+        if span is None:
+            continue
+        width = span[1] - span[0] + 1
+        if width >= 100 and total / width >= 0.85:
+            is_rule[offset] = True
+    bands: List[Tuple[int, int]] = []
+    start: Optional[int] = None
+    gap = 0
+    for offset, total in enumerate(row_counts):
+        ink = total >= REFINE_MIN_INK_ROW and not is_rule[offset]
+        if ink:
+            if start is None:
+                start = offset
+            gap = 0
+        elif start is not None:
+            gap += 1
+            if gap >= 4:
+                bands.append((start, offset - gap))
+                start = None
+                gap = 0
+    if start is not None:
+        bands.append((start, len(row_counts) - 1 - gap))
+    return [(a, b) for (a, b) in bands
+            if REFINE_MIN_BAND_H <= b - a + 1 <= REFINE_MAX_BAND_H]
+
+
+def _merged_cells(
+    col_counts: List[int], img_w: int, gap_min: int
+) -> List[List[int]]:
+    """Value cells of a line: ink columns split by wide gaps (label | value)."""
+    cells: List[Tuple[int, int]] = []
+    run: Optional[int] = None
+    for pos, total in enumerate(col_counts):
+        if total > 0 and run is None:
+            run = pos
+        elif total == 0 and run is not None:
+            cells.append((run, pos - 1))
+            run = None
+    if run is not None:
+        cells.append((run, img_w - 1))
+    merged: List[List[int]] = []
+    for cell_left, cell_right in cells:
+        if merged and cell_left - merged[-1][1] - 1 < gap_min:
+            merged[-1][1] = cell_right
+        else:
+            merged.append([cell_left, cell_right])
+    return merged
+
+
 def refine_pii_box(
     ink_mask: Any,
     box: List[int],
@@ -373,38 +436,7 @@ def refine_pii_box(
     if win_bottom - win_top < REFINE_MIN_BAND_H:
         return None
     window = ink_mask.crop((0, win_top, img_w, win_bottom))
-    row_counts = _mask_row_counts(window)
-    # Rule rows (table/cell borders: long dense ink runs) are not text.
-    is_rule = [False] * len(row_counts)
-    for offset, total in enumerate(row_counts):
-        if total < 40:
-            continue
-        span = _mask_row_span(window, offset)
-        if span is None:
-            continue
-        width = span[1] - span[0] + 1
-        if width >= 100 and total / width >= 0.85:
-            is_rule[offset] = True
-    # Ink bands (single text lines), small gaps merged.
-    bands: List[Tuple[int, int]] = []
-    start: Optional[int] = None
-    gap = 0
-    for offset, total in enumerate(row_counts):
-        ink = total >= REFINE_MIN_INK_ROW and not is_rule[offset]
-        if ink:
-            if start is None:
-                start = offset
-            gap = 0
-        elif start is not None:
-            gap += 1
-            if gap >= 4:
-                bands.append((start, offset - gap))
-                start = None
-                gap = 0
-    if start is not None:
-        bands.append((start, len(row_counts) - 1 - gap))
-    bands = [(a, b) for (a, b) in bands
-             if REFINE_MIN_BAND_H <= b - a + 1 <= REFINE_MAX_BAND_H]
+    bands = _ink_bands(window)
     if not bands:
         return None
     best: Optional[List[int]] = None
@@ -417,23 +449,7 @@ def refine_pii_box(
             continue
         strip = window.crop((0, top, img_w, bottom + 1))
         col_counts = _mask_col_counts(strip)
-        # Value cells: ink columns split by wide gaps (label | value).
-        cells: List[Tuple[int, int]] = []
-        run: Optional[int] = None
-        for pos, total in enumerate(col_counts):
-            if total > 0 and run is None:
-                run = pos
-            elif total == 0 and run is not None:
-                cells.append((run, pos - 1))
-                run = None
-        if run is not None:
-            cells.append((run, img_w - 1))
-        merged: List[List[int]] = []
-        for cell_left, cell_right in cells:
-            if merged and cell_left - merged[-1][1] - 1 < gap_min:
-                merged[-1][1] = cell_right
-            else:
-                merged.append([cell_left, cell_right])
+        merged = _merged_cells(col_counts, img_w, gap_min)
         # Beyond-band strips spot vertical cell borders (trimmed), as
         # does a full-height ink column (a border spans the whole band;
         # even a tall "1" leaves the band's sparse edge rows blank).
@@ -486,6 +502,219 @@ def refine_pii_box(
         return None
     return [max(0, best[0]), max(0, best[1]),
             min(img_w, best[2]), min(img_h, best[3])]
+
+
+# fix-cost bug 2: a PII mask must sit on the reading's own line. On a
+# dense right-aligned receipt the reader's boxes sat 20-86px above the
+# real line; the snap then masked "SAMPLE Bank" and left the account
+# numbers visible while the strip checks passed. Fail closed instead:
+# a snap of a full line or more, or a line whose glyphs do not spell
+# the reading's digit pattern, is needs_review; the leak check also
+# looks for a still-visible line with the reading's pattern.
+# fix-cost-redaction review: 0.5 flagged correct snaps of 9.5-17px on
+# the demo receipts' 29px lines (live runs 3 and 4); every wrong-line
+# mask is still caught by the pattern check and the leak search.
+LINE_SHIFT_MAX = 1.0
+LINE_SHIFT_REVIEW_REASON = "가림 상자가 판독 위치에서 한 줄 이상 옮겨져 확인 필요"
+LINE_MATCH_REVIEW_REASON = "가린 줄이 판독한 번호와 맞는지 확인할 수 없어 확인 필요"
+SAME_LINE_REVIEW_REASON = "다른 번호와 같은 줄을 가려 확인 필요"
+INK_UNCHECKED_REVIEW_REASON = "글자 위치를 확인할 수 없어 확인 필요"
+UNMASKED_LINE_REASON = "판독한 번호와 같은 모양의 줄이 가려지지 않았을 수 있음"
+LEAK_UNCHECKED_REASON = "판독한 번호가 가려졌는지 확인할 수 없음"
+LINE_MIN_DIGITS = 4
+# A found line counts as masked when the masks hide at least this share
+# of the digits the kind is meant to hide (not just one touching pixel).
+LINE_HIDDEN_SHARE = 0.6
+
+
+def line_shift_too_far(box: List[int], refined: List[int]) -> bool:
+    """True when the snap moved a box a full text line (LINE_SHIFT_MAX) or more."""
+    try:
+        bx1, by1, bx2, by2 = (int(v) for v in box)
+        rx1, ry1, rx2, ry2 = (int(v) for v in refined)
+    except (TypeError, ValueError):
+        return True
+    line_h = max(1, by2 - by1, ry2 - ry1)
+    shift = abs((ry1 + ry2) / 2.0 - (by1 + by2) / 2.0)
+    return shift >= LINE_SHIFT_MAX * line_h
+
+
+def text_signature(text: str) -> str:
+    """Glyph pattern of a reading: D per digit, S per other glyph."""
+    return "".join("D" if ch.isdigit() else "S"
+                   for ch in str(text or "") if not ch.isspace())
+
+
+def glyph_signature(ink_mask: Any, box: List[int]) -> str:
+    """Glyph pattern of the ink inside a box (D digit-like, S small, X other).
+
+    Each ink column run is one glyph. The digit height is the most common
+    run height among the taller runs; a run of that height on the common
+    baseline is D (digits and capitals look alike, so the pattern, not
+    one glyph, decides), a run at most 0.6 of it is S (separators), any
+    other run is X (lowercase, descenders, brackets). X runs at either
+    end are cell borders and are dropped.
+    """
+    return "".join(token for _, _, token in _glyph_tokens(ink_mask, box))
+
+
+def _glyph_tokens(
+    ink_mask: Any, box: List[int]
+) -> List[Tuple[int, int, str]]:
+    """(x_start, x_end, token) per glyph run, edge X runs dropped."""
+    try:
+        x1, y1, x2, y2 = (int(v) for v in box)
+        x1, y1 = max(0, x1), max(0, y1)
+        x2, y2 = min(int(ink_mask.width), x2), min(int(ink_mask.height), y2)
+    except (TypeError, ValueError, AttributeError):
+        return []
+    if x2 - x1 < 2 or y2 - y1 < 2:
+        return []
+    crop = ink_mask.crop((x1, y1, x2, y2))
+    width, height = int(crop.width), int(crop.height)
+    blob = bytes(crop.tobytes())
+    cols = _mask_col_counts(crop)
+    runs: List[Tuple[int, int, int]] = []
+    start: Optional[int] = None
+    for pos, total in enumerate(cols + [0]):
+        if total > 0 and start is None:
+            start = pos
+        elif total == 0 and start is not None:
+            rows = [row for row in range(height)
+                    if 255 in blob[row * width + start:row * width + pos]]
+            runs.append((start, rows[0], rows[-1], pos))
+            start = None
+    if not runs:
+        return []
+    heights = [bottom - top + 1 for _, top, bottom, _ in runs]
+    tall = [h for h in heights if h >= 0.5 * max(heights)]
+
+    def _near(a: int, b: int) -> bool:
+        return abs(a - b) <= max(1, int(round(0.06 * b)))
+
+    digit_h = max(tall, key=lambda h: (sum(1 for o in tall if _near(o, h)), h))
+    tol = max(2, int(round(0.15 * digit_h)))
+    bottoms = sorted(bottom for (_, top, bottom, _), h in zip(runs, heights)
+                     if abs(h - digit_h) <= tol)
+    base = bottoms[len(bottoms) // 2]
+    tokens: List[Tuple[int, int, str]] = []
+    for (left, top, bottom, right), h in zip(runs, heights):
+        if abs(h - digit_h) <= tol and abs(bottom - base) <= tol:
+            token = "D"
+        elif h <= 0.6 * digit_h:
+            token = "S"
+        else:
+            token = "X"
+        tokens.append((x1 + left, x1 + right, token))
+    while tokens and tokens[0][2] == "X":
+        tokens.pop(0)
+    while tokens and tokens[-1][2] == "X":
+        tokens.pop()
+    return tokens
+
+
+def digits_to_hide(kind: str, text: str) -> int:
+    """Digits a kind's mask hides (split_*_box rules; all when short)."""
+    digits = sum(1 for ch in str(text or "") if ch.isdigit())
+    if kind == "account_number":
+        return digits - 4 if digits > 4 else digits
+    if kind == "id_number":
+        return digits - 6 if digits > 7 else digits
+    if kind == "phone":
+        return 4 if digits > 4 else digits
+    return digits
+
+
+def line_is_masked(
+    ink_mask: Any, line: List[int], masks: List[List[int]],
+    kind: str, text: str,
+) -> bool:
+    """True when masks hide most digits a kind should hide on a line.
+
+    A digit glyph is hidden when its center sits inside a mask that
+    covers at least half of the line's height; a mask that only touches
+    the line (padding of the line above) hides nothing.
+    """
+    try:
+        ly1, ly2 = int(line[1]), int(line[3])
+    except (TypeError, ValueError, IndexError):
+        return False
+    line_h = max(1, ly2 - ly1)
+    covering = []
+    for mask in masks:
+        try:
+            mx1, my1, mx2, my2 = (int(v) for v in mask)
+        except (TypeError, ValueError):
+            continue
+        if min(my2, ly2) - max(my1, ly1) >= 0.5 * line_h:
+            covering.append((mx1, mx2))
+    hidden = 0
+    for left, right, token in _glyph_tokens(ink_mask, line):
+        center = (left + right) / 2.0
+        if token == "D" and any(mx1 <= center < mx2 for mx1, mx2 in covering):
+            hidden += 1
+    need = max(1, int(round(LINE_HIDDEN_SHARE * digits_to_hide(kind, text))))
+    return hidden >= need
+
+
+def signature_matches(observed: str, expected: str) -> bool:
+    """Observed glyph pattern spells the reading (small edit distance).
+
+    A separator in the reading matches an S or X run at no cost (a
+    bracket is taller than a digit); anything else costs 1. Readings
+    with fewer than LINE_MIN_DIGITS digits cannot be confirmed.
+    """
+    if expected.count("D") < LINE_MIN_DIGITS or not observed:
+        return False
+    prev = list(range(len(observed) + 1))
+    for i, want in enumerate(expected, start=1):
+        cur = [i] + [0] * len(observed)
+        for j, got in enumerate(observed, start=1):
+            same = got == want or (want == "S" and got == "X")
+            cur[j] = min(prev[j] + 1, cur[j - 1] + 1,
+                         prev[j - 1] + (0 if same else 1))
+        prev = cur
+    return prev[-1] <= max(1, len(expected) // 8)
+
+
+def pii_line_matches(ink_mask: Any, box: List[int], text: str) -> bool:
+    """True when the box's ink spells the reading's digit pattern."""
+    return signature_matches(glyph_signature(ink_mask, box),
+                             text_signature(text))
+
+
+def find_pii_lines(
+    ink_mask: Any, box: List[int], text: str
+) -> List[List[int]]:
+    """Cells near a reading box whose ink spells the reading's pattern.
+
+    Same window and bands as refine_pii_box (+-REFINE_DY); used by the
+    leak check to spot the reading's number still visible on a line no
+    mask covers.
+    """
+    try:
+        img_w, img_h = int(ink_mask.width), int(ink_mask.height)
+        x1, y1, x2, y2 = (int(v) for v in box)
+    except (TypeError, ValueError, AttributeError):
+        return []
+    count = len(text_signature(text))
+    if count <= 0 or x2 <= x1 or y2 <= y1:
+        return []
+    gap_min = max(12, int(round(max(1.0, (x2 - x1) / count))))
+    win_top = max(0, y1 - REFINE_DY)
+    win_bottom = min(img_h, y2 + REFINE_DY)
+    if win_bottom - win_top < REFINE_MIN_BAND_H:
+        return []
+    window = ink_mask.crop((0, win_top, img_w, win_bottom))
+    found: List[List[int]] = []
+    for top, bottom in _ink_bands(window):
+        strip = window.crop((0, top, img_w, bottom + 1))
+        for left, right in _merged_cells(_mask_col_counts(strip), img_w,
+                                         gap_min):
+            cell = [left, win_top + top, right + 1, win_top + bottom + 1]
+            if pii_line_matches(ink_mask, cell, text):
+                found.append(cell)
+    return found
 
 
 def _geom_range(
@@ -872,6 +1101,7 @@ def check_leak(
     redacted_path: Path,
     plan_entries: List[Dict[str, Any]],
     expected_sha256: Optional[str] = None,
+    pii_items: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """Rule leak check without a re-read (P0).
 
@@ -880,6 +1110,12 @@ def check_leak(
     (privacy-safe direction), so it is a warning that flags a preview
     check instead of a HOLD. A mask whose original area is blank white is
     likewise a warning (likely misaligned box), not a failure.
+    fix-cost bug 2: ``pii_items`` ({ex_id, item_id, box, text} from the
+    reading) are searched near their reading box; a line that spells the
+    reading's number and whose digits the masks do not mostly hide
+    (line_is_masked) is a warning (preview review, the image stays out
+    of the bundle until the user confirms). Without an ink mask every
+    item is a warning too (fail closed).
     """
     from PIL import Image
 
@@ -944,6 +1180,36 @@ def check_leak(
             findings.append({
                 "ex_id": ex_id, "item_id": item_id,
                 "message": "원본 가림 영역이 비어 있어 박스 확인이 필요합니다.",
+                "warning": True})
+    if pii_items:
+        try:
+            ink = build_ink_mask(original)
+        except Exception:
+            ink = None
+        masks: List[List[int]] = []
+        for entry in plan_entries or []:
+            mask = entry.get("mask_box") or {}
+            try:
+                masks.append([int(mask.get("x1", 0)), int(mask.get("y1", 0)),
+                              int(mask.get("x2", 0)), int(mask.get("y2", 0))])
+            except (TypeError, ValueError, AttributeError):
+                continue
+        for item in pii_items:
+            text = str(item.get("text", ""))
+            kind = str(item.get("kind", ""))
+            if ink is None:
+                # Fail closed: no ink mask, no proof the number is hidden.
+                message = LEAK_UNCHECKED_REASON
+            else:
+                lines = find_pii_lines(ink, list(item.get("box") or []), text)
+                if all(line_is_masked(ink, line, masks, kind, text)
+                       for line in lines):
+                    continue
+                message = UNMASKED_LINE_REASON
+            findings.append({
+                "ex_id": str(item.get("ex_id", "")),
+                "item_id": str(item.get("item_id", "")),
+                "message": message,
                 "warning": True})
     hard = [f for f in findings if not f.get("warning")]
     return {"status": "fail" if hard else "pass", "findings": findings}
