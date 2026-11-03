@@ -1,7 +1,7 @@
 import os
 from datetime import date, timedelta
 from decimal import Decimal
-from typing import Dict, Any, Optional
+from typing import Dict, Any, List, Optional
 from pypdf import PdfReader, PdfWriter
 
 from reportlab.lib.pagesizes import A4
@@ -48,6 +48,10 @@ def _fmt_kr_date(d: date) -> str:
 
 def _fmt_won(amount: Decimal) -> str:
     return f"{int(amount):,}"
+
+
+def _fmt_rate(rate: Decimal) -> str:
+    return format(rate.normalize(), "f")
 
 
 class CaliforniaSC100Compiler:
@@ -170,6 +174,7 @@ class KoreanLegalDocumentCompiler:
         verification: VerificationResult,
         output_path: str,
         as_of: Optional[date] = None,
+        fact_sentences: Optional[List[str]] = None,
     ) -> str:
         """
         내용증명 PDF 생성 (나눔고딕 한글 폰트)
@@ -243,7 +248,7 @@ class KoreanLegalDocumentCompiler:
             ["", Paragraph(f"주소: {p.address or '미기재'}", body_style)],
             [Paragraph("<b>수 신 인:</b>", bold_style), Paragraph(f"{d.name} (연락처: {d.phone or '미기재'})", body_style)],
             ["", Paragraph(f"주소: {d.address or '미기재'}", body_style)],
-            [Paragraph("<b>제    목:</b>", bold_style), Paragraph("<b>대여금 반환 청구 및 최종 변제 독촉의 건</b>", bold_style)],
+            [Paragraph("<b>제    목:</b>", bold_style), Paragraph("<b>대여금 반환 청구의 건</b>", bold_style)],
         ]
         info_table = Table(info_data, colWidths=[65, 430])
         info_table.setStyle(TableStyle([
@@ -256,10 +261,17 @@ class KoreanLegalDocumentCompiler:
 
         principal_str = f"{_fmt_won(loan_fact.principal_amount)}원"
         remaining_str = f"{_fmt_won(verification.reconciled_amount)}원"
-        interest_str = f"{_fmt_won(verification.calculated_interest)}원"
-        total_str = f"{_fmt_won(verification.total_claim_amount)}원"
+        if as_of is not None:
+            base_s = _fmt_kr_date(as_of)
+            interest_str = f"{_fmt_won(verification.calculated_interest)}원 ({base_s} 기준)"
+            total_str = f"{_fmt_won(verification.total_claim_amount)}원"
+            total_disp = f"{total_str} ({base_s} 기준)"
+        else:
+            interest_str = f"{_fmt_won(verification.calculated_interest)}원"
+            total_str = ""
+            total_disp = ""
 
-        elements.append(Paragraph(f"<b>[청구 금액 합계: 금 {total_str}]</b> (남은 원금: {remaining_str}, 현재 지연손해금: {interest_str})", bold_style))
+        elements.append(Paragraph(f"<b>[청구 금액 합계: 금 {total_disp}]</b> (남은 원금: {remaining_str}, 현재 지연손해금: {interest_str})", bold_style))
         elements.append(Spacer(1, 10))
 
         loan_d = _fmt_kr_date(loan_fact.loan_date)
@@ -269,13 +281,19 @@ class KoreanLegalDocumentCompiler:
             f"귀하는 이를 <b>{due_d}</b>까지 전액 변제하기로 약정하였습니다."
         )
         if loan_fact.repayments:
-            reps = sorted(loan_fact.repayments, key=lambda r: r.payment_date)
+            if as_of is not None:
+                reps = sorted(
+                    [r for r in loan_fact.repayments if r.payment_date <= as_of],
+                    key=lambda r: r.payment_date,
+                )
+            else:
+                reps = sorted(loan_fact.repayments, key=lambda r: r.payment_date)
             if len(reps) == 1:
                 r = reps[0]
                 r_d = _fmt_kr_date(r.payment_date)
                 r_amt = _fmt_won(r.amount)
                 item2 += f"<br/>그중 {r_amt}원을 {r_d} 받았고 남은 원금은 {remaining_str}입니다."
-            else:
+            elif len(reps) > 1:
                 total_repaid = sum((r.amount for r in reps), Decimal("0"))
                 total_s = _fmt_won(total_repaid)
                 last_d = _fmt_kr_date(reps[-1].payment_date)
@@ -288,34 +306,48 @@ class KoreanLegalDocumentCompiler:
             deadline = as_of + timedelta(days=7)
             deadline_s = _fmt_kr_date(deadline)
             item4 = (
-                f"4. 이에 발신인은 본 내용증명을 통하여 귀하에게 최종 변제를 촉구하오니, "
-                f"<b>{deadline_s}</b>까지 위 원리금 합계액(금 {total_str})을 보내 주시기 바랍니다."
+                f"4. 이에 발신인은 본 내용증명을 통하여 귀하에게 "
+                f"<b>{deadline_s}</b>까지 위 원리금 합계액(금 {total_disp})을 보내 주시기 바랍니다."
             )
         else:
             item4 = (
-                f"4. 이에 발신인은 본 내용증명을 통하여 귀하에게 최종 변제를 촉구하오니, "
+                f"4. 이에 발신인은 본 내용증명을 통하여 귀하에게 "
                 f"위 원리금 합계액(금 {total_str})을 보내 주시기 바랍니다."
             )
 
-        body_text = (
-            f"1. 귀하의 무궁한 발전을 기원합니다.<br/><br/>"
-            f"{item2}<br/><br/>"
-            f"3. 발신인은 변제기 이후 현재까지 남은 돈을 받지 못했습니다.<br/><br/>"
-            f"{item4}"
-        )
+        if fact_sentences:
+            fact_block = "<br/><br/>".join(fact_sentences)
+            body_text = (
+                f"1. 귀하의 무궁한 발전을 기원합니다.<br/><br/>"
+                f"{fact_block}<br/><br/>"
+                f"{item4}"
+            )
+        else:
+            body_text = (
+                f"1. 귀하의 무궁한 발전을 기원합니다.<br/><br/>"
+                f"{item2}<br/><br/>"
+                f"3. 발신인은 변제기 이후 현재까지 남은 돈을 받지 못했습니다.<br/><br/>"
+                f"{item4}"
+            )
         elements.append(Paragraph(body_text, body_style))
         elements.append(Spacer(1, 25))
 
         if as_of is not None:
-            date_str = as_of.strftime("%Y년 %m월 %d일")
+            date_str = f"{as_of.year}년 {as_of.month}월 {as_of.day}일"
         else:
             date_str = "____년 __월 __일"
         elements.append(Paragraph(date_str, center_style))
         elements.append(Spacer(1, 10))
         elements.append(Paragraph(f"<b>발신인: {p.name} (인/서명)</b>", right_style))
-        elements.append(Paragraph(NOTICE_KO, notice_style))
 
-        doc.build(elements)
+        def _footer(canvas, _doc):
+            canvas.saveState()
+            canvas.setFont(KO_FONT, 7)
+            canvas.setFillColor(colors.grey)
+            canvas.drawCentredString(A4[0] / 2, 30, NOTICE_KO)
+            canvas.restoreState()
+
+        doc.build(elements, onFirstPage=_footer, onLaterPages=_footer)
         return output_path
 
     @classmethod
@@ -323,6 +355,8 @@ class KoreanLegalDocumentCompiler:
         cls,
         loan_fact: LoanFactSchema,
         verification: VerificationResult,
+        as_of: Optional[date] = None,
+        fact_sentences: Optional[List[str]] = None,
     ) -> Dict[str, str]:
         """
         대한민국 법원 전자소송 클립보드 블록
@@ -330,10 +364,18 @@ class KoreanLegalDocumentCompiler:
         p = loan_fact.creditor
         d = loan_fact.debtor
 
+        base_date = as_of
+        if base_date is None and verification.calculation is not None:
+            base_date = verification.calculation.reference_total.as_of
         remaining_str = f"{_fmt_won(verification.reconciled_amount)}"
         principal_str = f"{_fmt_won(loan_fact.principal_amount)}"
-        interest_str = f"{_fmt_won(verification.calculated_interest)}"
-        total_str = f"{_fmt_won(verification.total_claim_amount)}"
+        if base_date is not None:
+            base_s = _fmt_kr_date(base_date)
+            interest_str = f"{_fmt_won(verification.calculated_interest)} ({base_s} 기준)"
+            total_str = f"{_fmt_won(verification.total_claim_amount)} ({base_s} 기준)"
+        else:
+            interest_str = f"{_fmt_won(verification.calculated_interest)}"
+            total_str = ""
 
         parties_text = (
             f"채권자: {p.name}\n"
@@ -354,27 +396,11 @@ class KoreanLegalDocumentCompiler:
                 f"라는 명령을 구함."
             )
         else:
-            if loan_fact.repayments:
-                last_rep = max(r.payment_date for r in loan_fact.repayments)
-                due_next = loan_fact.due_date + timedelta(days=1)
-                last_next = last_rep + timedelta(days=1)
-                acc = due_next if due_next > last_next else last_next
-            else:
-                acc = loan_fact.due_date + timedelta(days=1)
-            acc_s = _fmt_kr_date(acc)
-            is_commercial = getattr(loan_fact.transaction_kind, "value", "civil") == "commercial"
-            rate_pre = "연 6%" if is_commercial else "연 5%"
-            claim_purpose = (
-                f"1. 채무자는 채권자에게 {remaining_str}원 및 이에 대하여 {acc_s}부터 "
-                f"이 사건 지급명령 정본 송달일까지는 {rate_pre}, "
-                f"그 다음 날부터 다 갚는 날까지는 연 12%의 각 비율로 계산한 돈을 지급하라.\n"
-                f"2. 독촉절차비용은 채무자의 부담으로 한다.\n"
-                f"라는 명령을 구함."
-            )
+            claim_purpose = ""
 
         if loan_fact.demand_date:
             dem_s = _fmt_kr_date(loan_fact.demand_date)
-            demand_clause = f"채권자는 {dem_s}경 채무자에게 최종 변제를 요청하였으나, 채무자는 현재까지 이를 지급하지 않고 있습니다."
+            demand_clause = f"채권자는 {dem_s}경 채무자에게 변제를 요청하였으나, 채무자는 현재까지 이를 지급하지 않고 있습니다."
         else:
             demand_clause = "채무자는 변제기 이후 현재까지 남은 돈을 지급하지 않고 있습니다."
 
@@ -384,14 +410,22 @@ class KoreanLegalDocumentCompiler:
             f"채권자는 {loan_s}경 채무자에게 금 {principal_str}원을 대여하였고, "
             f"채무자는 이를 {due_s}까지 변제하기로 약정하였습니다."
         )
+        if loan_fact.agreed_interest_rate is not None:
+            lend_part += f" 이자는 연 {_fmt_rate(loan_fact.agreed_interest_rate)}%로 정하였습니다."
         if loan_fact.repayments:
-            reps = sorted(loan_fact.repayments, key=lambda r: r.payment_date)
+            if base_date is not None:
+                reps = sorted(
+                    [r for r in loan_fact.repayments if r.payment_date <= base_date],
+                    key=lambda r: r.payment_date,
+                )
+            else:
+                reps = sorted(loan_fact.repayments, key=lambda r: r.payment_date)
             if len(reps) == 1:
                 r = reps[0]
                 r_d = _fmt_kr_date(r.payment_date)
                 r_amt = _fmt_won(r.amount)
                 lend_part += f" 그중 {r_amt}원을 {r_d} 받았고 남은 원금은 {remaining_str}원입니다."
-            else:
+            elif len(reps) > 1:
                 total_repaid = sum((r.amount for r in reps), Decimal("0"))
                 total_s = _fmt_won(total_repaid)
                 last_d = _fmt_kr_date(reps[-1].payment_date)
@@ -400,16 +434,27 @@ class KoreanLegalDocumentCompiler:
                     f"남은 원금은 {remaining_str}원입니다. (마지막 수령일 {last_d})"
                 )
 
-        claim_cause_payment_order = (
-            f"1. 당사자 관계\n"
-            f"채권자는 채무자에게 금전을 대여한 자이며, 채무자는 이를 차용한 자입니다.\n\n"
-            f"2. 대여사실 및 변제약정\n"
-            f"{lend_part}\n\n"
-            f"3. 변제기 이후 상황\n"
-            f"약정 변제기가 지났음에도 {demand_clause}\n\n"
-            f"4. 결론\n"
-            f"따라서 채권자는 위 대여원금 및 지연손해금을 지급받기 위하여 본 신청에 이르렀습니다."
-        )
+        if fact_sentences:
+            fact_block = "\n".join(fact_sentences)
+            claim_cause_payment_order = (
+                f"1. 당사자 관계\n"
+                f"채권자는 채무자에게 금전을 대여한 자이며, 채무자는 이를 차용한 자입니다.\n\n"
+                f"2. 대여사실 및 변제약정\n"
+                f"{fact_block}\n\n"
+                f"3. 결론\n"
+                f"따라서 채권자는 위 대여원금 및 지연손해금을 지급받기 위하여 본 신청에 이르렀습니다."
+            )
+        else:
+            claim_cause_payment_order = (
+                f"1. 당사자 관계\n"
+                f"채권자는 채무자에게 금전을 대여한 자이며, 채무자는 이를 차용한 자입니다.\n\n"
+                f"2. 대여사실 및 변제약정\n"
+                f"{lend_part}\n\n"
+                f"3. 변제기 이후 상황\n"
+                f"약정 변제기가 지났음에도 {demand_clause}\n\n"
+                f"4. 결론\n"
+                f"따라서 채권자는 위 대여원금 및 지연손해금을 지급받기 위하여 본 신청에 이르렀습니다."
+            )
 
         evidence_citations = ", ".join([f"[{e.id} {e.title}]" for e in loan_fact.evidences])
         claim_cause_lawsuit = (

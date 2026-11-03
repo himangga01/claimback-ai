@@ -46,10 +46,16 @@ def _kr_days(start_exclusive: date, end_inclusive: date) -> int:
     return diff if diff > 0 else 0
 
 
+def _kr_numer(principal: Decimal, days: int, rate_percent: Decimal) -> Decimal:
+    if days <= 0 or principal <= Decimal("0") or rate_percent <= Decimal("0"):
+        return Decimal("0")
+    return principal * rate_percent * Decimal(days)
+
+
 def _kr_interest_exact(principal: Decimal, days: int, rate_percent: Decimal) -> Decimal:
     if days <= 0 or principal <= Decimal("0") or rate_percent <= Decimal("0"):
         return Decimal("0")
-    return principal * (rate_percent / Decimal("100")) * (Decimal(days) / _D365)
+    return (principal * rate_percent * Decimal(days)) / Decimal("36500")
 
 
 def _floor_krw(amount: Decimal) -> Decimal:
@@ -93,6 +99,12 @@ def _build_rate_sentence(
 _UNSUPPORTED_REPAYMENT_MSG = (
     "이 변제 형태(이자보다 적은 변제)의 청구취지 문구는 아직 지원하지 않습니다. "
     "확인할 칸: 변제 내역"
+)
+
+
+_UNSUPPORTED_RATE_MSG = (
+    "이 이율 조합의 청구취지 문구는 아직 지원하지 않습니다. "
+    "확인할 칸: 약정 이율"
 )
 
 
@@ -150,6 +162,44 @@ def _kr_interval_interest(
     return total, pre_part, post_part, cont_part, details
 
 
+def _kr_interval_numer(
+    loan_fact: LoanFactSchema,
+    principal: Decimal,
+    start_exc: date,
+    end_inc: date,
+    capped_agreed: Optional[Decimal],
+    pre_rate: Decimal,
+    post_rate: Decimal,
+) -> Decimal:
+    numer_total = Decimal("0")
+    if end_inc <= start_exc or principal <= Decimal("0"):
+        return numer_total
+    if capped_agreed is not None:
+        o_start = max(start_exc, loan_fact.loan_date)
+        o_end = min(end_inc, loan_fact.due_date)
+        days = _kr_days(o_start, o_end)
+        if days > 0:
+            numer_total += _kr_numer(principal, days, capped_agreed)
+    if loan_fact.service_date is not None:
+        o_start = max(start_exc, loan_fact.due_date)
+        o_end = min(end_inc, loan_fact.service_date)
+    else:
+        o_start = max(start_exc, loan_fact.due_date)
+        o_end = end_inc
+    if o_end > loan_fact.due_date and o_end > o_start:
+        days_pre = _kr_days(o_start, o_end)
+        if days_pre > 0:
+            numer_total += _kr_numer(principal, days_pre, pre_rate)
+    if loan_fact.service_date is not None:
+        o_start_post = max(start_exc, loan_fact.service_date)
+        o_end_post = end_inc
+        if o_end_post > loan_fact.service_date and o_end_post > o_start_post:
+            days_post = _kr_days(o_start_post, o_end_post)
+            if days_post > 0:
+                numer_total += _kr_numer(principal, days_post, post_rate)
+    return numer_total
+
+
 def calculate_kr(loan_fact: LoanFactSchema, as_of: date) -> Calculation:
     warnings: List[str] = []
     missing_fields: List[str] = []
@@ -189,6 +239,11 @@ def calculate_kr(loan_fact: LoanFactSchema, as_of: date) -> Calculation:
         [r for r in loan_fact.repayments if r.payment_date <= as_of],
         key=lambda x: x.payment_date,
     )
+    if any(r.payment_date > as_of for r in loan_fact.repayments):
+        warnings.append(
+            f"기준일({_format_kr_date(as_of)}) 뒤의 변제가 있어 받지 않은 것으로 계산했습니다. "
+            "확인할 칸: 변제 내역"
+        )
 
     current_principal = loan_fact.principal_amount
     overpayment = Decimal("0")
@@ -212,8 +267,13 @@ def calculate_kr(loan_fact: LoanFactSchema, as_of: date) -> Calculation:
                 f"{_format_exact_2(exact)}"
             )
             steps.append(CalculationStep(label=label, formula=formula, amount=exact))
-        combined_exact = carry_unpaid + total_exact
-        floored = _floor_krw(combined_exact)
+        numer_total = _kr_interval_numer(
+            loan_fact, current_principal, prev_exc, rep.payment_date,
+            capped, pre_rate, post_rate,
+        )
+        combined_numer = carry_unpaid * Decimal("36500") + numer_total
+        combined_exact = combined_numer / Decimal("36500")
+        floored = combined_numer // Decimal("36500")
         steps.append(
             CalculationStep(
                 label="충당 시 이자 합계",
@@ -286,8 +346,12 @@ def calculate_kr(loan_fact: LoanFactSchema, as_of: date) -> Calculation:
                 f"{_format_exact_2(exact)}"
             )
             steps.append(CalculationStep(label=label, formula=formula, amount=exact))
-        combined_final = carry_unpaid + total_exact_f
-        floored_final = _floor_krw(combined_final)
+        numer_final = _kr_interval_numer(
+            loan_fact, current_principal, prev_exc, as_of, capped, pre_rate, post_rate
+        )
+        combined_numer_f = carry_unpaid * Decimal("36500") + numer_final
+        combined_final = combined_numer_f / Decimal("36500")
+        floored_final = combined_numer_f // Decimal("36500")
         steps.append(
             CalculationStep(
                 label="기준일 이자 합계",
@@ -301,15 +365,24 @@ def calculate_kr(loan_fact: LoanFactSchema, as_of: date) -> Calculation:
         accrued = Decimal("0")
         reference_amount = Decimal("0")
 
-    if sorted_reps:
-        last_rep_date = sorted_reps[-1].payment_date
-        due_next = loan_fact.due_date + timedelta(days=1)
-        last_next = last_rep_date + timedelta(days=1)
-        accrual_start = due_next if due_next > last_next else last_next
+    unsupported_rate = capped is not None and capped < statutory
+    if unsupported_rate and "agreed_interest_rate" not in missing_fields:
+        missing_fields.append("agreed_interest_rate")
+    if capped is not None and capped >= statutory:
+        if sorted_reps:
+            accrual_start = sorted_reps[-1].payment_date + timedelta(days=1)
+        else:
+            accrual_start = loan_fact.loan_date + timedelta(days=1)
     else:
-        accrual_start = loan_fact.due_date + timedelta(days=1)
+        if sorted_reps:
+            last_rep_date = sorted_reps[-1].payment_date
+            due_next = loan_fact.due_date + timedelta(days=1)
+            last_next = last_rep_date + timedelta(days=1)
+            accrual_start = due_next if due_next > last_next else last_next
+        else:
+            accrual_start = loan_fact.due_date + timedelta(days=1)
 
-    if unsupported:
+    if unsupported or unsupported_rate or current_principal <= Decimal("0"):
         sentence = ""
     else:
         sentence = _build_rate_sentence(current_principal, accrual_start, pre_rate, post_rate)
@@ -541,14 +614,15 @@ class DeterministicLegalCalculator:
 
         agreed = loan_fact.agreed_interest_rate
         if agreed is not None:
-            audit_log.append(f"약정 이율 연 {agreed:.1f}%로 계산")
+            capped_log = agreed if agreed <= Decimal("20.0") else Decimal("20.0")
+            audit_log.append(f"약정 이율 연 {_format_rate(capped_log)}%로 계산")
         else:
             base_rate = (
                 Decimal("6.0")
                 if loan_fact.transaction_kind == TransactionKindEnum.COMMERCIAL
                 else Decimal("5.0")
             )
-            audit_log.append(f"기준 이율 연 {base_rate:.1f}%로 계산")
+            audit_log.append(f"기준 이율 연 {_format_rate(base_rate)}%로 계산")
 
         for alloc in calc.allocations:
             audit_log.append(
@@ -579,7 +653,7 @@ class DeterministicLegalCalculator:
                 )
                 pre_rate = calc.rate_clause.pre_service_rate
                 audit_log.append(
-                    f"{start_inc} ~ {calculation_date} 송달 전 지연손해금(연 {pre_rate:.1f}%) "
+                    f"{start_inc} ~ {calculation_date} 송달 전 지연손해금(연 {_format_rate(pre_rate)}%) "
                     f"{_format_exact_2(pre_total)} 발생"
                 )
         else:
@@ -747,6 +821,8 @@ class VerificationGateService:
             expected_total = calc_obj.reference_total.amount
             if "repayments" in calc_obj.missing_fields and calc_obj.rate_clause.sentence == "":
                 missing_requirements.append(_UNSUPPORTED_REPAYMENT_MSG)
+            if "agreed_interest_rate" in calc_obj.missing_fields and calc_obj.rate_clause.sentence == "":
+                missing_requirements.append(_UNSUPPORTED_RATE_MSG)
         else:
             remaining_principal, calculated_interest, overpayment, calc_logs, breakdown = (
                 DeterministicLegalCalculator.apply_repayments_and_calculate_balance(

@@ -42,6 +42,26 @@ NORMAL_SENTENCES = [
     "약속을 지키지 않았다",
     "돈을 돌려받지 못했다",
     "연락처를 알고 있다",
+    "{{debtor_name}}이 원금을 갚지 않았다",
+    "회사원인 친구와 만났다",
+    "친구 사이이다",
+    "이사를 했다",
+    "일이 생겨서 늦었다",
+    "조만간 만나기로 했다",
+    "천천히 걸어갔다",
+    "만일 비가 오면 연기한다",
+    "이틀 동안 기다렸다",
+    "에서 양해를 구했다",
+    "credit counseling을 받았다",
+    "영영 돌아오지 않았다",
+    "만만한 상대가 아니다",
+    "사이좋게 지냈다",
+    "이사가 끝났다",
+    "일이 잘 풀렸다",
+    "그는 회사원이다",
+    "원금을 돌려받았다",
+    "조만간 연락하겠다",
+    "이 돈은 갚지 않았다",
 ]
 
 
@@ -84,7 +104,7 @@ def test_g1a_normal_draft_passes():
 
 
 def test_g1a_plain_korean_sentences_pass():
-    assert len(NORMAL_SENTENCES) >= 20
+    assert len(NORMAL_SENTENCES) >= 40
     draft = SlotDraft(
         lang="ko",
         sentences=[

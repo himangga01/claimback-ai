@@ -156,7 +156,7 @@ def test_agreed_interest_rate_capped_at_20_percent():
     rem_p, acc_i, overp, log, breakdown = DeterministicLegalCalculator.apply_repayments_and_calculate_balance(
         fact, calculation_date=date(2026, 4, 1)
     )
-    assert any("20.0%" in line for line in log)
+    assert any("연 20%로 계산" in line for line in log)
 
 
 def test_verification_tampering_reconciliation(sample_korean_loan_fact):
@@ -216,7 +216,7 @@ def test_korean_civil_interest_segments_pre_and_post_service(sample_korean_loan_
     assert breakdown["pre_service_interest"] > Decimal("0")
     assert breakdown["post_service_interest"] > Decimal("0")
     assert any("소촉법 송달 후 지연손해금(연 12%)" in line for line in log)
-    assert any("송달 전 지연손해금(연 5.0%)" in line for line in log)
+    assert any("송달 전 지연손해금(연 5%)" in line for line in log)
 
 
 def test_korean_civil_interest_without_service_date_uses_5_percent_only(sample_korean_loan_fact):
@@ -229,7 +229,7 @@ def test_korean_civil_interest_without_service_date_uses_5_percent_only(sample_k
             sample_korean_loan_fact, calculation_date=calc_date
         )
     )
-    assert any("연 5.0%" in line for line in log)
+    assert any("연 5%로 계산" in line for line in log)
     assert not any("연 12%" in line for line in log)
 
 
