@@ -63,14 +63,28 @@
             <h3 id="viewer-title" data-testid="viewer-title">증거 보기</h3>
             <span id="viewer-meta" data-testid="viewer-meta" class="viewer-meta"></span>
           </div>
-          <div id="viewer" data-testid="viewer" class="viewer">
-            <div id="viewer-inner" class="viewer-inner">
-              <img id="viewer-img" data-testid="viewer-img" alt="선택한 증거 이미지" hidden>
-              <div id="box-layer" data-testid="box-layer" class="box-layer"></div>
+          <div class="viewer-row">
+            <div class="viewer-col">
+              <p class="legend" data-testid="original-legend">원본</p>
+              <div id="viewer" data-testid="viewer" class="viewer">
+                <div id="viewer-inner" class="viewer-inner">
+                  <img id="viewer-img" data-testid="viewer-img" alt="선택한 증거 이미지" hidden>
+                  <div id="box-layer" data-testid="box-layer" class="box-layer"></div>
+                </div>
+                <p id="viewer-empty" data-testid="viewer-empty" class="viewer-empty">증거를 선택하세요.</p>
+              </div>
             </div>
-            <p id="viewer-empty" data-testid="viewer-empty" class="viewer-empty">증거를 선택하세요.</p>
+            <div id="redaction-col" data-testid="redaction-col" class="viewer-col" hidden>
+              <p class="legend" data-testid="redaction-legend">가린 사본</p>
+              <div class="viewer">
+                <div class="viewer-inner">
+                  <img id="redaction-img" data-testid="redaction-img" alt="가림 미리보기">
+                </div>
+              </div>
+            </div>
           </div>
           <p class="legend" data-testid="box-legend"><span class="legend-swatch" aria-hidden="true"></span>Spark 판독 박스</p>
+          <p id="segment-legend" data-testid="segment-legend" class="legend" hidden><span class="legend-swatch-segment" aria-hidden="true"></span>SAM이 찾은 영역</p>
           <p id="reading-note" data-testid="reading-note" class="hint"></p>
         </div>
         <div class="cp-right">
@@ -121,6 +135,10 @@
       <h2 id="package-title" tabindex="-1">6. 서류 패키지</h2>
       <h3>파일</h3>
       <ul id="file-list" data-testid="file-list" class="plain-list"></ul>
+      <div id="pkg-gates" data-testid="pkg-gates" hidden>
+        <h3>서류 검사</h3>
+        <div id="pkg-gate-list" data-testid="pkg-gate-list" class="gate-summary"></div>
+      </div>
       <h3>청구 취지</h3>
       <pre id="claim-purpose" data-testid="claim-purpose" class="copy-block"></pre>
       <button data-testid="copy-claim-purpose" type="button" class="copy-btn" data-copy="claim-purpose">복사</button>

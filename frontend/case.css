@@ -200,6 +200,10 @@ button.danger {
   border-radius: 4px;
   padding: 1px 7px;
   color: #1f2a36;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .step-meta { color: var(--muted); }
 .step-status { font-weight: 700; }
@@ -296,6 +300,25 @@ button.danger {
   border-radius: 2px;
 }
 
+.segment-box {
+  position: absolute;
+  border: 2px solid #c2410c;
+  background: rgba(194, 65, 12, 0.16);
+  border-radius: 2px;
+}
+
+.viewer-row {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: stretch;
+}
+
+.viewer-col {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .reading-box.flash { animation: boxflash 0.5s ease-in-out 4; }
 
 @keyframes boxflash {
@@ -322,6 +345,14 @@ button.danger {
   height: 12px;
   border: 2px solid var(--deep-blue);
   background: rgba(11, 61, 145, 0.18);
+}
+
+.legend-swatch-segment {
+  display: inline-block;
+  width: 20px;
+  height: 12px;
+  border: 2px solid #c2410c;
+  background: rgba(194, 65, 12, 0.16);
 }
 
 .fields-table, .calc-table {
@@ -351,6 +382,14 @@ button.danger {
   display: inline-block;
   font-size: 12px;
   color: var(--muted);
+  margin-top: 2px;
+}
+
+.field-error {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--danger);
   margin-top: 2px;
 }
 
@@ -405,7 +444,7 @@ button.danger {
 .slots-view { font-size: 13px; background: #f4f7fb; border-radius: 4px; padding: 8px 10px; }
 .rendered-text { font-size: 14px; }
 .findings { font-size: 13px; }
-.findings.is-ok { color: var(--accent); font-weight: 700; }
+.findings.is-ok { color: var(--muted); font-weight: 700; }
 .findings.is-bad { color: var(--danger); }
 .findings .gate-name { font-weight: 800; }
 .sentence-notice { font-size: 13px; font-weight: 700; color: var(--danger); }
@@ -422,6 +461,9 @@ button.danger {
 
 .gate-summary { font-size: 13px; margin-bottom: 12px; }
 .gate-row { padding: 3px 0; }
+.gate-row[data-status="fail"] { color: var(--danger); font-weight: 700; }
+.gate-row[data-status="pass"] { color: var(--accent); }
+.gate-row[data-status="skipped"] { color: var(--muted); }
 
 .footer {
   border-top: 1px solid var(--line);

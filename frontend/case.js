@@ -13,6 +13,8 @@ const S = {
   running: false,
   runGen: 0,
   putting: false,
+  redactions: null,
+  segments: null,
 };
 
 const AGENTS = [
@@ -53,16 +55,18 @@ const TAG_KO = {
   loan_request: "빌려 달라는 말",
   amount_mention: "금액 언급",
   repay_promise: "갚겠다는 말",
-  reminder: "독촉",
+  reminder: "갚아 달라는 말",
   other: "기타",
 };
 
 const GATE_KO = {
   G1a: "숫자·이름은 슬롯으로만",
+  G1b: "최종 서류 검사",
   G3: "문장마다 증거 표시",
   G2: "필수 칸 확인",
   G4: "금액 범위 확인",
   NAMING: "금지 표현 검사",
+  DRAFT: "문안 규칙 검사",
 };
 
 const ROLE_OPTIONS = [
@@ -179,17 +183,19 @@ function revealSection(sectionId, titleId) {
   const t = titleId ? $(titleId) : null;
   if (t) {
     t.focus({ preventScroll: true });
-    t.scrollIntoView({ block: "start" });
+    const reduce = window.matchMedia
+      && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    t.scrollIntoView({ block: "start", behavior: reduce ? "auto" : "smooth" });
   }
 }
 
 /* ---------- case lifecycle ---------- */
 
 function setRunningUI(on) {
-  for (const id of ["btn-sample", "btn-run", "btn-confirm", "btn-approve-continue"]) {
+  for (const id of ["btn-sample", "btn-run", "btn-confirm", "btn-approve-continue", "btn-delete"]) {
     const el = $(id);
     if (!el) continue;
-    if (id === "btn-run") {
+    if (id === "btn-run" || id === "btn-delete") {
       el.disabled = on || !S.caseId;
     } else {
       el.disabled = on;
@@ -223,6 +229,8 @@ function resetCaseState(view) {
   S.drafts = null;
   S.pkg = null;
   S.selectedEx = null;
+  S.redactions = null;
+  S.segments = null;
 }
 
 async function runCase() {
@@ -249,10 +257,10 @@ async function runWithPolling() {
   setRunningUI(true);
   $("run-progress").hidden = false;
   const poll = async () => {
-    if (gen !== S.runGen) return;
+    if (gen !== S.runGen || !S.running) return;
     try {
       const res = await api("GET", `/api/cases/${S.caseId}`);
-      if (gen !== S.runGen) return;
+      if (gen !== S.runGen || !S.running) return;
       if (res.ok) {
         S.caseView = res.data;
         renderCaseMeta();
@@ -289,7 +297,7 @@ async function runWithPolling() {
 }
 
 async function deleteCase() {
-  if (!S.caseId) return;
+  if (!S.caseId || S.running) return;
   const res = await api("DELETE", `/api/cases/${S.caseId}`);
   if (!res.ok && res.status !== 404) {
     setStatus("삭제하지 못했습니다. " + errText(res.data));
@@ -302,6 +310,8 @@ async function deleteCase() {
   S.drafts = null;
   S.pkg = null;
   S.selectedEx = null;
+  S.redactions = null;
+  S.segments = null;
   $("btn-delete").disabled = true;
   $("btn-run").disabled = true;
   for (const id of ["board-section", "checkpoint-section", "calc-section",
@@ -362,6 +372,7 @@ function renderCaseMeta() {
   $("replay-badge").hidden = v.meta_mode !== "replay";
   $("board-section").hidden = false;
   $("btn-run").disabled = S.running || !S.caseId;
+  $("btn-delete").disabled = S.running || !S.caseId;
 }
 
 function stepOrder(v, s) {
@@ -377,13 +388,27 @@ function modelBadgeText(s) {
   return base;
 }
 
+function countModelCalls(v) {
+  let calls = 0;
+  for (const s of (v.steps || [])) {
+    if (!s.model) continue;
+    if ((s.key === "reading" || s.key === "vision")
+      && Array.isArray(s.substeps) && s.substeps.length > 0) {
+      calls += s.substeps.filter((x) => x && x.status === "done").length;
+    } else {
+      calls += Number(s.attempts || 0);
+    }
+  }
+  return calls;
+}
+
 function renderBoardSummary(v) {
   const el = $("board-summary");
-  const calls = v.steps.filter(
-    (s) => s.model && (s.status === "done" || s.status === "running")).length;
+  const calls = countModelCalls(v);
   const cost = v.run_cost_usd || "0";
-  const mode = v.meta_mode === "replay" ? "재생" : "실호출";
+  const mode = v.meta_mode === "replay" ? "(재생)" : "실제 호출";
   el.textContent = `Meta 모델 호출 ${calls}회 · $${cost} · ${mode}`;
+  el.dataset.calls = String(calls);
 }
 
 function renderBoard() {
@@ -434,7 +459,9 @@ function renderBoard() {
       if (s.status !== "waiting" && s.status !== "skipped") {
         const meta = document.createElement("span");
         meta.className = "step-meta";
-        meta.textContent = `${fmtLatency(s.latency_ms || 0)} · $${s.cost_usd || "0"}`;
+        meta.textContent = v.meta_mode === "replay"
+          ? `$${s.cost_usd || "0"}`
+          : `${fmtLatency(s.latency_ms || 0)} · $${s.cost_usd || "0"}`;
         head.appendChild(meta);
       }
       row.appendChild(head);
@@ -452,7 +479,9 @@ function renderBoard() {
         ul.className = "substeps";
         for (const sub of s.substeps) {
           const li = document.createElement("li");
-          li.textContent = `${exLabel(sub.ex_id)} · ${STATUS_KO[sub.status] || sub.status} · ${fmtLatency(sub.latency_ms || 0)}`;
+          li.textContent = v.meta_mode === "replay"
+            ? `${exLabel(sub.ex_id)} · ${STATUS_KO[sub.status] || sub.status}`
+            : `${exLabel(sub.ex_id)} · ${STATUS_KO[sub.status] || sub.status} · ${fmtLatency(sub.latency_ms || 0)}`;
           ul.appendChild(li);
         }
         row.appendChild(ul);
@@ -482,7 +511,8 @@ function renderUserStrip(v) {
     chip.className = "user-chip";
     chip.dataset.testid = `step-${s.key}`;
     chip.dataset.status = s.status;
-    chip.textContent = `${stepOrder(v, s)}. ${s.agent} · ${STATUS_KO[s.status] || s.status}`;
+    const label = s.status === "running" ? "확인 기다림" : (STATUS_KO[s.status] || s.status);
+    chip.textContent = `${stepOrder(v, s)}. ${s.agent} · ${label}`;
     strip.appendChild(chip);
   }
 }
@@ -515,9 +545,11 @@ function renderHold(v) {
 /* ---------- checkpoint 1 ---------- */
 
 async function loadCheckpoint1(opts) {
-  const [rd, rv] = await Promise.all([
+  const [rd, rv, red, seg] = await Promise.all([
     api("GET", `/api/cases/${S.caseId}/readings`),
     api("GET", `/api/cases/${S.caseId}/review`),
+    api("GET", `/api/cases/${S.caseId}/redactions`),
+    api("GET", `/api/cases/${S.caseId}/segments`),
   ]);
   if (!rd.ok || !rv.ok) {
     setStatus("사실 확인 자료를 불러오지 못했습니다.");
@@ -525,13 +557,35 @@ async function loadCheckpoint1(opts) {
   }
   S.readings = rd.data;
   S.review = rv.data;
+  S.redactions = red.ok ? red.data : null;
+  S.segments = seg.ok ? seg.data : null;
   renderCheckpoint();
   revealSection("checkpoint-section", opts && opts.reveal === false ? null : "checkpoint-title");
 }
 
 function readingsFor(exId) {
-  const r = S.readings.find((x) => x.ex_id === exId);
+  const r = (S.readings || []).find((x) => x.ex_id === exId);
   return r ? r.items : [];
+}
+
+function readingSide(exId, itemId) {
+  const items = readingsFor(exId);
+  const it = items.find((x) => x.item_id === itemId);
+  return it ? it.side : null;
+}
+
+function redactionPreviewUrl(exId) {
+  const previews = S.redactions && S.redactions.previews;
+  if (!Array.isArray(previews)) return null;
+  const p = previews.find((x) => x && x.ex_id === exId);
+  return p ? p.url : null;
+}
+
+function segmentsFor(exId) {
+  if (!Array.isArray(S.segments)) return [];
+  const entry = S.segments.find((x) => x && x.ex_id === exId);
+  if (!entry || !Array.isArray(entry.objects)) return [];
+  return entry.objects.filter((o) => o && o.box && o.box.ref_w && o.box.ref_h);
 }
 
 function renderCheckpoint() {
@@ -578,6 +632,9 @@ function selectEvidence(exId) {
     empty.hidden = false;
     empty.textContent = "미리보기가 없습니다.";
     $("reading-note").textContent = "";
+    const legend = $("segment-legend");
+    if (legend) legend.hidden = true;
+    renderRedaction(exId);
     return;
   }
   empty.hidden = true;
@@ -585,6 +642,8 @@ function selectEvidence(exId) {
   img.src = e.preview_url;
   if (items.length === 0) {
     $("reading-note").textContent = "판독 결과 없음";
+    renderSegments(exId, layer);
+    renderRedaction(exId);
     return;
   }
   $("reading-note").textContent = `판독 ${items.length}개`;
@@ -601,6 +660,40 @@ function selectEvidence(exId) {
     div.title = item.text_verbatim || "";
     layer.appendChild(div);
   }
+  renderSegments(exId, layer);
+  renderRedaction(exId);
+}
+
+function renderSegments(exId, layer) {
+  const legend = $("segment-legend");
+  const objs = segmentsFor(exId);
+  if (legend) legend.hidden = objs.length === 0;
+  for (const o of objs) {
+    const box = o.box;
+    const div = document.createElement("div");
+    div.className = "segment-box";
+    div.dataset.testid = `segment-box-${exId}`;
+    div.style.left = (box.x1 / box.ref_w * 100) + "%";
+    div.style.top = (box.y1 / box.ref_h * 100) + "%";
+    div.style.width = (Math.max(box.x2 - box.x1, 1) / box.ref_w * 100) + "%";
+    div.style.height = (Math.max(box.y2 - box.y1, 1) / box.ref_h * 100) + "%";
+    div.title = o.target || "";
+    layer.appendChild(div);
+  }
+}
+
+function renderRedaction(exId) {
+  const col = $("redaction-col");
+  const img = $("redaction-img");
+  if (!col || !img) return;
+  const url = redactionPreviewUrl(exId);
+  if (!url) {
+    col.hidden = true;
+    img.removeAttribute("src");
+    return;
+  }
+  col.hidden = false;
+  img.src = url;
 }
 
 function blinkBox(exId, itemId) {
@@ -618,6 +711,7 @@ function blinkBox(exId, itemId) {
 
 function displayHint(f) {
   if (!f.display) return null;
+  if (typeof f.value === "string" && f.display === f.value) return null;
   const hint = document.createElement("span");
   hint.className = "display-hint";
   hint.dataset.testid = `display-field-${f.field}`;
@@ -650,6 +744,11 @@ function renderFields() {
         a.setAttribute("aria-label", `받은 돈 ${i + 1} 금액`);
         wrap.appendChild(d);
         wrap.appendChild(a);
+        const aErr = document.createElement("span");
+        aErr.className = "field-error";
+        aErr.dataset.testid = `error-field-repayments-${i}-amount`;
+        aErr.hidden = true;
+        wrap.appendChild(aErr);
         tdVal.appendChild(wrap);
       });
       const hint = displayHint(f);
@@ -670,12 +769,18 @@ function renderFields() {
       const input = document.createElement("input");
       input.type = "text";
       input.value = f.value ?? "";
-      input.placeholder = f.display || "";
       input.dataset.testid = `field-${f.field}`;
       input.setAttribute("aria-label", f.label);
       tdVal.appendChild(input);
       const hint = displayHint(f);
       if (hint) tdVal.appendChild(hint);
+      if (AMOUNT_FIELDS.has(f.field)) {
+        const err = document.createElement("span");
+        err.className = "field-error";
+        err.dataset.testid = `error-field-${f.field}`;
+        err.hidden = true;
+        tdVal.appendChild(err);
+      }
     }
     tr.appendChild(tdVal);
     const tdSrc = document.createElement("td");
@@ -693,12 +798,33 @@ function renderFields() {
   }
 }
 
+function conflictText(c) {
+  if (typeof c === "string") return c || null;
+  if (c && typeof c === "object" && !Array.isArray(c)) {
+    const labels = {};
+    for (const f of ((S.review && S.review.fields) || [])) labels[f.field] = f.label || f.field;
+    let names = "";
+    if (Array.isArray(c.fields)) {
+      names = c.fields.map((f) => labels[f] || f).join(", ");
+    } else if (typeof c.fields === "string") {
+      names = c.fields;
+    }
+    const note = c.note || c.message || "";
+    if (names && note) return `${names}: ${note}`;
+    return note || names || null;
+  }
+  return null;
+}
+
 function renderConflicts() {
   const ul = $("conflict-list");
   ul.innerHTML = "";
   const items = [];
-  for (const c of (S.review.conflicts || [])) items.push(typeof c === "string" ? c : JSON.stringify(c));
-  for (const q of (S.review.questions || [])) items.push(q.question || `${q.field} 입력 필요`);
+  for (const c of ((S.review && S.review.conflicts) || [])) {
+    const t = conflictText(c);
+    if (t) items.push(t);
+  }
+  for (const q of ((S.review && S.review.questions) || [])) items.push(q.question || `${q.field} 입력 필요`);
   if (items.length === 0) {
     const li = document.createElement("li");
     li.textContent = "없음";
@@ -712,25 +838,51 @@ function renderConflicts() {
   }
 }
 
+function speakerLabel(u) {
+  if (u.speaker !== null && u.speaker !== undefined && u.speaker !== "" && u.speaker !== "null") {
+    return u.speaker;
+  }
+  const side = readingSide(u.ex_id, u.item_id);
+  if (side === "right") return "오른쪽 말풍선";
+  if (side === "left") return "왼쪽 말풍선";
+  return "말한 사람 모름";
+}
+
+function exNum(exId) {
+  const m = /^EX(\d+)$/.exec(exId || "");
+  return m ? Number(m[1]) : 0;
+}
+
+function itemNum(itemId) {
+  const m = /(\d+)/.exec(itemId || "");
+  return m ? Number(m[1]) : 0;
+}
+
+function firstRepayPromiseKey() {
+  const promised = (S.review.utterances || []).filter((u) => (u.tags || []).includes("repay_promise"));
+  promised.sort((a, b) => (exNum(a.ex_id) - exNum(b.ex_id)) || (itemNum(a.item_id) - itemNum(b.item_id)));
+  return promised.length > 0 ? `${promised[0].ex_id}:${promised[0].item_id}` : null;
+}
+
 function renderUtterances() {
   const ul = $("utterance-list");
   ul.innerHTML = "";
+  const firstPromise = firstRepayPromiseKey();
   for (const u of (S.review.utterances || [])) {
     const li = document.createElement("li");
     li.dataset.testid = `utterance-${u.ex_id}-${u.item_id}`;
     li.dataset.tags = (u.tags || []).join(" ");
+    const who = speakerLabel(u);
     const label = document.createElement("label");
     const check = document.createElement("input");
     check.type = "checkbox";
     check.dataset.testid = `highlight-${u.ex_id}-${u.item_id}`;
-    check.setAttribute("aria-label", `강조: ${u.speaker}: ${u.text}`);
+    check.setAttribute("aria-label", `강조: ${who}: ${u.text}`);
+    if (firstPromise === `${u.ex_id}:${u.item_id}`) check.checked = true;
     label.appendChild(check);
-    const em = document.createElement("span");
-    em.textContent = " 강조 ";
-    label.appendChild(em);
     li.appendChild(label);
     const body = document.createElement("span");
-    body.textContent = `${u.speaker}: ${u.text} `;
+    body.textContent = `${who}: ${u.text} `;
     li.appendChild(body);
     for (const tag of (u.tags || [])) {
       const chip = document.createElement("span");
@@ -766,6 +918,17 @@ function renderRoles() {
   }
 }
 
+const DISPLAY_AMOUNT_RE = /^\s*\d[\d,]*\s*원?\s*$/;
+
+function parseAmountInput(raw) {
+  const t = String(raw ?? "").trim();
+  if (t === "") return "";
+  if (!DISPLAY_AMOUNT_RE.test(t)) return t;
+  return t.replace(/[\s,원]/g, "");
+}
+
+const AMOUNT_FIELDS = new Set(["principal"]);
+
 function gatherFacts() {
   const fields = {};
   for (const f of S.review.fields) {
@@ -775,14 +938,15 @@ function gatherFacts() {
         const d = document.querySelector(`[data-testid="field-repayments-${i}-date"]`);
         const a = document.querySelector(`[data-testid="field-repayments-${i}-amount"]`);
         if (!d || !a) break;
-        if (d.value || a.value) rows.push({ date: d.value, amount: a.value });
+        if (d.value || a.value) rows.push({ date: d.value, amount: parseAmountInput(a.value) });
       }
       fields.repayments = rows;
     } else if (f.field === "transaction_kind") {
       fields[f.field] = document.querySelector('[data-testid="field-transaction_kind"]').value;
     } else {
       const el = document.querySelector(`[data-testid="field-${f.field}"]`);
-      const val = el.value.trim();
+      let val = el.value.trim();
+      if (AMOUNT_FIELDS.has(f.field)) val = parseAmountInput(val);
       fields[f.field] = (val === "" && f.value === null) ? null : val;
     }
   }
@@ -798,16 +962,43 @@ function gatherFacts() {
   return { fields, evidence_roles, highlight, as_of: $("asof").value };
 }
 
+function clearFactsErrors() {
+  document.querySelectorAll('[data-testid^="error-field-"]').forEach((el) => {
+    el.hidden = true;
+    el.textContent = "";
+  });
+}
+
+function showFactsErrorsFor(msg) {
+  if (!msg) return;
+  if (msg.includes("principal")) {
+    const el = document.querySelector('[data-testid="error-field-principal"]');
+    if (el) {
+      el.textContent = msg;
+      el.hidden = false;
+    }
+  }
+  if (msg.includes("repayments.amount")) {
+    document.querySelectorAll('[data-testid^="error-field-repayments-"]').forEach((el) => {
+      el.textContent = msg;
+      el.hidden = false;
+    });
+  }
+}
+
 async function confirmFacts() {
   if (S.putting || S.running) return;
   setStatus("");
+  clearFactsErrors();
   S.putting = true;
   $("btn-confirm").disabled = true;
   try {
     const body = gatherFacts();
     const put = await api("PUT", `/api/cases/${S.caseId}/facts`, body);
     if (!put.ok) {
-      setStatus("확정값을 저장하지 못했습니다. " + errText(put.data));
+      const msg = errText(put.data);
+      setStatus("확정값을 저장하지 못했습니다. " + msg);
+      if (put.status === 400) showFactsErrorsFor(msg);
       return;
     }
     S.caseView = put.data;
@@ -911,13 +1102,19 @@ function renderDrafts() {
   }
 }
 
+function showGate(g) {
+  return !(g.gate === "G1b" && g.status === "skipped");
+}
+
 function gateRow(g) {
   const row = document.createElement("div");
   row.className = "gate-row";
   row.dataset.testid = `gate-${g.gate}`;
   row.dataset.gate = g.gate;
   row.dataset.status = g.status;
-  const state = g.status === "pass" ? "통과" : g.status === "fail" ? "지적 있음" : g.status;
+  const state = g.status === "pass" ? "✓ 통과"
+    : g.status === "fail" ? "지적 있음"
+    : g.status === "skipped" ? "건너뜀" : g.status;
   row.textContent = `${gateName(g.gate)} (${g.gate}): ${state}`;
   return row;
 }
@@ -1104,7 +1301,7 @@ function renderDraftsGateSummary() {
   const gates = $("gate-summary");
   gates.innerHTML = "";
   for (const g of (S.drafts.gate_results || [])) {
-    gates.appendChild(gateRow(g));
+    if (showGate(g)) gates.appendChild(gateRow(g));
   }
 }
 
@@ -1172,10 +1369,13 @@ async function approveSentence(sid) {
 async function approveAndContinue() {
   if (S.putting || S.running) return;
   setStatus("");
-  const btn = $("btn-approve-continue");
-  btn.disabled = true;
+  S.running = true;
+  const gen = ++S.runGen;
+  setRunningUI(true);
+  $("run-progress").hidden = false;
   try {
     const res = await api("POST", `/api/cases/${S.caseId}/run`, {});
+    if (gen !== S.runGen) return;
     if (!res.ok) {
       setStatus("계속하지 못했습니다. " + errText(res.data));
       return;
@@ -1187,7 +1387,11 @@ async function approveAndContinue() {
       await loadPackage();
     }
   } finally {
-    btn.disabled = false;
+    if (gen === S.runGen) {
+      S.running = false;
+      setRunningUI(false);
+      $("run-progress").hidden = true;
+    }
   }
 }
 
@@ -1215,6 +1419,16 @@ async function loadPackage(opts) {
   $("claim-cause").textContent = (S.pkg.ecourt || {}).claim_cause_payment_order || "";
   $("pkg-notice").textContent = (S.pkg.notices || {}).notice_ko || "";
   $("pkg-disclaimer").textContent = (S.pkg.notices || {}).disclaimer_ko || "";
+  const gates = $("pkg-gates");
+  const gateList = $("pkg-gate-list");
+  if (gates && gateList) {
+    const results = (S.pkg.gate_results || []).filter(showGate);
+    gateList.innerHTML = "";
+    gates.hidden = results.length === 0;
+    for (const g of results) {
+      gateList.appendChild(gateRow(g));
+    }
+  }
   revealSection("package-section", opts && opts.reveal === false ? null : "package-title");
 }
 
