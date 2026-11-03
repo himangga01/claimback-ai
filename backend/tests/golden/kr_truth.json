@@ -1,0 +1,3102 @@
+{
+  "_note": "test-only golden answers. Never pass to runtime agents.",
+  "case": {
+    "accrual_start_date": "2026-05-02",
+    "agreed_interest_rate": null,
+    "contract_form": "written",
+    "creditor": {
+      "address": "서울특별시 샘플구 데모로 0",
+      "name": "서가온(SAMPLE)",
+      "phone": "010-0000-0000"
+    },
+    "currency": "KRW",
+    "debtor": {
+      "address": "경기도 샘플시 데모동 0",
+      "name": "탁나루(SAMPLE)",
+      "phone": "010-0000-0000"
+    },
+    "due_date": "2026-04-10",
+    "loan_date": "2026-03-10",
+    "principal_amount": 5000000,
+    "remaining_principal": 4014383,
+    "repayments": [
+      {
+        "amount": 1000000,
+        "evidence_id": "EX5",
+        "payment_date": "2026-05-01"
+      }
+    ],
+    "transaction_kind": "civil"
+  },
+  "evidences": [
+    {
+      "coord_basis": null,
+      "coord_system": "pixel",
+      "ex_id": "EX1",
+      "file": "kr/chat_01.png",
+      "height": 960,
+      "ignore_regions": [
+        [
+          0,
+          0,
+          640,
+          36
+        ]
+      ],
+      "sha256": "aef151799973a34a2f885db948628581d26af0c5ba59e91a1678592beaf31628",
+      "width": 640
+    },
+    {
+      "coord_basis": null,
+      "coord_system": "pixel",
+      "ex_id": "EX2",
+      "file": "kr/chat_02_tall.png",
+      "height": 2400,
+      "ignore_regions": [
+        [
+          0,
+          0,
+          640,
+          36
+        ]
+      ],
+      "sha256": "1895b682c0c13e93695725000d8e45200d237b83772ec21615990ea72379f54f",
+      "width": 640
+    },
+    {
+      "coord_basis": null,
+      "coord_system": "pixel",
+      "ex_id": "EX3",
+      "file": "kr/chat_02_scroll.mp4",
+      "height": 960,
+      "ignore_regions": [
+        [
+          0,
+          0,
+          640,
+          36
+        ]
+      ],
+      "sha256": "021bf97f57823ac130aeb11b1d2fe4ac7f41cf3c6ab0ad623987381d60a750ed",
+      "width": 640
+    },
+    {
+      "coord_basis": null,
+      "coord_system": "pixel",
+      "ex_id": "EX4",
+      "file": "kr/transfer_loan.png",
+      "height": 640,
+      "ignore_regions": [
+        [
+          0,
+          0,
+          640,
+          36
+        ]
+      ],
+      "sha256": "b984e7ba284244e334e9d7a98d1d9111a83cc887c47a38353fd22c20c83d32bb",
+      "width": 640
+    },
+    {
+      "coord_basis": null,
+      "coord_system": "pixel",
+      "ex_id": "EX5",
+      "file": "kr/transfer_repay.png",
+      "height": 640,
+      "ignore_regions": [
+        [
+          0,
+          0,
+          640,
+          36
+        ]
+      ],
+      "sha256": "c4e295a2f6dc285fa36c501399b965f51fdbceadda3a37072ea5add4b40dbb5d",
+      "width": 640
+    },
+    {
+      "coord_basis": "kr/iou.png",
+      "coord_system": "pixel",
+      "ex_id": "EX6",
+      "file": "kr/iou.pdf",
+      "height": 1754,
+      "ignore_regions": [
+        [
+          0,
+          0,
+          1240,
+          36
+        ]
+      ],
+      "sha256": "00fa48803f3d374dc11c16ee870aa716bb13ee7884925e75a5bee03d53ee1e06",
+      "width": 1240
+    },
+    {
+      "coord_basis": null,
+      "coord_system": "pixel",
+      "ex_id": "EX7",
+      "file": "kr/iou.png",
+      "height": 1754,
+      "ignore_regions": [
+        [
+          0,
+          0,
+          1240,
+          36
+        ]
+      ],
+      "sha256": "bc160472494ac638ef77d04c37c539cebe95a70d59efde100d949acac3c2dd58",
+      "width": 1240
+    }
+  ],
+  "items": [
+    {
+      "box": [
+        0,
+        0,
+        640,
+        36
+      ],
+      "ex_id": "EX1",
+      "frame_ts": null,
+      "item_id": "item1",
+      "kind": "watermark",
+      "line_box": null,
+      "normalized": "SAMPLE / 데모용",
+      "speaker": null,
+      "text_verbatim": "SAMPLE / 데모용"
+    },
+    {
+      "box": [
+        20,
+        48,
+        77,
+        68
+      ],
+      "ex_id": "EX1",
+      "frame_ts": null,
+      "item_id": "item2",
+      "kind": "header",
+      "line_box": null,
+      "normalized": "샘플톡",
+      "speaker": null,
+      "text_verbatim": "샘플톡"
+    },
+    {
+      "box": [
+        263,
+        86,
+        376,
+        102
+      ],
+      "ex_id": "EX1",
+      "frame_ts": null,
+      "item_id": "item3",
+      "kind": "date",
+      "line_box": null,
+      "normalized": "2026-03-09",
+      "speaker": null,
+      "text_verbatim": "2026년 3월 9일"
+    },
+    {
+      "box": [
+        72,
+        130,
+        176,
+        144
+      ],
+      "ex_id": "EX1",
+      "frame_ts": null,
+      "item_id": "item4",
+      "kind": "party_name",
+      "line_box": null,
+      "normalized": "탁나루(SAMPLE)",
+      "speaker": null,
+      "text_verbatim": "탁나루(SAMPLE)"
+    },
+    {
+      "box": [
+        70,
+        150,
+        459,
+        223
+      ],
+      "ex_id": "EX1",
+      "frame_ts": null,
+      "item_id": "item5",
+      "kind": "utterance",
+      "line_box": null,
+      "normalized": "서가온님, 급하게 500만 원만 빌려주실 수 있나요?",
+      "speaker": "탁나루(SAMPLE)",
+      "text_verbatim": "서가온님, 급하게 500만 원만 빌려주실 수 있나요?"
+    },
+    {
+      "box": [
+        237,
+        162,
+        317,
+        183
+      ],
+      "ex_id": "EX1",
+      "frame_ts": null,
+      "item_id": "item6",
+      "kind": "amount",
+      "line_box": [
+        86,
+        163,
+        443,
+        183
+      ],
+      "normalized": 5000000,
+      "speaker": "탁나루(SAMPLE)",
+      "text_verbatim": "500만 원"
+    },
+    {
+      "box": [
+        278,
+        239,
+        620,
+        284
+      ],
+      "ex_id": "EX1",
+      "frame_ts": null,
+      "item_id": "item7",
+      "kind": "utterance",
+      "line_box": null,
+      "normalized": "무슨 일이에요? 500만 원이 맞나요?",
+      "speaker": "서가온(SAMPLE)",
+      "text_verbatim": "무슨 일이에요? 500만 원이 맞나요?"
+    },
+    {
+      "box": [
+        431,
+        251,
+        511,
+        272
+      ],
+      "ex_id": "EX1",
+      "frame_ts": null,
+      "item_id": "item8",
+      "kind": "amount",
+      "line_box": [
+        294,
+        252,
+        604,
+        271
+      ],
+      "normalized": 5000000,
+      "speaker": "서가온(SAMPLE)",
+      "text_verbatim": "500만 원"
+    },
+    {
+      "box": [
+        22,
+        302,
+        126,
+        316
+      ],
+      "ex_id": "EX1",
+      "frame_ts": null,
+      "item_id": "item9",
+      "kind": "party_name",
+      "line_box": null,
+      "normalized": "탁나루(SAMPLE)",
+      "speaker": null,
+      "text_verbatim": "탁나루(SAMPLE)"
+    },
+    {
+      "box": [
+        20,
+        322,
+        352,
+        395
+      ],
+      "ex_id": "EX1",
+      "frame_ts": null,
+      "item_id": "item10",
+      "kind": "utterance",
+      "line_box": null,
+      "normalized": "네, 병원비로 500만 원이 필요해요. 4월 10일까지 갚을게요.",
+      "speaker": "탁나루(SAMPLE)",
+      "text_verbatim": "네, 병원비로 500만 원이 필요해요. 4월 10일까지 갚을게요."
+    },
+    {
+      "box": [
+        149,
+        334,
+        229,
+        355
+      ],
+      "ex_id": "EX1",
+      "frame_ts": null,
+      "item_id": "item11",
+      "kind": "amount",
+      "line_box": [
+        36,
+        335,
+        336,
+        355
+      ],
+      "normalized": 5000000,
+      "speaker": "탁나루(SAMPLE)",
+      "text_verbatim": "500만 원"
+    },
+    {
+      "box": [
+        36,
+        362,
+        116,
+        383
+      ],
+      "ex_id": "EX1",
+      "frame_ts": null,
+      "item_id": "item12",
+      "kind": "date",
+      "line_box": [
+        36,
+        363,
+        242,
+        382
+      ],
+      "normalized": null,
+      "speaker": "탁나루(SAMPLE)",
+      "text_verbatim": "4월 10일"
+    },
+    {
+      "box": [
+        258,
+        415,
+        381,
+        431
+      ],
+      "ex_id": "EX1",
+      "frame_ts": null,
+      "item_id": "item13",
+      "kind": "date",
+      "line_box": null,
+      "normalized": "2026-03-10",
+      "speaker": null,
+      "text_verbatim": "2026년 3월 10일"
+    },
+    {
+      "box": [
+        253,
+        457,
+        620,
+        502
+      ],
+      "ex_id": "EX1",
+      "frame_ts": null,
+      "item_id": "item14",
+      "kind": "utterance",
+      "line_box": null,
+      "normalized": "알겠어요. 오늘 5,000,000원 보낼게요.",
+      "speaker": "서가온(SAMPLE)",
+      "text_verbatim": "알겠어요. 오늘 5,000,000원 보낼게요."
+    },
+    {
+      "box": [
+        401,
+        469,
+        516,
+        490
+      ],
+      "ex_id": "EX1",
+      "frame_ts": null,
+      "item_id": "item15",
+      "kind": "amount",
+      "line_box": [
+        269,
+        470,
+        604,
+        490
+      ],
+      "normalized": 5000000,
+      "speaker": "서가온(SAMPLE)",
+      "text_verbatim": "5,000,000원"
+    },
+    {
+      "box": [
+        22,
+        520,
+        126,
+        534
+      ],
+      "ex_id": "EX1",
+      "frame_ts": null,
+      "item_id": "item16",
+      "kind": "party_name",
+      "line_box": null,
+      "normalized": "탁나루(SAMPLE)",
+      "speaker": null,
+      "text_verbatim": "탁나루(SAMPLE)"
+    },
+    {
+      "box": [
+        20,
+        540,
+        199,
+        585
+      ],
+      "ex_id": "EX1",
+      "frame_ts": null,
+      "item_id": "item17",
+      "kind": "utterance",
+      "line_box": null,
+      "normalized": "정말 감사합니다!",
+      "speaker": "탁나루(SAMPLE)",
+      "text_verbatim": "정말 감사합니다!"
+    },
+    {
+      "box": [
+        0,
+        0,
+        640,
+        36
+      ],
+      "ex_id": "EX2",
+      "frame_ts": null,
+      "item_id": "item1",
+      "kind": "watermark",
+      "line_box": null,
+      "normalized": "SAMPLE / 데모용",
+      "speaker": null,
+      "text_verbatim": "SAMPLE / 데모용"
+    },
+    {
+      "box": [
+        20,
+        48,
+        77,
+        68
+      ],
+      "ex_id": "EX2",
+      "frame_ts": null,
+      "item_id": "item2",
+      "kind": "header",
+      "line_box": null,
+      "normalized": "샘플톡",
+      "speaker": null,
+      "text_verbatim": "샘플톡"
+    },
+    {
+      "box": [
+        258,
+        86,
+        381,
+        102
+      ],
+      "ex_id": "EX2",
+      "frame_ts": null,
+      "item_id": "item3",
+      "kind": "date",
+      "line_box": null,
+      "normalized": "2026-04-20",
+      "speaker": null,
+      "text_verbatim": "2026년 4월 20일"
+    },
+    {
+      "box": [
+        269,
+        301,
+        620,
+        374
+      ],
+      "ex_id": "EX2",
+      "frame_ts": null,
+      "item_id": "item4",
+      "kind": "utterance",
+      "line_box": null,
+      "normalized": "탁나루님, 4월 10일이 지났어요. 확인 부탁드려요.",
+      "speaker": "서가온(SAMPLE)",
+      "text_verbatim": "탁나루님, 4월 10일이 지났어요. 확인 부탁드려요."
+    },
+    {
+      "box": [
+        373,
+        313,
+        453,
+        334
+      ],
+      "ex_id": "EX2",
+      "frame_ts": null,
+      "item_id": "item5",
+      "kind": "date",
+      "line_box": [
+        285,
+        313,
+        604,
+        334
+      ],
+      "normalized": null,
+      "speaker": "서가온(SAMPLE)",
+      "text_verbatim": "4월 10일"
+    },
+    {
+      "box": [
+        72,
+        565,
+        176,
+        579
+      ],
+      "ex_id": "EX2",
+      "frame_ts": null,
+      "item_id": "item6",
+      "kind": "party_name",
+      "line_box": null,
+      "normalized": "탁나루(SAMPLE)",
+      "speaker": null,
+      "text_verbatim": "탁나루(SAMPLE)"
+    },
+    {
+      "box": [
+        70,
+        585,
+        421,
+        630
+      ],
+      "ex_id": "EX2",
+      "frame_ts": null,
+      "item_id": "item7",
+      "kind": "utterance",
+      "line_box": null,
+      "normalized": "죄송해요. 4월 25일까지 꼭 갚을게요.",
+      "speaker": "탁나루(SAMPLE)",
+      "text_verbatim": "죄송해요. 4월 25일까지 꼭 갚을게요."
+    },
+    {
+      "box": [
+        174,
+        597,
+        254,
+        618
+      ],
+      "ex_id": "EX2",
+      "frame_ts": null,
+      "item_id": "item8",
+      "kind": "date",
+      "line_box": [
+        86,
+        598,
+        405,
+        618
+      ],
+      "normalized": null,
+      "speaker": "탁나루(SAMPLE)",
+      "text_verbatim": "4월 25일"
+    },
+    {
+      "box": [
+        258,
+        823,
+        381,
+        839
+      ],
+      "ex_id": "EX2",
+      "frame_ts": null,
+      "item_id": "item9",
+      "kind": "date",
+      "line_box": null,
+      "normalized": "2026-04-25",
+      "speaker": null,
+      "text_verbatim": "2026년 4월 25일"
+    },
+    {
+      "box": [
+        250,
+        1038,
+        620,
+        1111
+      ],
+      "ex_id": "EX2",
+      "frame_ts": null,
+      "item_id": "item10",
+      "kind": "utterance",
+      "line_box": null,
+      "normalized": "4월 25일이 지났어요. 언제 보내주실 수 있나요?",
+      "speaker": "서가온(SAMPLE)",
+      "text_verbatim": "4월 25일이 지났어요. 언제 보내주실 수 있나요?"
+    },
+    {
+      "box": [
+        266,
+        1050,
+        346,
+        1071
+      ],
+      "ex_id": "EX2",
+      "frame_ts": null,
+      "item_id": "item11",
+      "kind": "date",
+      "line_box": [
+        266,
+        1051,
+        604,
+        1071
+      ],
+      "normalized": null,
+      "speaker": "서가온(SAMPLE)",
+      "text_verbatim": "4월 25일"
+    },
+    {
+      "box": [
+        22,
+        1302,
+        126,
+        1316
+      ],
+      "ex_id": "EX2",
+      "frame_ts": null,
+      "item_id": "item12",
+      "kind": "party_name",
+      "line_box": null,
+      "normalized": "탁나루(SAMPLE)",
+      "speaker": null,
+      "text_verbatim": "탁나루(SAMPLE)"
+    },
+    {
+      "box": [
+        20,
+        1322,
+        460,
+        1367
+      ],
+      "ex_id": "EX2",
+      "frame_ts": null,
+      "item_id": "item13",
+      "kind": "utterance",
+      "line_box": null,
+      "normalized": "정말 죄송합니다. 5월 1일에는 꼭 보내드릴게요.",
+      "speaker": "탁나루(SAMPLE)",
+      "text_verbatim": "정말 죄송합니다. 5월 1일에는 꼭 보내드릴게요."
+    },
+    {
+      "box": [
+        187,
+        1334,
+        255,
+        1355
+      ],
+      "ex_id": "EX2",
+      "frame_ts": null,
+      "item_id": "item14",
+      "kind": "date",
+      "line_box": [
+        36,
+        1335,
+        444,
+        1355
+      ],
+      "normalized": null,
+      "speaker": "탁나루(SAMPLE)",
+      "text_verbatim": "5월 1일"
+    },
+    {
+      "box": [
+        263,
+        1560,
+        376,
+        1576
+      ],
+      "ex_id": "EX2",
+      "frame_ts": null,
+      "item_id": "item15",
+      "kind": "date",
+      "line_box": null,
+      "normalized": "2026-05-01",
+      "speaker": null,
+      "text_verbatim": "2026년 5월 1일"
+    },
+    {
+      "box": [
+        22,
+        1777,
+        126,
+        1791
+      ],
+      "ex_id": "EX2",
+      "frame_ts": null,
+      "item_id": "item16",
+      "kind": "party_name",
+      "line_box": null,
+      "normalized": "탁나루(SAMPLE)",
+      "speaker": null,
+      "text_verbatim": "탁나루(SAMPLE)"
+    },
+    {
+      "box": [
+        20,
+        1797,
+        289,
+        1842
+      ],
+      "ex_id": "EX2",
+      "frame_ts": null,
+      "item_id": "item17",
+      "kind": "utterance",
+      "line_box": null,
+      "normalized": "오늘 100만 원 먼저 보냈어.",
+      "speaker": "탁나루(SAMPLE)",
+      "text_verbatim": "오늘 100만 원 먼저 보냈어."
+    },
+    {
+      "box": [
+        80,
+        1809,
+        160,
+        1830
+      ],
+      "ex_id": "EX2",
+      "frame_ts": null,
+      "item_id": "item18",
+      "kind": "amount",
+      "line_box": [
+        36,
+        1810,
+        273,
+        1830
+      ],
+      "normalized": 1000000,
+      "speaker": "탁나루(SAMPLE)",
+      "text_verbatim": "100만 원"
+    },
+    {
+      "box": [
+        183,
+        2031,
+        620,
+        2104
+      ],
+      "ex_id": "EX2",
+      "frame_ts": null,
+      "item_id": "item19",
+      "kind": "utterance",
+      "line_box": null,
+      "normalized": "100만 원 받았어요. 남은 400만 원은 언제 주실 수 있나요?",
+      "speaker": "서가온(SAMPLE)",
+      "text_verbatim": "100만 원 받았어요. 남은 400만 원은 언제 주실 수 있나요?"
+    },
+    {
+      "box": [
+        199,
+        2043,
+        279,
+        2064
+      ],
+      "ex_id": "EX2",
+      "frame_ts": null,
+      "item_id": "item20",
+      "kind": "amount",
+      "line_box": [
+        199,
+        2044,
+        604,
+        2064
+      ],
+      "normalized": 1000000,
+      "speaker": "서가온(SAMPLE)",
+      "text_verbatim": "100만 원"
+    },
+    {
+      "box": [
+        417,
+        2043,
+        497,
+        2064
+      ],
+      "ex_id": "EX2",
+      "frame_ts": null,
+      "item_id": "item21",
+      "kind": "amount",
+      "line_box": [
+        199,
+        2044,
+        604,
+        2064
+      ],
+      "normalized": 4000000,
+      "speaker": "서가온(SAMPLE)",
+      "text_verbatim": "400만 원"
+    },
+    {
+      "box": [
+        22,
+        2295,
+        126,
+        2309
+      ],
+      "ex_id": "EX2",
+      "frame_ts": null,
+      "item_id": "item22",
+      "kind": "party_name",
+      "line_box": null,
+      "normalized": "탁나루(SAMPLE)",
+      "speaker": null,
+      "text_verbatim": "탁나루(SAMPLE)"
+    },
+    {
+      "box": [
+        20,
+        2315,
+        413,
+        2360
+      ],
+      "ex_id": "EX2",
+      "frame_ts": null,
+      "item_id": "item23",
+      "kind": "utterance",
+      "line_box": null,
+      "normalized": "5월 20일까지 남은 400만 원 다 갚을게요.",
+      "speaker": "탁나루(SAMPLE)",
+      "text_verbatim": "5월 20일까지 남은 400만 원 다 갚을게요."
+    },
+    {
+      "box": [
+        36,
+        2327,
+        116,
+        2348
+      ],
+      "ex_id": "EX2",
+      "frame_ts": null,
+      "item_id": "item24",
+      "kind": "date",
+      "line_box": [
+        36,
+        2328,
+        397,
+        2347
+      ],
+      "normalized": null,
+      "speaker": "탁나루(SAMPLE)",
+      "text_verbatim": "5월 20일"
+    },
+    {
+      "box": [
+        204,
+        2327,
+        284,
+        2348
+      ],
+      "ex_id": "EX2",
+      "frame_ts": null,
+      "item_id": "item25",
+      "kind": "amount",
+      "line_box": [
+        36,
+        2328,
+        397,
+        2347
+      ],
+      "normalized": 4000000,
+      "speaker": "탁나루(SAMPLE)",
+      "text_verbatim": "400만 원"
+    },
+    {
+      "box": [
+        0,
+        0,
+        640,
+        36
+      ],
+      "ex_id": "EX3",
+      "frame_ts": 0.0,
+      "item_id": "item1",
+      "kind": "watermark",
+      "line_box": null,
+      "normalized": "SAMPLE / 데모용",
+      "speaker": null,
+      "text_verbatim": "SAMPLE / 데모용"
+    },
+    {
+      "box": [
+        20,
+        48,
+        77,
+        68
+      ],
+      "ex_id": "EX3",
+      "frame_ts": 0.0,
+      "item_id": "item2",
+      "kind": "header",
+      "line_box": null,
+      "normalized": "샘플톡",
+      "speaker": null,
+      "text_verbatim": "샘플톡"
+    },
+    {
+      "box": [
+        258,
+        86,
+        381,
+        102
+      ],
+      "ex_id": "EX3",
+      "frame_ts": 0.0,
+      "item_id": "item3",
+      "kind": "date",
+      "line_box": null,
+      "normalized": "2026-04-20",
+      "speaker": null,
+      "text_verbatim": "2026년 4월 20일"
+    },
+    {
+      "box": [
+        269,
+        301,
+        620,
+        374
+      ],
+      "ex_id": "EX3",
+      "frame_ts": 0.0,
+      "item_id": "item4",
+      "kind": "utterance",
+      "line_box": null,
+      "normalized": "탁나루님, 4월 10일이 지났어요. 확인 부탁드려요.",
+      "speaker": "서가온(SAMPLE)",
+      "text_verbatim": "탁나루님, 4월 10일이 지났어요. 확인 부탁드려요."
+    },
+    {
+      "box": [
+        373,
+        313,
+        453,
+        334
+      ],
+      "ex_id": "EX3",
+      "frame_ts": 0.0,
+      "item_id": "item5",
+      "kind": "date",
+      "line_box": [
+        285,
+        313,
+        604,
+        334
+      ],
+      "normalized": null,
+      "speaker": "서가온(SAMPLE)",
+      "text_verbatim": "4월 10일"
+    },
+    {
+      "box": [
+        72,
+        565,
+        176,
+        579
+      ],
+      "ex_id": "EX3",
+      "frame_ts": 0.0,
+      "item_id": "item6",
+      "kind": "party_name",
+      "line_box": null,
+      "normalized": "탁나루(SAMPLE)",
+      "speaker": null,
+      "text_verbatim": "탁나루(SAMPLE)"
+    },
+    {
+      "box": [
+        70,
+        585,
+        421,
+        630
+      ],
+      "ex_id": "EX3",
+      "frame_ts": 0.0,
+      "item_id": "item7",
+      "kind": "utterance",
+      "line_box": null,
+      "normalized": "죄송해요. 4월 25일까지 꼭 갚을게요.",
+      "speaker": "탁나루(SAMPLE)",
+      "text_verbatim": "죄송해요. 4월 25일까지 꼭 갚을게요."
+    },
+    {
+      "box": [
+        174,
+        597,
+        254,
+        618
+      ],
+      "ex_id": "EX3",
+      "frame_ts": 0.0,
+      "item_id": "item8",
+      "kind": "date",
+      "line_box": [
+        86,
+        598,
+        405,
+        618
+      ],
+      "normalized": null,
+      "speaker": "탁나루(SAMPLE)",
+      "text_verbatim": "4월 25일"
+    },
+    {
+      "box": [
+        258,
+        823,
+        381,
+        839
+      ],
+      "ex_id": "EX3",
+      "frame_ts": 0.0,
+      "item_id": "item9",
+      "kind": "date",
+      "line_box": null,
+      "normalized": "2026-04-25",
+      "speaker": null,
+      "text_verbatim": "2026년 4월 25일"
+    },
+    {
+      "box": [
+        250,
+        887,
+        620,
+        960
+      ],
+      "ex_id": "EX3",
+      "frame_ts": 0.734,
+      "item_id": "item10",
+      "kind": "utterance",
+      "line_box": null,
+      "normalized": "4월 25일이 지났어요. 언제 보내주실 수 있나요?",
+      "speaker": "서가온(SAMPLE)",
+      "text_verbatim": "4월 25일이 지났어요. 언제 보내주실 수 있나요?"
+    },
+    {
+      "box": [
+        266,
+        939,
+        346,
+        960
+      ],
+      "ex_id": "EX3",
+      "frame_ts": 0.54,
+      "item_id": "item11",
+      "kind": "date",
+      "line_box": [
+        266,
+        940,
+        604,
+        960
+      ],
+      "normalized": null,
+      "speaker": "서가온(SAMPLE)",
+      "text_verbatim": "4월 25일"
+    },
+    {
+      "box": [
+        22,
+        946,
+        126,
+        960
+      ],
+      "ex_id": "EX3",
+      "frame_ts": 1.731,
+      "item_id": "item12",
+      "kind": "party_name",
+      "line_box": null,
+      "normalized": "탁나루(SAMPLE)",
+      "speaker": null,
+      "text_verbatim": "탁나루(SAMPLE)"
+    },
+    {
+      "box": [
+        20,
+        915,
+        460,
+        960
+      ],
+      "ex_id": "EX3",
+      "frame_ts": 1.978,
+      "item_id": "item13",
+      "kind": "utterance",
+      "line_box": null,
+      "normalized": "정말 죄송합니다. 5월 1일에는 꼭 보내드릴게요.",
+      "speaker": "탁나루(SAMPLE)",
+      "text_verbatim": "정말 죄송합니다. 5월 1일에는 꼭 보내드릴게요."
+    },
+    {
+      "box": [
+        187,
+        939,
+        255,
+        960
+      ],
+      "ex_id": "EX3",
+      "frame_ts": 1.92,
+      "item_id": "item14",
+      "kind": "date",
+      "line_box": [
+        36,
+        940,
+        444,
+        960
+      ],
+      "normalized": null,
+      "speaker": "탁나루(SAMPLE)",
+      "text_verbatim": "5월 1일"
+    },
+    {
+      "box": [
+        263,
+        944,
+        376,
+        960
+      ],
+      "ex_id": "EX3",
+      "frame_ts": 2.994,
+      "item_id": "item15",
+      "kind": "date",
+      "line_box": null,
+      "normalized": "2026-05-01",
+      "speaker": null,
+      "text_verbatim": "2026년 5월 1일"
+    },
+    {
+      "box": [
+        22,
+        946,
+        126,
+        960
+      ],
+      "ex_id": "EX3",
+      "frame_ts": 4.04,
+      "item_id": "item16",
+      "kind": "party_name",
+      "line_box": null,
+      "normalized": "탁나루(SAMPLE)",
+      "speaker": null,
+      "text_verbatim": "탁나루(SAMPLE)"
+    },
+    {
+      "box": [
+        20,
+        915,
+        289,
+        960
+      ],
+      "ex_id": "EX3",
+      "frame_ts": 4.288,
+      "item_id": "item17",
+      "kind": "utterance",
+      "line_box": null,
+      "normalized": "오늘 100만 원 먼저 보냈어.",
+      "speaker": "탁나루(SAMPLE)",
+      "text_verbatim": "오늘 100만 원 먼저 보냈어."
+    },
+    {
+      "box": [
+        80,
+        939,
+        160,
+        960
+      ],
+      "ex_id": "EX3",
+      "frame_ts": 4.229,
+      "item_id": "item18",
+      "kind": "amount",
+      "line_box": [
+        36,
+        940,
+        273,
+        960
+      ],
+      "normalized": 1000000,
+      "speaker": "탁나루(SAMPLE)",
+      "text_verbatim": "100만 원"
+    },
+    {
+      "box": [
+        183,
+        887,
+        620,
+        960
+      ],
+      "ex_id": "EX3",
+      "frame_ts": 5.561,
+      "item_id": "item19",
+      "kind": "utterance",
+      "line_box": null,
+      "normalized": "100만 원 받았어요. 남은 400만 원은 언제 주실 수 있나요?",
+      "speaker": "서가온(SAMPLE)",
+      "text_verbatim": "100만 원 받았어요. 남은 400만 원은 언제 주실 수 있나요?"
+    },
+    {
+      "box": [
+        199,
+        939,
+        279,
+        960
+      ],
+      "ex_id": "EX3",
+      "frame_ts": 5.367,
+      "item_id": "item20",
+      "kind": "amount",
+      "line_box": [
+        199,
+        940,
+        604,
+        960
+      ],
+      "normalized": 1000000,
+      "speaker": "서가온(SAMPLE)",
+      "text_verbatim": "100만 원"
+    },
+    {
+      "box": [
+        417,
+        939,
+        497,
+        960
+      ],
+      "ex_id": "EX3",
+      "frame_ts": 5.367,
+      "item_id": "item21",
+      "kind": "amount",
+      "line_box": [
+        199,
+        940,
+        604,
+        960
+      ],
+      "normalized": 4000000,
+      "speaker": "서가온(SAMPLE)",
+      "text_verbatim": "400만 원"
+    },
+    {
+      "box": [
+        22,
+        946,
+        126,
+        960
+      ],
+      "ex_id": "EX3",
+      "frame_ts": 6.558,
+      "item_id": "item22",
+      "kind": "party_name",
+      "line_box": null,
+      "normalized": "탁나루(SAMPLE)",
+      "speaker": null,
+      "text_verbatim": "탁나루(SAMPLE)"
+    },
+    {
+      "box": [
+        20,
+        915,
+        413,
+        960
+      ],
+      "ex_id": "EX3",
+      "frame_ts": 6.806,
+      "item_id": "item23",
+      "kind": "utterance",
+      "line_box": null,
+      "normalized": "5월 20일까지 남은 400만 원 다 갚을게요.",
+      "speaker": "탁나루(SAMPLE)",
+      "text_verbatim": "5월 20일까지 남은 400만 원 다 갚을게요."
+    },
+    {
+      "box": [
+        36,
+        939,
+        116,
+        960
+      ],
+      "ex_id": "EX3",
+      "frame_ts": 6.747,
+      "item_id": "item24",
+      "kind": "date",
+      "line_box": [
+        36,
+        940,
+        397,
+        959
+      ],
+      "normalized": null,
+      "speaker": "탁나루(SAMPLE)",
+      "text_verbatim": "5월 20일"
+    },
+    {
+      "box": [
+        204,
+        939,
+        284,
+        960
+      ],
+      "ex_id": "EX3",
+      "frame_ts": 6.747,
+      "item_id": "item25",
+      "kind": "amount",
+      "line_box": [
+        36,
+        940,
+        397,
+        959
+      ],
+      "normalized": 4000000,
+      "speaker": "탁나루(SAMPLE)",
+      "text_verbatim": "400만 원"
+    },
+    {
+      "box": [
+        0,
+        0,
+        640,
+        36
+      ],
+      "ex_id": "EX4",
+      "frame_ts": null,
+      "item_id": "item1",
+      "kind": "watermark",
+      "line_box": null,
+      "normalized": "SAMPLE / 데모용",
+      "speaker": null,
+      "text_verbatim": "SAMPLE / 데모용"
+    },
+    {
+      "box": [
+        36,
+        62,
+        296,
+        92
+      ],
+      "ex_id": "EX4",
+      "frame_ts": null,
+      "item_id": "item2",
+      "kind": "header",
+      "line_box": null,
+      "normalized": "샘플은행 송금확인증",
+      "speaker": null,
+      "text_verbatim": "샘플은행 송금확인증"
+    },
+    {
+      "box": [
+        36,
+        137,
+        113,
+        156
+      ],
+      "ex_id": "EX4",
+      "frame_ts": null,
+      "item_id": "item3",
+      "kind": "label",
+      "line_box": null,
+      "normalized": "보낸 사람",
+      "speaker": null,
+      "text_verbatim": "보낸 사람"
+    },
+    {
+      "box": [
+        230,
+        132,
+        395,
+        154
+      ],
+      "ex_id": "EX4",
+      "frame_ts": null,
+      "item_id": "item4",
+      "kind": "party_name",
+      "line_box": null,
+      "normalized": "서가온(SAMPLE)",
+      "speaker": null,
+      "text_verbatim": "서가온(SAMPLE)"
+    },
+    {
+      "box": [
+        36,
+        209,
+        113,
+        227
+      ],
+      "ex_id": "EX4",
+      "frame_ts": null,
+      "item_id": "item5",
+      "kind": "label",
+      "line_box": null,
+      "normalized": "보낸 계좌",
+      "speaker": null,
+      "text_verbatim": "보낸 계좌"
+    },
+    {
+      "box": [
+        230,
+        207,
+        389,
+        224
+      ],
+      "ex_id": "EX4",
+      "frame_ts": null,
+      "item_id": "item6",
+      "kind": "account_number",
+      "line_box": null,
+      "normalized": "000-0000-1234",
+      "speaker": null,
+      "text_verbatim": "000-0000-1234"
+    },
+    {
+      "box": [
+        36,
+        281,
+        113,
+        300
+      ],
+      "ex_id": "EX4",
+      "frame_ts": null,
+      "item_id": "item7",
+      "kind": "label",
+      "line_box": null,
+      "normalized": "받는 사람",
+      "speaker": null,
+      "text_verbatim": "받는 사람"
+    },
+    {
+      "box": [
+        230,
+        276,
+        395,
+        298
+      ],
+      "ex_id": "EX4",
+      "frame_ts": null,
+      "item_id": "item8",
+      "kind": "party_name",
+      "line_box": null,
+      "normalized": "탁나루(SAMPLE)",
+      "speaker": null,
+      "text_verbatim": "탁나루(SAMPLE)"
+    },
+    {
+      "box": [
+        36,
+        353,
+        113,
+        371
+      ],
+      "ex_id": "EX4",
+      "frame_ts": null,
+      "item_id": "item9",
+      "kind": "label",
+      "line_box": null,
+      "normalized": "받는 계좌",
+      "speaker": null,
+      "text_verbatim": "받는 계좌"
+    },
+    {
+      "box": [
+        230,
+        351,
+        389,
+        367
+      ],
+      "ex_id": "EX4",
+      "frame_ts": null,
+      "item_id": "item10",
+      "kind": "account_number",
+      "line_box": null,
+      "normalized": "000-0000-5678",
+      "speaker": null,
+      "text_verbatim": "000-0000-5678"
+    },
+    {
+      "box": [
+        36,
+        425,
+        72,
+        444
+      ],
+      "ex_id": "EX4",
+      "frame_ts": null,
+      "item_id": "item11",
+      "kind": "label",
+      "line_box": null,
+      "normalized": "금액",
+      "speaker": null,
+      "text_verbatim": "금액"
+    },
+    {
+      "box": [
+        230,
+        420,
+        356,
+        442
+      ],
+      "ex_id": "EX4",
+      "frame_ts": null,
+      "item_id": "item12",
+      "kind": "amount",
+      "line_box": null,
+      "normalized": 5000000,
+      "speaker": null,
+      "text_verbatim": "5,000,000원"
+    },
+    {
+      "box": [
+        36,
+        497,
+        90,
+        515
+      ],
+      "ex_id": "EX4",
+      "frame_ts": null,
+      "item_id": "item13",
+      "kind": "label",
+      "line_box": null,
+      "normalized": "송금일",
+      "speaker": null,
+      "text_verbatim": "송금일"
+    },
+    {
+      "box": [
+        230,
+        495,
+        350,
+        512
+      ],
+      "ex_id": "EX4",
+      "frame_ts": null,
+      "item_id": "item14",
+      "kind": "date",
+      "line_box": null,
+      "normalized": "2026-03-10",
+      "speaker": null,
+      "text_verbatim": "2026-03-10"
+    },
+    {
+      "box": [
+        0,
+        0,
+        640,
+        36
+      ],
+      "ex_id": "EX5",
+      "frame_ts": null,
+      "item_id": "item1",
+      "kind": "watermark",
+      "line_box": null,
+      "normalized": "SAMPLE / 데모용",
+      "speaker": null,
+      "text_verbatim": "SAMPLE / 데모용"
+    },
+    {
+      "box": [
+        36,
+        62,
+        296,
+        92
+      ],
+      "ex_id": "EX5",
+      "frame_ts": null,
+      "item_id": "item2",
+      "kind": "header",
+      "line_box": null,
+      "normalized": "샘플은행 입금확인증",
+      "speaker": null,
+      "text_verbatim": "샘플은행 입금확인증"
+    },
+    {
+      "box": [
+        36,
+        137,
+        113,
+        156
+      ],
+      "ex_id": "EX5",
+      "frame_ts": null,
+      "item_id": "item3",
+      "kind": "label",
+      "line_box": null,
+      "normalized": "받은 사람",
+      "speaker": null,
+      "text_verbatim": "받은 사람"
+    },
+    {
+      "box": [
+        230,
+        132,
+        395,
+        154
+      ],
+      "ex_id": "EX5",
+      "frame_ts": null,
+      "item_id": "item4",
+      "kind": "party_name",
+      "line_box": null,
+      "normalized": "서가온(SAMPLE)",
+      "speaker": null,
+      "text_verbatim": "서가온(SAMPLE)"
+    },
+    {
+      "box": [
+        36,
+        209,
+        113,
+        227
+      ],
+      "ex_id": "EX5",
+      "frame_ts": null,
+      "item_id": "item5",
+      "kind": "label",
+      "line_box": null,
+      "normalized": "받은 계좌",
+      "speaker": null,
+      "text_verbatim": "받은 계좌"
+    },
+    {
+      "box": [
+        230,
+        207,
+        389,
+        224
+      ],
+      "ex_id": "EX5",
+      "frame_ts": null,
+      "item_id": "item6",
+      "kind": "account_number",
+      "line_box": null,
+      "normalized": "000-0000-1234",
+      "speaker": null,
+      "text_verbatim": "000-0000-1234"
+    },
+    {
+      "box": [
+        36,
+        281,
+        113,
+        300
+      ],
+      "ex_id": "EX5",
+      "frame_ts": null,
+      "item_id": "item7",
+      "kind": "label",
+      "line_box": null,
+      "normalized": "보낸 사람",
+      "speaker": null,
+      "text_verbatim": "보낸 사람"
+    },
+    {
+      "box": [
+        230,
+        276,
+        395,
+        298
+      ],
+      "ex_id": "EX5",
+      "frame_ts": null,
+      "item_id": "item8",
+      "kind": "party_name",
+      "line_box": null,
+      "normalized": "탁나루(SAMPLE)",
+      "speaker": null,
+      "text_verbatim": "탁나루(SAMPLE)"
+    },
+    {
+      "box": [
+        36,
+        353,
+        113,
+        371
+      ],
+      "ex_id": "EX5",
+      "frame_ts": null,
+      "item_id": "item9",
+      "kind": "label",
+      "line_box": null,
+      "normalized": "보낸 계좌",
+      "speaker": null,
+      "text_verbatim": "보낸 계좌"
+    },
+    {
+      "box": [
+        230,
+        351,
+        389,
+        367
+      ],
+      "ex_id": "EX5",
+      "frame_ts": null,
+      "item_id": "item10",
+      "kind": "account_number",
+      "line_box": null,
+      "normalized": "000-0000-5678",
+      "speaker": null,
+      "text_verbatim": "000-0000-5678"
+    },
+    {
+      "box": [
+        36,
+        425,
+        72,
+        444
+      ],
+      "ex_id": "EX5",
+      "frame_ts": null,
+      "item_id": "item11",
+      "kind": "label",
+      "line_box": null,
+      "normalized": "금액",
+      "speaker": null,
+      "text_verbatim": "금액"
+    },
+    {
+      "box": [
+        230,
+        420,
+        356,
+        442
+      ],
+      "ex_id": "EX5",
+      "frame_ts": null,
+      "item_id": "item12",
+      "kind": "amount",
+      "line_box": null,
+      "normalized": 1000000,
+      "speaker": null,
+      "text_verbatim": "1,000,000원"
+    },
+    {
+      "box": [
+        36,
+        497,
+        90,
+        515
+      ],
+      "ex_id": "EX5",
+      "frame_ts": null,
+      "item_id": "item13",
+      "kind": "label",
+      "line_box": null,
+      "normalized": "입금일",
+      "speaker": null,
+      "text_verbatim": "입금일"
+    },
+    {
+      "box": [
+        230,
+        495,
+        350,
+        511
+      ],
+      "ex_id": "EX5",
+      "frame_ts": null,
+      "item_id": "item14",
+      "kind": "date",
+      "line_box": null,
+      "normalized": "2026-05-01",
+      "speaker": null,
+      "text_verbatim": "2026-05-01"
+    },
+    {
+      "box": [
+        0,
+        0,
+        1240,
+        36
+      ],
+      "ex_id": "EX6",
+      "frame_ts": null,
+      "item_id": "item1",
+      "kind": "watermark",
+      "line_box": null,
+      "normalized": "SAMPLE / 데모용",
+      "speaker": null,
+      "text_verbatim": "SAMPLE / 데모용"
+    },
+    {
+      "box": [
+        524,
+        81,
+        715,
+        135
+      ],
+      "ex_id": "EX6",
+      "frame_ts": null,
+      "item_id": "item2",
+      "kind": "header",
+      "line_box": null,
+      "normalized": "차 용 증",
+      "speaker": null,
+      "text_verbatim": "차 용 증"
+    },
+    {
+      "box": [
+        120,
+        193,
+        204,
+        222
+      ],
+      "ex_id": "EX6",
+      "frame_ts": null,
+      "item_id": "item3",
+      "kind": "label",
+      "line_box": null,
+      "normalized": "채권자",
+      "speaker": null,
+      "text_verbatim": "채권자"
+    },
+    {
+      "box": [
+        470,
+        188,
+        723,
+        222
+      ],
+      "ex_id": "EX6",
+      "frame_ts": null,
+      "item_id": "item4",
+      "kind": "party_name",
+      "line_box": null,
+      "normalized": "서가온(SAMPLE)",
+      "speaker": null,
+      "text_verbatim": "서가온(SAMPLE)"
+    },
+    {
+      "box": [
+        120,
+        281,
+        268,
+        311
+      ],
+      "ex_id": "EX6",
+      "frame_ts": null,
+      "item_id": "item5",
+      "kind": "label",
+      "line_box": null,
+      "normalized": "채권자 주소",
+      "speaker": null,
+      "text_verbatim": "채권자 주소"
+    },
+    {
+      "box": [
+        470,
+        276,
+        873,
+        309
+      ],
+      "ex_id": "EX6",
+      "frame_ts": null,
+      "item_id": "item6",
+      "kind": "address",
+      "line_box": null,
+      "normalized": "서울특별시 샘플구 데모로 0",
+      "speaker": null,
+      "text_verbatim": "서울특별시 샘플구 데모로 0"
+    },
+    {
+      "box": [
+        120,
+        369,
+        204,
+        398
+      ],
+      "ex_id": "EX6",
+      "frame_ts": null,
+      "item_id": "item7",
+      "kind": "label",
+      "line_box": null,
+      "normalized": "채무자",
+      "speaker": null,
+      "text_verbatim": "채무자"
+    },
+    {
+      "box": [
+        470,
+        364,
+        723,
+        398
+      ],
+      "ex_id": "EX6",
+      "frame_ts": null,
+      "item_id": "item8",
+      "kind": "party_name",
+      "line_box": null,
+      "normalized": "탁나루(SAMPLE)",
+      "speaker": null,
+      "text_verbatim": "탁나루(SAMPLE)"
+    },
+    {
+      "box": [
+        120,
+        457,
+        268,
+        487
+      ],
+      "ex_id": "EX6",
+      "frame_ts": null,
+      "item_id": "item9",
+      "kind": "label",
+      "line_box": null,
+      "normalized": "채무자 주소",
+      "speaker": null,
+      "text_verbatim": "채무자 주소"
+    },
+    {
+      "box": [
+        470,
+        452,
+        809,
+        485
+      ],
+      "ex_id": "EX6",
+      "frame_ts": null,
+      "item_id": "item10",
+      "kind": "address",
+      "line_box": null,
+      "normalized": "경기도 샘플시 데모동 0",
+      "speaker": null,
+      "text_verbatim": "경기도 샘플시 데모동 0"
+    },
+    {
+      "box": [
+        120,
+        546,
+        176,
+        575
+      ],
+      "ex_id": "EX6",
+      "frame_ts": null,
+      "item_id": "item11",
+      "kind": "label",
+      "line_box": null,
+      "normalized": "금액",
+      "speaker": null,
+      "text_verbatim": "금액"
+    },
+    {
+      "box": [
+        470,
+        541,
+        669,
+        574
+      ],
+      "ex_id": "EX6",
+      "frame_ts": null,
+      "item_id": "item12",
+      "kind": "amount",
+      "line_box": null,
+      "normalized": 5000000,
+      "speaker": null,
+      "text_verbatim": "5,000,000원"
+    },
+    {
+      "box": [
+        120,
+        633,
+        254,
+        663
+      ],
+      "ex_id": "EX6",
+      "frame_ts": null,
+      "item_id": "item13",
+      "kind": "label",
+      "line_box": null,
+      "normalized": "금액(한글)",
+      "speaker": null,
+      "text_verbatim": "금액(한글)"
+    },
+    {
+      "box": [
+        470,
+        628,
+        650,
+        661
+      ],
+      "ex_id": "EX6",
+      "frame_ts": null,
+      "item_id": "item14",
+      "kind": "amount",
+      "line_box": null,
+      "normalized": 5000000,
+      "speaker": null,
+      "text_verbatim": "금 오백만 원"
+    },
+    {
+      "box": [
+        120,
+        721,
+        204,
+        750
+      ],
+      "ex_id": "EX6",
+      "frame_ts": null,
+      "item_id": "item15",
+      "kind": "label",
+      "line_box": null,
+      "normalized": "대여일",
+      "speaker": null,
+      "text_verbatim": "대여일"
+    },
+    {
+      "box": [
+        470,
+        719,
+        662,
+        746
+      ],
+      "ex_id": "EX6",
+      "frame_ts": null,
+      "item_id": "item16",
+      "kind": "date",
+      "line_box": null,
+      "normalized": "2026-03-10",
+      "speaker": null,
+      "text_verbatim": "2026-03-10"
+    },
+    {
+      "box": [
+        120,
+        809,
+        204,
+        838
+      ],
+      "ex_id": "EX6",
+      "frame_ts": null,
+      "item_id": "item17",
+      "kind": "label",
+      "line_box": null,
+      "normalized": "변제기",
+      "speaker": null,
+      "text_verbatim": "변제기"
+    },
+    {
+      "box": [
+        470,
+        807,
+        662,
+        833
+      ],
+      "ex_id": "EX6",
+      "frame_ts": null,
+      "item_id": "item18",
+      "kind": "date",
+      "line_box": null,
+      "normalized": "2026-04-10",
+      "speaker": null,
+      "text_verbatim": "2026-04-10"
+    },
+    {
+      "box": [
+        120,
+        898,
+        332,
+        931
+      ],
+      "ex_id": "EX6",
+      "frame_ts": null,
+      "item_id": "item19",
+      "kind": "label",
+      "line_box": null,
+      "normalized": "이자 약정 없음",
+      "speaker": null,
+      "text_verbatim": "이자 약정 없음"
+    },
+    {
+      "box": [
+        120,
+        986,
+        288,
+        1015
+      ],
+      "ex_id": "EX6",
+      "frame_ts": null,
+      "item_id": "item20",
+      "kind": "label",
+      "line_box": null,
+      "normalized": "주민등록번호",
+      "speaker": null,
+      "text_verbatim": "주민등록번호"
+    },
+    {
+      "box": [
+        470,
+        984,
+        755,
+        1009
+      ],
+      "ex_id": "EX6",
+      "frame_ts": null,
+      "item_id": "item21",
+      "kind": "id_number",
+      "line_box": null,
+      "normalized": "000000-0000000",
+      "speaker": null,
+      "text_verbatim": "000000-0000000"
+    },
+    {
+      "box": [
+        120,
+        1097,
+        386,
+        1125
+      ],
+      "ex_id": "EX6",
+      "frame_ts": null,
+      "item_id": "item22",
+      "kind": "label",
+      "line_box": null,
+      "normalized": "서가온(SAMPLE) 서명",
+      "speaker": null,
+      "text_verbatim": "서가온(SAMPLE) 서명"
+    },
+    {
+      "box": [
+        120,
+        1287,
+        386,
+        1315
+      ],
+      "ex_id": "EX6",
+      "frame_ts": null,
+      "item_id": "item23",
+      "kind": "label",
+      "line_box": null,
+      "normalized": "탁나루(SAMPLE) 서명",
+      "speaker": null,
+      "text_verbatim": "탁나루(SAMPLE) 서명"
+    },
+    {
+      "box": [
+        1015,
+        1304,
+        1144,
+        1349
+      ],
+      "ex_id": "EX6",
+      "frame_ts": null,
+      "item_id": "item24",
+      "kind": "party_name",
+      "line_box": null,
+      "normalized": "탁나루",
+      "speaker": null,
+      "text_verbatim": "탁나루"
+    },
+    {
+      "box": [
+        0,
+        0,
+        1240,
+        36
+      ],
+      "ex_id": "EX7",
+      "frame_ts": null,
+      "item_id": "item1",
+      "kind": "watermark",
+      "line_box": null,
+      "normalized": "SAMPLE / 데모용",
+      "speaker": null,
+      "text_verbatim": "SAMPLE / 데모용"
+    },
+    {
+      "box": [
+        524,
+        81,
+        715,
+        135
+      ],
+      "ex_id": "EX7",
+      "frame_ts": null,
+      "item_id": "item2",
+      "kind": "header",
+      "line_box": null,
+      "normalized": "차 용 증",
+      "speaker": null,
+      "text_verbatim": "차 용 증"
+    },
+    {
+      "box": [
+        120,
+        193,
+        204,
+        222
+      ],
+      "ex_id": "EX7",
+      "frame_ts": null,
+      "item_id": "item3",
+      "kind": "label",
+      "line_box": null,
+      "normalized": "채권자",
+      "speaker": null,
+      "text_verbatim": "채권자"
+    },
+    {
+      "box": [
+        470,
+        188,
+        723,
+        222
+      ],
+      "ex_id": "EX7",
+      "frame_ts": null,
+      "item_id": "item4",
+      "kind": "party_name",
+      "line_box": null,
+      "normalized": "서가온(SAMPLE)",
+      "speaker": null,
+      "text_verbatim": "서가온(SAMPLE)"
+    },
+    {
+      "box": [
+        120,
+        281,
+        268,
+        311
+      ],
+      "ex_id": "EX7",
+      "frame_ts": null,
+      "item_id": "item5",
+      "kind": "label",
+      "line_box": null,
+      "normalized": "채권자 주소",
+      "speaker": null,
+      "text_verbatim": "채권자 주소"
+    },
+    {
+      "box": [
+        470,
+        276,
+        873,
+        309
+      ],
+      "ex_id": "EX7",
+      "frame_ts": null,
+      "item_id": "item6",
+      "kind": "address",
+      "line_box": null,
+      "normalized": "서울특별시 샘플구 데모로 0",
+      "speaker": null,
+      "text_verbatim": "서울특별시 샘플구 데모로 0"
+    },
+    {
+      "box": [
+        120,
+        369,
+        204,
+        398
+      ],
+      "ex_id": "EX7",
+      "frame_ts": null,
+      "item_id": "item7",
+      "kind": "label",
+      "line_box": null,
+      "normalized": "채무자",
+      "speaker": null,
+      "text_verbatim": "채무자"
+    },
+    {
+      "box": [
+        470,
+        364,
+        723,
+        398
+      ],
+      "ex_id": "EX7",
+      "frame_ts": null,
+      "item_id": "item8",
+      "kind": "party_name",
+      "line_box": null,
+      "normalized": "탁나루(SAMPLE)",
+      "speaker": null,
+      "text_verbatim": "탁나루(SAMPLE)"
+    },
+    {
+      "box": [
+        120,
+        457,
+        268,
+        487
+      ],
+      "ex_id": "EX7",
+      "frame_ts": null,
+      "item_id": "item9",
+      "kind": "label",
+      "line_box": null,
+      "normalized": "채무자 주소",
+      "speaker": null,
+      "text_verbatim": "채무자 주소"
+    },
+    {
+      "box": [
+        470,
+        452,
+        809,
+        485
+      ],
+      "ex_id": "EX7",
+      "frame_ts": null,
+      "item_id": "item10",
+      "kind": "address",
+      "line_box": null,
+      "normalized": "경기도 샘플시 데모동 0",
+      "speaker": null,
+      "text_verbatim": "경기도 샘플시 데모동 0"
+    },
+    {
+      "box": [
+        120,
+        546,
+        176,
+        575
+      ],
+      "ex_id": "EX7",
+      "frame_ts": null,
+      "item_id": "item11",
+      "kind": "label",
+      "line_box": null,
+      "normalized": "금액",
+      "speaker": null,
+      "text_verbatim": "금액"
+    },
+    {
+      "box": [
+        470,
+        541,
+        669,
+        574
+      ],
+      "ex_id": "EX7",
+      "frame_ts": null,
+      "item_id": "item12",
+      "kind": "amount",
+      "line_box": null,
+      "normalized": 5000000,
+      "speaker": null,
+      "text_verbatim": "5,000,000원"
+    },
+    {
+      "box": [
+        120,
+        633,
+        254,
+        663
+      ],
+      "ex_id": "EX7",
+      "frame_ts": null,
+      "item_id": "item13",
+      "kind": "label",
+      "line_box": null,
+      "normalized": "금액(한글)",
+      "speaker": null,
+      "text_verbatim": "금액(한글)"
+    },
+    {
+      "box": [
+        470,
+        628,
+        650,
+        661
+      ],
+      "ex_id": "EX7",
+      "frame_ts": null,
+      "item_id": "item14",
+      "kind": "amount",
+      "line_box": null,
+      "normalized": 5000000,
+      "speaker": null,
+      "text_verbatim": "금 오백만 원"
+    },
+    {
+      "box": [
+        120,
+        721,
+        204,
+        750
+      ],
+      "ex_id": "EX7",
+      "frame_ts": null,
+      "item_id": "item15",
+      "kind": "label",
+      "line_box": null,
+      "normalized": "대여일",
+      "speaker": null,
+      "text_verbatim": "대여일"
+    },
+    {
+      "box": [
+        470,
+        719,
+        662,
+        746
+      ],
+      "ex_id": "EX7",
+      "frame_ts": null,
+      "item_id": "item16",
+      "kind": "date",
+      "line_box": null,
+      "normalized": "2026-03-10",
+      "speaker": null,
+      "text_verbatim": "2026-03-10"
+    },
+    {
+      "box": [
+        120,
+        809,
+        204,
+        838
+      ],
+      "ex_id": "EX7",
+      "frame_ts": null,
+      "item_id": "item17",
+      "kind": "label",
+      "line_box": null,
+      "normalized": "변제기",
+      "speaker": null,
+      "text_verbatim": "변제기"
+    },
+    {
+      "box": [
+        470,
+        807,
+        662,
+        833
+      ],
+      "ex_id": "EX7",
+      "frame_ts": null,
+      "item_id": "item18",
+      "kind": "date",
+      "line_box": null,
+      "normalized": "2026-04-10",
+      "speaker": null,
+      "text_verbatim": "2026-04-10"
+    },
+    {
+      "box": [
+        120,
+        898,
+        332,
+        931
+      ],
+      "ex_id": "EX7",
+      "frame_ts": null,
+      "item_id": "item19",
+      "kind": "label",
+      "line_box": null,
+      "normalized": "이자 약정 없음",
+      "speaker": null,
+      "text_verbatim": "이자 약정 없음"
+    },
+    {
+      "box": [
+        120,
+        986,
+        288,
+        1015
+      ],
+      "ex_id": "EX7",
+      "frame_ts": null,
+      "item_id": "item20",
+      "kind": "label",
+      "line_box": null,
+      "normalized": "주민등록번호",
+      "speaker": null,
+      "text_verbatim": "주민등록번호"
+    },
+    {
+      "box": [
+        470,
+        984,
+        755,
+        1009
+      ],
+      "ex_id": "EX7",
+      "frame_ts": null,
+      "item_id": "item21",
+      "kind": "id_number",
+      "line_box": null,
+      "normalized": "000000-0000000",
+      "speaker": null,
+      "text_verbatim": "000000-0000000"
+    },
+    {
+      "box": [
+        120,
+        1097,
+        386,
+        1125
+      ],
+      "ex_id": "EX7",
+      "frame_ts": null,
+      "item_id": "item22",
+      "kind": "label",
+      "line_box": null,
+      "normalized": "서가온(SAMPLE) 서명",
+      "speaker": null,
+      "text_verbatim": "서가온(SAMPLE) 서명"
+    },
+    {
+      "box": [
+        120,
+        1287,
+        386,
+        1315
+      ],
+      "ex_id": "EX7",
+      "frame_ts": null,
+      "item_id": "item23",
+      "kind": "label",
+      "line_box": null,
+      "normalized": "탁나루(SAMPLE) 서명",
+      "speaker": null,
+      "text_verbatim": "탁나루(SAMPLE) 서명"
+    },
+    {
+      "box": [
+        1015,
+        1304,
+        1144,
+        1349
+      ],
+      "ex_id": "EX7",
+      "frame_ts": null,
+      "item_id": "item24",
+      "kind": "party_name",
+      "line_box": null,
+      "normalized": "탁나루",
+      "speaker": null,
+      "text_verbatim": "탁나루"
+    }
+  ],
+  "redaction_targets": [
+    {
+      "ex_id": "EX4",
+      "item_id": "item6",
+      "keep_box": [
+        337,
+        207,
+        389,
+        224
+      ],
+      "mask_box": [
+        230,
+        207,
+        337,
+        224
+      ],
+      "target": "account_number"
+    },
+    {
+      "ex_id": "EX4",
+      "item_id": "item10",
+      "keep_box": [
+        337,
+        351,
+        389,
+        367
+      ],
+      "mask_box": [
+        230,
+        351,
+        337,
+        367
+      ],
+      "target": "account_number"
+    },
+    {
+      "ex_id": "EX5",
+      "item_id": "item6",
+      "keep_box": [
+        337,
+        207,
+        389,
+        224
+      ],
+      "mask_box": [
+        230,
+        207,
+        337,
+        224
+      ],
+      "target": "account_number"
+    },
+    {
+      "ex_id": "EX5",
+      "item_id": "item10",
+      "keep_box": [
+        337,
+        351,
+        389,
+        367
+      ],
+      "mask_box": [
+        230,
+        351,
+        337,
+        367
+      ],
+      "target": "account_number"
+    },
+    {
+      "ex_id": "EX6",
+      "item_id": "item21",
+      "keep_box": null,
+      "mask_box": [
+        608,
+        984,
+        755,
+        1009
+      ],
+      "target": "id_number"
+    },
+    {
+      "ex_id": "EX7",
+      "item_id": "item21",
+      "keep_box": null,
+      "mask_box": [
+        608,
+        984,
+        755,
+        1009
+      ],
+      "target": "id_number"
+    }
+  ],
+  "utterance_tags": {
+    "EX1:item10": [
+      "amount_mention",
+      "repay_promise"
+    ],
+    "EX1:item14": [
+      "amount_mention"
+    ],
+    "EX1:item17": [
+      "other"
+    ],
+    "EX1:item5": [
+      "loan_request",
+      "amount_mention"
+    ],
+    "EX1:item7": [
+      "amount_mention"
+    ],
+    "EX2:item10": [
+      "reminder"
+    ],
+    "EX2:item13": [
+      "repay_promise"
+    ],
+    "EX2:item17": [
+      "amount_mention"
+    ],
+    "EX2:item19": [
+      "amount_mention",
+      "reminder"
+    ],
+    "EX2:item23": [
+      "amount_mention",
+      "repay_promise"
+    ],
+    "EX2:item4": [
+      "reminder"
+    ],
+    "EX2:item7": [
+      "repay_promise"
+    ],
+    "EX3:item10": [
+      "reminder"
+    ],
+    "EX3:item13": [
+      "repay_promise"
+    ],
+    "EX3:item17": [
+      "amount_mention"
+    ],
+    "EX3:item19": [
+      "amount_mention",
+      "reminder"
+    ],
+    "EX3:item23": [
+      "amount_mention",
+      "repay_promise"
+    ],
+    "EX3:item4": [
+      "reminder"
+    ],
+    "EX3:item7": [
+      "repay_promise"
+    ]
+  },
+  "vision_targets": [
+    {
+      "box": [
+        20,
+        166,
+        60,
+        206
+      ],
+      "ex_id": "EX1",
+      "frame_box": null,
+      "frame_ts": null,
+      "item_id": null,
+      "target": "face"
+    },
+    {
+      "box": [
+        70,
+        150,
+        459,
+        223
+      ],
+      "ex_id": "EX1",
+      "frame_box": null,
+      "frame_ts": null,
+      "item_id": "item5",
+      "target": "chat_bubble"
+    },
+    {
+      "box": [
+        278,
+        239,
+        620,
+        284
+      ],
+      "ex_id": "EX1",
+      "frame_box": null,
+      "frame_ts": null,
+      "item_id": "item7",
+      "target": "chat_bubble"
+    },
+    {
+      "box": [
+        20,
+        322,
+        352,
+        395
+      ],
+      "ex_id": "EX1",
+      "frame_box": null,
+      "frame_ts": null,
+      "item_id": "item10",
+      "target": "chat_bubble"
+    },
+    {
+      "box": [
+        253,
+        457,
+        620,
+        502
+      ],
+      "ex_id": "EX1",
+      "frame_box": null,
+      "frame_ts": null,
+      "item_id": "item14",
+      "target": "chat_bubble"
+    },
+    {
+      "box": [
+        20,
+        540,
+        199,
+        585
+      ],
+      "ex_id": "EX1",
+      "frame_box": null,
+      "frame_ts": null,
+      "item_id": "item17",
+      "target": "chat_bubble"
+    },
+    {
+      "box": [
+        269,
+        301,
+        620,
+        374
+      ],
+      "ex_id": "EX2",
+      "frame_box": null,
+      "frame_ts": null,
+      "item_id": "item4",
+      "target": "chat_bubble"
+    },
+    {
+      "box": [
+        20,
+        587,
+        60,
+        627
+      ],
+      "ex_id": "EX2",
+      "frame_box": null,
+      "frame_ts": null,
+      "item_id": null,
+      "target": "face"
+    },
+    {
+      "box": [
+        70,
+        585,
+        421,
+        630
+      ],
+      "ex_id": "EX2",
+      "frame_box": null,
+      "frame_ts": null,
+      "item_id": "item7",
+      "target": "chat_bubble"
+    },
+    {
+      "box": [
+        250,
+        1038,
+        620,
+        1111
+      ],
+      "ex_id": "EX2",
+      "frame_box": null,
+      "frame_ts": null,
+      "item_id": "item10",
+      "target": "chat_bubble"
+    },
+    {
+      "box": [
+        20,
+        1322,
+        460,
+        1367
+      ],
+      "ex_id": "EX2",
+      "frame_box": null,
+      "frame_ts": null,
+      "item_id": "item13",
+      "target": "chat_bubble"
+    },
+    {
+      "box": [
+        20,
+        1797,
+        289,
+        1842
+      ],
+      "ex_id": "EX2",
+      "frame_box": null,
+      "frame_ts": null,
+      "item_id": "item17",
+      "target": "chat_bubble"
+    },
+    {
+      "box": [
+        183,
+        2031,
+        620,
+        2104
+      ],
+      "ex_id": "EX2",
+      "frame_box": null,
+      "frame_ts": null,
+      "item_id": "item19",
+      "target": "chat_bubble"
+    },
+    {
+      "box": [
+        20,
+        2315,
+        413,
+        2360
+      ],
+      "ex_id": "EX2",
+      "frame_box": null,
+      "frame_ts": null,
+      "item_id": "item23",
+      "target": "chat_bubble"
+    },
+    {
+      "box": [
+        269,
+        301,
+        620,
+        374
+      ],
+      "ex_id": "EX3",
+      "frame_box": null,
+      "frame_ts": 0.0,
+      "item_id": "item4",
+      "target": "chat_bubble"
+    },
+    {
+      "box": [
+        20,
+        587,
+        60,
+        627
+      ],
+      "ex_id": "EX3",
+      "frame_box": null,
+      "frame_ts": 0.0,
+      "item_id": null,
+      "target": "face"
+    },
+    {
+      "box": [
+        70,
+        585,
+        421,
+        630
+      ],
+      "ex_id": "EX3",
+      "frame_box": null,
+      "frame_ts": 0.0,
+      "item_id": "item7",
+      "target": "chat_bubble"
+    },
+    {
+      "box": [
+        250,
+        887,
+        620,
+        960
+      ],
+      "ex_id": "EX3",
+      "frame_box": null,
+      "frame_ts": 0.734,
+      "item_id": "item10",
+      "target": "chat_bubble"
+    },
+    {
+      "box": [
+        20,
+        915,
+        460,
+        960
+      ],
+      "ex_id": "EX3",
+      "frame_box": null,
+      "frame_ts": 1.978,
+      "item_id": "item13",
+      "target": "chat_bubble"
+    },
+    {
+      "box": [
+        20,
+        915,
+        289,
+        960
+      ],
+      "ex_id": "EX3",
+      "frame_box": null,
+      "frame_ts": 4.288,
+      "item_id": "item17",
+      "target": "chat_bubble"
+    },
+    {
+      "box": [
+        183,
+        887,
+        620,
+        960
+      ],
+      "ex_id": "EX3",
+      "frame_box": null,
+      "frame_ts": 5.561,
+      "item_id": "item19",
+      "target": "chat_bubble"
+    },
+    {
+      "box": [
+        20,
+        915,
+        413,
+        960
+      ],
+      "ex_id": "EX3",
+      "frame_box": null,
+      "frame_ts": 6.806,
+      "item_id": "item23",
+      "target": "chat_bubble"
+    },
+    {
+      "box": [
+        492,
+        1100,
+        928,
+        1186
+      ],
+      "ex_id": "EX6",
+      "frame_box": [
+        470,
+        1067,
+        950,
+        1217
+      ],
+      "frame_ts": null,
+      "item_id": null,
+      "target": "signature"
+    },
+    {
+      "box": [
+        492,
+        1290,
+        928,
+        1376
+      ],
+      "ex_id": "EX6",
+      "frame_box": [
+        470,
+        1257,
+        950,
+        1407
+      ],
+      "frame_ts": null,
+      "item_id": null,
+      "target": "signature"
+    },
+    {
+      "box": [
+        990,
+        1237,
+        1170,
+        1417
+      ],
+      "ex_id": "EX6",
+      "frame_box": null,
+      "frame_ts": null,
+      "item_id": null,
+      "target": "stamp"
+    },
+    {
+      "box": [
+        492,
+        1100,
+        928,
+        1186
+      ],
+      "ex_id": "EX7",
+      "frame_box": [
+        470,
+        1067,
+        950,
+        1217
+      ],
+      "frame_ts": null,
+      "item_id": null,
+      "target": "signature"
+    },
+    {
+      "box": [
+        492,
+        1290,
+        928,
+        1376
+      ],
+      "ex_id": "EX7",
+      "frame_box": [
+        470,
+        1257,
+        950,
+        1407
+      ],
+      "frame_ts": null,
+      "item_id": null,
+      "target": "signature"
+    },
+    {
+      "box": [
+        990,
+        1237,
+        1170,
+        1417
+      ],
+      "ex_id": "EX7",
+      "frame_box": null,
+      "frame_ts": null,
+      "item_id": null,
+      "target": "stamp"
+    }
+  ]
+}

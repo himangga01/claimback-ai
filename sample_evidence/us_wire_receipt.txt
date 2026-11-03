@@ -1,7 +1,7 @@
 [WIRE TRANSFER RECEIPT - SAMPLE BANK]
 Date: January 10, 2026 10:15 AM PST
-Sender: Jaehoon Jeong (Account Ending in 7547)
-Beneficiary: Michael Scott (Account Ending in 0144, Sample Bank Los Angeles)
+Sender: Avery Linden (SAMPLE) (Account Ending in 1234)
+Beneficiary: Rowan Hale (SAMPLE) (Account Ending in 3456, Sample Bank Los Angeles)
 Amount: $5,000.00 USD
 Memo: Personal bridge loan (Due April 10, 2026)
 Reference Number: SAMPLE-WIRE-20260110-88192

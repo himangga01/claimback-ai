@@ -1,18 +1,66 @@
 {
-  "korean_sample": {
-    "transfer_receipt": {
-      "file": "kr_transfer_receipt.txt",
-      "sha256": "d70b3366d2832696e488d07b9b4ebcd4a12d94d833ec5dcc821ce39b8931568c"
+  "en_images": {
+    "chat_01.png": {
+      "file": "en/chat_01.png",
+      "sha256": "5283f0d030a6a2408f92d50f9fbaddb78234ddcbf1fdf9d31bc98095153a75bb"
     },
+    "promissory_note.pdf": {
+      "file": "en/promissory_note.pdf",
+      "sha256": "287c100e632b89bc05441f5eb4d2e0bdf21ecc3463dfdd8017519fd0cce18785"
+    },
+    "promissory_note.png": {
+      "file": "en/promissory_note.png",
+      "sha256": "485acd9ef5bc24c84866010ddf4efc0fb6577da438d442102e10564e6fac2976"
+    },
+    "wire_receipt.png": {
+      "file": "en/wire_receipt.png",
+      "sha256": "e575ca48775fa3e769a370d153d8aa7bec1de5d08d0e12417dd97cb7a8c8df12"
+    }
+  },
+  "korean_sample": {
     "chat_log": {
       "file": "kr_chat_log.txt",
-      "sha256": "01ee74d4a1780b06715d6fe0261aa669e71d564c5c22c50843df44fd9e4ed6c8"
+      "sha256": "63e31fe59bb5e7c25cd1ff528135e12488318d579c3ec9219e6b4d85dac42e25"
+    },
+    "transfer_receipt": {
+      "file": "kr_transfer_receipt.txt",
+      "sha256": "8fe6d6d4617185b96cdbbbcac3b9cad0e39f003e4c99977c586a7a4e149d6728"
+    }
+  },
+  "kr_images": {
+    "chat_01.png": {
+      "file": "kr/chat_01.png",
+      "sha256": "aef151799973a34a2f885db948628581d26af0c5ba59e91a1678592beaf31628"
+    },
+    "chat_02_scroll.mp4": {
+      "file": "kr/chat_02_scroll.mp4",
+      "sha256": "021bf97f57823ac130aeb11b1d2fe4ac7f41cf3c6ab0ad623987381d60a750ed"
+    },
+    "chat_02_tall.png": {
+      "file": "kr/chat_02_tall.png",
+      "sha256": "1895b682c0c13e93695725000d8e45200d237b83772ec21615990ea72379f54f"
+    },
+    "iou.pdf": {
+      "file": "kr/iou.pdf",
+      "sha256": "00fa48803f3d374dc11c16ee870aa716bb13ee7884925e75a5bee03d53ee1e06"
+    },
+    "iou.png": {
+      "file": "kr/iou.png",
+      "sha256": "bc160472494ac638ef77d04c37c539cebe95a70d59efde100d949acac3c2dd58"
+    },
+    "transfer_loan.png": {
+      "file": "kr/transfer_loan.png",
+      "sha256": "b984e7ba284244e334e9d7a98d1d9111a83cc887c47a38353fd22c20c83d32bb"
+    },
+    "transfer_repay.png": {
+      "file": "kr/transfer_repay.png",
+      "sha256": "c4e295a2f6dc285fa36c501399b965f51fdbceadda3a37072ea5add4b40dbb5d"
     }
   },
   "us_sample": {
     "wire_receipt": {
       "file": "us_wire_receipt.txt",
-      "sha256": "5dbb5c03b372ec55f35e217bf7a2f0813dbeeddf6b33b3b6f8b6284710f3a69d"
+      "sha256": "1bea6080d6dbd79e562e66a81fed0a7efa51081ee9cc8c8c4784cf87f66ea7c4"
     }
   }
 }

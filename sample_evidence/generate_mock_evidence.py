@@ -8,8 +8,8 @@ def make_sample_files():
     # 1. 한국 샘플은행 이체확인증 모의 파일
     kr_transfer_text = """[샘플은행 송금확인증]
 송금일시: 2026년 01월 01일 14:22:10
-보낸 분: 정재훈 (샘플은행 1000-****-7547)
-받는 분: 김채무 (샘플은행 3333-****-5678)
+보낸 분: 서가온(SAMPLE) (샘플은행 000-****-1234)
+받는 분: 탁나루(SAMPLE) (샘플은행 000-****-3456)
 송금금액: 10,000,000원 (금 일천만 원)
 송금메모: 대여금 (6월 30일 변제 약정)
 상태: 정상 이체완료
@@ -21,10 +21,10 @@ def make_sample_files():
     h1 = hashlib.sha256(kr_transfer_text.encode("utf-8")).hexdigest()
 
     # 2. 샘플톡 대화록 모의 파일
-    kr_chat_text = """[2026-06-25 18:30] 정재훈: 채무야, 6월 30일 약속한 천만 원 상환 준비 잘 되고 있어?
-[2026-06-25 18:32] 김채무: 형님 죄송해요 사업 정산이 조금 늦어져서요.. 다음 달 15일까지는 무조건 꼭 갚을게요 진짜 죄송합니다
-[2026-06-25 18:35] 정재훈: 약속대로 6월 30일까지 안 들어오면 법적 절차(지급명령) 들어갈 수밖에 없어.
-[2026-06-25 18:36] 김채무: 네 무슨 말씀인지 잘 알겠습니다. 원금 1,000만 원이랑 지연손해금까지 다 책임지겠습니다.
+    kr_chat_text = """[2026-06-25 18:30] 서가온(SAMPLE): 탁나루님, 6월 30일 약속한 천만 원 상환 준비 잘 되고 있어?
+[2026-06-25 18:32] 탁나루(SAMPLE): 형님 죄송해요 사업 정산이 조금 늦어져서요.. 다음 달 15일까지는 무조건 꼭 갚을게요 진짜 죄송합니다
+[2026-06-25 18:35] 서가온(SAMPLE): 약속대로 6월 30일까지 안 들어오면 법적 절차(지급명령) 들어갈 수밖에 없어.
+[2026-06-25 18:36] 탁나루(SAMPLE): 네 무슨 말씀인지 잘 알겠습니다. 원금 1,000만 원이랑 지연손해금까지 다 책임지겠습니다.
 """
     p2 = os.path.join(SAMPLE_DIR, "kr_chat_log.txt")
     with open(p2, "w", encoding="utf-8", newline="\n") as f:
@@ -34,8 +34,8 @@ def make_sample_files():
     # 3. 미국 Wire Transfer 모의 파일
     us_transfer_text = """[WIRE TRANSFER RECEIPT - SAMPLE BANK]
 Date: January 10, 2026 10:15 AM PST
-Sender: Jaehoon Jeong (Account Ending in 7547)
-Beneficiary: Michael Scott (Account Ending in 0144, Sample Bank Los Angeles)
+Sender: Avery Linden (SAMPLE) (Account Ending in 1234)
+Beneficiary: Rowan Hale (SAMPLE) (Account Ending in 3456, Sample Bank Los Angeles)
 Amount: $5,000.00 USD
 Memo: Personal bridge loan (Due April 10, 2026)
 Reference Number: SAMPLE-WIRE-20260110-88192
