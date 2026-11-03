@@ -31,6 +31,9 @@ _IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}
 _PDF_SUFFIXES = {".pdf"}
 _VIDEO_SUFFIXES = {".mp4", ".mov", ".avi", ".webm", ".mkv"}
 
+MAX_UPLOAD_BYTES = 20 * 1024 * 1024
+MAX_EVIDENCE_COUNT = 10
+
 
 def sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(bytes(data)).hexdigest()
@@ -49,6 +52,34 @@ def kind_for(filename: str) -> Optional[str]:
     if suffix in _VIDEO_SUFFIXES:
         return "video"
     return None
+
+
+def content_matches_kind(data: bytes, kind: str) -> bool:
+    """Magic-byte check that upload bytes match the claimed kind (C11)."""
+    head = bytes(data or b"")[:16]
+    if kind == "pdf":
+        return head.startswith(b"%PDF")
+    if kind == "image":
+        if head.startswith(b"\x89PNG\r\n\x1a\n"):
+            return True
+        if head.startswith(b"\xff\xd8\xff"):
+            return True
+        if head.startswith((b"GIF87a", b"GIF89a")):
+            return True
+        if head.startswith(b"BM"):
+            return True
+        if head.startswith(b"RIFF") and b"WEBP" in bytes(data or b"")[:32]:
+            return True
+        return False
+    if kind == "video":
+        if len(head) >= 8 and head[4:8] == b"ftyp":
+            return True
+        if head.startswith(b"RIFF"):
+            return True
+        if head.startswith(b"\x1a\x45\xdf\xa3"):
+            return True
+        return False
+    return False
 
 
 def _next_number(state: CaseState) -> int:

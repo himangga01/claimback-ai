@@ -17,8 +17,8 @@ from app.agents.spark import field_summary, load_prompt, run_spark_json
 PROMPT_VERSION = "fact_organizer.v1"
 PROMPT_FILE = "fact_organizer.v1.md"
 MODEL = "muse-spark-1.3"
-MAX_OUTPUT_TOKENS = 4000
-REASONING_EFFORT = "medium"
+MAX_OUTPUT_TOKENS = 8000
+REASONING_EFFORT = "low"
 
 FIELD_LABELS: Dict[str, str] = {
     "creditor_name": "채권자 이름",
@@ -40,6 +40,8 @@ VALID_ROLES = ("loan_transfer", "repayment", "other")
 ORGANIZER_TEXT_FORMAT: Dict[str, Any] = {
     "type": "json_schema",
     "name": "review",
+    # strict stays False: field values are polymorphic (string|null|array)
+    # which strict schemas cannot express; enums are enforced below.
     "schema": {
         "type": "object",
         "properties": {
@@ -48,7 +50,8 @@ ORGANIZER_TEXT_FORMAT: Dict[str, Any] = {
                 "items": {
                     "type": "object",
                     "properties": {
-                        "field": {"type": "string"},
+                        "field": {"type": "string",
+                                  "enum": list(FIELD_LABELS)},
                         "value": {},
                         "sources": {
                             "type": "array",
@@ -59,13 +62,15 @@ ORGANIZER_TEXT_FORMAT: Dict[str, Any] = {
                                     "item_id": {"type": "string"},
                                 },
                                 "required": ["ex_id", "item_id"],
-                                "additionalProperties": True,
+                                "additionalProperties": False,
                             },
                         },
                         "conflict": {"type": "boolean"},
+                        "null_reason": {"type": ["string", "null"]},
                     },
-                    "required": ["field", "value", "sources"],
-                    "additionalProperties": True,
+                    "required": ["field", "value", "sources", "conflict",
+                                 "null_reason"],
+                    "additionalProperties": False,
                 },
             },
             "conflicts": {
@@ -77,7 +82,7 @@ ORGANIZER_TEXT_FORMAT: Dict[str, Any] = {
                         "note": {"type": "string"},
                     },
                     "required": ["fields", "note"],
-                    "additionalProperties": True,
+                    "additionalProperties": False,
                 },
             },
             "questions": {
@@ -85,11 +90,12 @@ ORGANIZER_TEXT_FORMAT: Dict[str, Any] = {
                 "items": {
                     "type": "object",
                     "properties": {
-                        "field": {"type": "string"},
+                        "field": {"type": "string",
+                                  "enum": list(FIELD_LABELS)},
                         "question": {"type": "string"},
                     },
                     "required": ["field", "question"],
-                    "additionalProperties": True,
+                    "additionalProperties": False,
                 },
             },
             "utterances": {
@@ -99,12 +105,14 @@ ORGANIZER_TEXT_FORMAT: Dict[str, Any] = {
                     "properties": {
                         "ex_id": {"type": "string"},
                         "item_id": {"type": "string"},
-                        "speaker": {"type": "string"},
+                        "speaker": {"type": ["string", "null"]},
                         "text": {"type": "string"},
-                        "tags": {"type": "array", "items": {"type": "string"}},
+                        "tags": {"type": "array",
+                                 "items": {"type": "string",
+                                           "enum": list(VALID_TAGS)}},
                     },
-                    "required": ["ex_id", "item_id", "text", "tags"],
-                    "additionalProperties": True,
+                    "required": ["ex_id", "item_id", "speaker", "text", "tags"],
+                    "additionalProperties": False,
                 },
             },
             "evidence_roles": {
@@ -113,14 +121,16 @@ ORGANIZER_TEXT_FORMAT: Dict[str, Any] = {
                     "type": "object",
                     "properties": {
                         "ex_id": {"type": "string"},
-                        "suggested_role": {"type": "string"},
+                        "suggested_role": {"type": "string",
+                                           "enum": list(VALID_ROLES)},
                     },
                     "required": ["ex_id", "suggested_role"],
-                    "additionalProperties": True,
+                    "additionalProperties": False,
                 },
             },
         },
-        "required": ["fields", "utterances", "evidence_roles"],
+        "required": ["fields", "conflicts", "questions", "utterances",
+                     "evidence_roles"],
         "additionalProperties": False,
     },
     "strict": False,
@@ -141,6 +151,7 @@ class ModelField(BaseModel):
     value: Any = None
     sources: List[ModelSource] = []
     conflict: bool = False
+    null_reason: Optional[str] = None
 
 
 class ModelConflict(BaseModel):
@@ -165,6 +176,19 @@ class ModelUtterance(BaseModel):
     speaker: Optional[str] = None
     text: str
     tags: List[str] = []
+
+    @classmethod
+    def _clean_speaker(cls, value: Any) -> Any:
+        if isinstance(value, str):
+            cleaned = value.strip()
+            if cleaned.lower() in ("null", "none", ":null", ""):
+                return None
+        return value
+
+    def __init__(self, **data: Any) -> None:
+        if "speaker" in data:
+            data["speaker"] = self._clean_speaker(data["speaker"])
+        super().__init__(**data)
 
 
 class ModelEvidenceRole(BaseModel):
@@ -210,9 +234,17 @@ def _iso_date(raw: Any, what: str) -> str:
         raise _ValueError(f"{what} is not a date") from exc
 
 
+def _is_null_token(value: Any) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, str):
+        return value.strip().lower() in ("", "null", "none", "-", "없음")
+    return False
+
+
 def normalize_field_value(name: str, value: Any) -> Any:
     """Machine formats for one field (raises _ValueError when unfixable)."""
-    if value is None or (isinstance(value, str) and not value.strip()):
+    if _is_null_token(value):
         return [] if name == "repayments" else None
     if name == "principal":
         return _digits_only(value, name)
@@ -220,7 +252,7 @@ def normalize_field_value(name: str, value: Any) -> Any:
         return _iso_date(value, name)
     if name == "interest_rate":
         text = str(value).strip().rstrip("%").strip()
-        if text in ("", "없음", "null", "None", "-"):
+        if text.lower() in ("", "없음", "null", "none", "-"):
             return None
         try:
             return format(Decimal(text).normalize(), "f")
@@ -234,6 +266,8 @@ def normalize_field_value(name: str, value: Any) -> Any:
             return "commercial"
         raise _ValueError(f"{name} is not civil|commercial")
     if name == "repayments":
+        if isinstance(value, str) and _is_null_token(value):
+            return []
         if not isinstance(value, list):
             raise _ValueError("repayments is not a list")
         cleaned = []
@@ -256,6 +290,8 @@ def display_for(name: str, value: Any) -> str:
     if name == "interest_rate":
         return "약정 없음" if value in (None, "") else deps.fmt_rate_pct(value)
     if name == "transaction_kind":
+        if value is None or value == "":
+            return ""
         return "개인 간 거래" if value == "civil" else "상거래"
     if name == "repayments":
         parts = [f"{deps.fmt_kr_date(r['date'])} {deps.fmt_amount_won(r['amount'])}"
@@ -271,7 +307,7 @@ def build_organizer_payload(prompt_text: str, readings: List[Dict[str, Any]]) ->
             {"item_id": item.get("item_id"), "kind": item.get("kind"),
              "text_verbatim": item.get("text_verbatim"),
              "normalized": item.get("normalized"),
-             "speaker": item.get("speaker")}
+             "speaker": item.get("speaker"), "side": item.get("side")}
             for item in reading.get("items", []) or []
         ]}
         for reading in readings or []
@@ -279,6 +315,84 @@ def build_organizer_payload(prompt_text: str, readings: List[Dict[str, Any]]) ->
     text = (f"{prompt_text}\n\nREADINGS:\n"
             f"{json.dumps(slim, ensure_ascii=False, sort_keys=True)}")
     return [{"role": "user", "content": [{"type": "input_text", "text": text}]}]
+
+
+def _readings_by_ref(
+    readings: List[Dict[str, Any]],
+) -> Dict[str, Dict[str, Any]]:
+    by_ref: Dict[str, Dict[str, Any]] = {}
+    for reading in readings or []:
+        for item in reading.get("items", []) or []:
+            ref = f"{reading.get('ex_id')}:{item.get('item_id')}"
+            by_ref[ref] = item if isinstance(item, dict) else {}
+    return by_ref
+
+
+def _cross_check_value(
+    name: str, value: Any, sources: List[Dict[str, str]],
+    by_ref: Dict[str, Dict[str, Any]],
+) -> Optional[str]:
+    """Compare a fact value with its cited readings' normalized (P5)."""
+    if value is None or value == [] or not sources:
+        return None
+    if name == "principal":
+        for source in sources:
+            item = by_ref.get(f"{source['ex_id']}:{source['item_id']}", {})
+            normalized = item.get("normalized")
+            if normalized is None or (isinstance(normalized, str)
+                                      and not normalized.strip()):
+                continue
+            try:
+                cited = _digits_only(normalized, name)
+            except _ValueError:
+                continue
+            if cited != value:
+                return (f"원금 {value}와 인용한 판독값 {cited}가 다릅니다.")
+        return None
+    if name in ("loan_date", "due_date"):
+        for source in sources:
+            item = by_ref.get(f"{source['ex_id']}:{source['item_id']}", {})
+            normalized = item.get("normalized")
+            if normalized is None or (isinstance(normalized, str)
+                                      and not normalized.strip()):
+                continue
+            try:
+                cited = _iso_date(normalized, name)
+            except _ValueError:
+                continue
+            if cited != value:
+                return (f"{FIELD_LABELS[name]} {value}와 인용한 판독값 "
+                        f"{cited}가 다릅니다.")
+        return None
+    if name == "repayments":
+        cited_amounts: set = set()
+        cited_dates: set = set()
+        for source in sources:
+            item = by_ref.get(f"{source['ex_id']}:{source['item_id']}", {})
+            normalized = item.get("normalized")
+            if normalized is None or (isinstance(normalized, str)
+                                      and not normalized.strip()):
+                continue
+            try:
+                cited_amounts.add(_digits_only(normalized, name))
+                continue
+            except _ValueError:
+                pass
+            try:
+                cited_dates.add(_iso_date(normalized, name))
+            except _ValueError:
+                continue
+        for entry in value or []:
+            if not isinstance(entry, dict):
+                continue
+            if (cited_amounts and entry.get("amount") not in cited_amounts):
+                return (f"변제액 {entry.get('amount')}가 인용한 판독값과 "
+                        "다릅니다.")
+            if cited_dates and entry.get("date") not in cited_dates:
+                return (f"변제일 {entry.get('date')}가 인용한 판독값과 "
+                        "다릅니다.")
+        return None
+    return None
 
 
 def normalize_review(
@@ -295,10 +409,8 @@ def normalize_review(
         raise AgentSchemaError(
             f"사실 정리 출력 형식 오류: {field_summary(exc)}"
         ) from exc
-    known_refs = set()
-    for reading in readings or []:
-        for item in reading.get("items", []) or []:
-            known_refs.add(f"{reading.get('ex_id')}:{item.get('item_id')}")
+    by_ref = _readings_by_ref(readings)
+    known_refs = set(by_ref)
     by_name: Dict[str, ModelField] = {}
     for entry in output.fields:
         if entry.field in KNOWN_FIELDS and entry.field not in by_name:
@@ -318,19 +430,46 @@ def normalize_review(
                 if ref in known_refs:
                     sources.append({"ex_id": source.ex_id,
                                     "item_id": source.item_id})
+        empty = value is None or value == []
+        model_reason = (entry.null_reason if entry else None)
+        if isinstance(model_reason, str):
+            model_reason = model_reason.strip() or None
+        else:
+            model_reason = None
+        null_reason = model_reason if empty else None
+        if empty and null_reason is None:
+            null_reason = "판독에서 찾지 못함"
+        conflict = bool(entry.conflict) if entry else False
         fields.append({
             "field": name, "label": FIELD_LABELS[name], "value": value,
             "display": display_for(name, value), "sources": sources,
-            "conflict": bool(entry.conflict) if entry else False,
+            "conflict": conflict, "null_reason": null_reason,
         })
+    for entry in fields:
+        note = _cross_check_value(
+            entry["field"], entry["value"], entry["sources"], by_ref)
+        if note is not None:
+            entry["conflict"] = True
     conflicts = [
         {"fields": [name for name in item.fields if name in KNOWN_FIELDS],
          "note": item.note}
         for item in output.conflicts
     ]
+    for entry in fields:
+        note = _cross_check_value(
+            entry["field"], entry["value"], entry["sources"], by_ref)
+        if note is not None and not any(
+                entry["field"] in item.get("fields", [])
+                and note in item.get("note", "")
+                for item in conflicts):
+            conflicts.append({"fields": [entry["field"]], "note": note})
+    flagged = {entry["field"] for entry in fields
+               if entry["conflict"] or entry["value"] is None
+               or entry["value"] == []}
     questions = [
         {"field": item.field, "question": item.question}
-        for item in output.questions if item.field in KNOWN_FIELDS
+        for item in output.questions
+        if item.field in KNOWN_FIELDS and item.field in flagged
     ]
     utterances = []
     for item in output.utterances:

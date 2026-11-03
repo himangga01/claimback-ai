@@ -168,7 +168,7 @@ def check_g1a_case(
         draft,
         list(allowed_slots),
         list(party_names),
-        [ex_to_num(e) for e in existing_ex_ids],
+        existing_exhibits=[ex_to_num(e) for e in existing_ex_ids],
     )
 
 

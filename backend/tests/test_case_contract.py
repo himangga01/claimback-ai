@@ -548,10 +548,11 @@ def test_evidence_upload_and_serving(case_env):
     case_id = res.json()["case_id"]
     assert res.json()["evidence"] == []
     png = (b"\x89PNG\r\n\x1a\n" + b"\x00" * 64)
+    mp4 = (b"\x00\x00\x00\x18ftypmp42" + b"\x00" * 32)
     res = client.post(
         f"/api/cases/{case_id}/evidence",
         files=[("files", ("shot.png", png, "image/png")),
-               ("files", ("clip.mp4", b"\x00" * 32, "video/mp4"))],
+               ("files", ("clip.mp4", mp4, "video/mp4"))],
     )
     assert res.status_code == 200, res.text
     evidence = res.json()["evidence"]
@@ -576,3 +577,156 @@ def test_agents_never_reference_golden():
         assert "golden" not in text.lower(), path.name
     text = (ROOT / "backend" / "app" / "api" / "cases.py").read_text(encoding="utf-8")
     assert "golden" not in text.lower()
+
+
+# --- INT-2 security + liveness ------------------------------------------------------
+def test_c1_delete_dot_does_not_remove_cases_root(case_env, tmp_path, monkeypatch):
+    client = case_env
+    case_id = _sample(client)
+    root = Path(case_state_mod.get_cases_root())
+    assert root.exists()
+    before = sorted(p.name for p in root.iterdir())
+    assert case_id in before
+    for evil in ("%2E", "%2e", "D:", "%2E%2E", "case_zzzzzzzzzzzz"):
+        res = client.delete(f"/api/cases/{evil}")
+        assert res.status_code == 404, evil
+        assert res.json()["detail"]["code"] == "not_found"
+    after = sorted(p.name for p in root.iterdir())
+    assert after == before
+    res = client.get(f"/api/cases/{case_id}")
+    assert res.status_code == 200
+
+
+def test_c2_get_responds_during_slow_run(tmp_path, monkeypatch):
+    import time as _time
+
+    monkeypatch.setattr(case_state_mod, "CASES_ROOT", tmp_path / "cases")
+    monkeypatch.setenv("READER_CONCURRENCY", "1")
+
+    def _slow_reader(case_id, evidence, evidence_path, preview_size,
+                     meta_mode, run_id, **kwargs):
+        _time.sleep(2.0)
+        ref_w, ref_h = preview_size or (64, 64)
+        return {"items": [{
+            "kind": "utterance", "text_verbatim": "느린 판독",
+            "normalized": None,
+            "box": _box(ref_w, ref_h), "speaker": None, "confidence": 0.9,
+        }], "model": "slow-reader", "latency_ms": 2000,
+            "attempts": 1, "cost_usd": 0.0}
+
+    monkeypatch.setitem(coord.AGENTS, "reader", _slow_reader)
+    monkeypatch.setitem(coord.AGENTS, "organizer", fake_organizer)
+    monkeypatch.setitem(coord.AGENTS, "drafter", fake_drafter)
+    client = TestClient(app)
+    res = client.post("/api/cases", json={"jurisdiction": "KR"})
+    case_id = res.json()["case_id"]
+    png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
+    res = client.post(f"/api/cases/{case_id}/evidence",
+                      files=[("files", ("shot.png", png, "image/png"))])
+    assert res.status_code == 200
+    outcome: dict = {}
+
+    def _run():
+        outcome["res"] = client.post(f"/api/cases/{case_id}/run", json={})
+
+    thread = threading.Thread(target=_run, daemon=True)
+    thread.start()
+    _time.sleep(0.5)
+    started = _time.perf_counter()
+    res = client.get(f"/api/cases/{case_id}")
+    elapsed = _time.perf_counter() - started
+    assert res.status_code == 200
+    assert elapsed < 1.5, f"GET blocked {elapsed:.2f}s during run"
+    thread.join(timeout=20)
+    assert outcome["res"].status_code == 200
+    assert outcome["res"].json()["state"] == "CHECKPOINT_1"
+
+
+def test_p1_draft_rules_reject_calculated_and_speech():
+    from app.agents import draft_rules as rules
+
+    bad = [
+        {"sentence_id": "s1", "type": "fact",
+         "text_with_slots": "{{creditor_name}}이 {{remaining_principal}}을 언급하였다. [[EX:4]]",
+         "ex_refs": ["EX4"]},
+        {"sentence_id": "s2", "type": "user",
+         "text_with_slots": "{{debtor_name}}은 {{due_date}}까지 {{remaining_principal}}을 주겠다고. [[USER]]",
+         "ex_refs": []},
+    ]
+    gate = rules.check_draft_rules(bad)
+    assert gate.status == "fail"
+    assert len(gate.findings) >= 3
+    good = [
+        {"sentence_id": "s1", "type": "fact",
+         "text_with_slots": "{{debtor_name}}은 {{due_date}}까지 갚겠다고 했습니다 [[EX:1]]. {{quote:EX1:item1}} [[EX:1]]",
+         "ex_refs": ["EX1"]},
+        {"sentence_id": "s2", "type": "user",
+         "text_with_slots": "그 뒤로 남은 돈을 받지 못했습니다. [[USER]]",
+         "ex_refs": []},
+    ]
+    assert rules.check_draft_rules(good).status == "pass"
+
+
+def test_c7_put_drafts_naming_and_approval_reset(case_env):
+    client = case_env
+    case_id = _sample(client)
+    _to_draft_approval(client, case_id)
+    drafts = client.get(f"/api/cases/{case_id}/drafts").json()
+    original = {s["sentence_id"]: s["text_with_slots"] for s in drafts["sentences"]}
+    # naming violation on edit
+    res = client.put(f"/api/cases/{case_id}/drafts", json={"sentences": [
+        {"sentence_id": "s1",
+         "text_with_slots": original["s1"].replace("보냈습니다", "보냈습니다 변호사")} ]})
+    assert res.status_code == 200
+    s1 = next(s for s in res.json()["sentences"] if s["sentence_id"] == "s1")
+    assert s1["approved"] is False
+    assert s1["findings"]
+    naming = next(g for g in res.json()["gate_results"] if g["gate"] == "NAMING")
+    assert naming["status"] == "fail"
+    # edit without approved clears a previous approval
+    res = client.put(f"/api/cases/{case_id}/drafts", json={"sentences": [
+        {"sentence_id": "s1", "text_with_slots": original["s1"], "approved": True}]})
+    assert next(s for s in res.json()["sentences"]
+                if s["sentence_id"] == "s1")["approved"] is True
+    res = client.put(f"/api/cases/{case_id}/drafts", json={"sentences": [
+        {"sentence_id": "s1", "text_with_slots": original["s1"] + " "}]})
+    assert res.status_code == 200
+    s1 = next(s for s in res.json()["sentences"] if s["sentence_id"] == "s1")
+    assert s1["approved"] is False
+
+
+def test_c11_upload_limits_and_magic(case_env):
+    client = case_env
+    res = client.post("/api/cases", json={"jurisdiction": "KR"})
+    case_id = res.json()["case_id"]
+    png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
+    # content/extension mismatch
+    res = client.post(f"/api/cases/{case_id}/evidence",
+                      files=[("files", ("fake.png", b"hello world", "image/png"))])
+    assert res.status_code == 400
+    # too many files
+    many = [("files", (f"f{i}.png", png, "image/png")) for i in range(11)]
+    res = client.post(f"/api/cases/{case_id}/evidence", files=many)
+    assert res.status_code == 400
+
+
+def test_c12_facts_validations(case_env):
+    client = case_env
+    case_id = _sample(client)
+    _to_checkpoint_1(client, case_id)
+    review = client.get(f"/api/cases/{case_id}/review").json()
+    facts = demo_inputs.build_demo_confirmed_facts(review)
+    bad = json.loads(json.dumps(facts))
+    bad["fields"]["interest_rate"] = "NaN"
+    res = client.put(f"/api/cases/{case_id}/facts", json=bad)
+    assert res.status_code == 400
+    bad = json.loads(json.dumps(facts))
+    bad["fields"]["principal"] = "５００００００"
+    res = client.put(f"/api/cases/{case_id}/facts", json=bad)
+    assert res.status_code == 400
+    res = client.put(f"/api/cases/{case_id}/facts", json={"fields": {}})
+    assert res.status_code == 400
+    assert res.json()["detail"]["missing_requirements"]
+    res = client.get(f"/api/cases/{case_id}/no-such-path")
+    assert res.status_code == 404
+    assert set(res.json()["detail"]) == {"code", "message", "missing_requirements"}

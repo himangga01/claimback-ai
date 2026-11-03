@@ -19,19 +19,26 @@
   거래 종류(`transaction_kind`)는 `civil` 또는 `commercial`,
   받은 돈(`repayments`)은 `[{"date", "amount"}]` 목록(없으면 빈 목록).
   모르는 칸은 `null`(목록은 빈 목록)으로 둔다.
+  빈 값은 진짜 `null`로 낸다. 문자열 `"null"`을 쓰지 않는다.
+- 빈 칸에는 `null_reason`에 이유를 한 줄로 적는다(예: 판독에 없음).
+  값이 있는 칸의 `null_reason`은 `null`로 둔다.
 - 모든 값에 근거(`ex_id`, `item_id`)를 연결한다. 근거가 없으면 빈 목록으로 둔다.
-- 값이 서로 다르면 `conflicts`에 적고, 사용자에게 물을 점을 `questions`에 적는다.
+- 값이 서로 다르면 `conflicts`에 적는다.
+- `questions`는 비어 있거나 충돌한 칸에만 묻는다.
+  값이 있고 충돌이 없는 칸에는 질문을 만들지 않는다.
 - 발화마다 사실 유형 태그를 붙인다: `loan_request`(빌려 달라는 요청),
   `amount_mention`(금액 언급), `repay_promise`(갚겠다는 약속),
-  `reminder`(독촉), `other`(기타).
+  `reminder`(독촉), `other`(기타). 목록 밖의 태그를 쓰지 않는다.
 - 증거마다 Suggested 역할을 정한다: `loan_transfer`(대여 이체),
-  `repayment`(변제 입금), `other`(기타).
+  `repayment`(변제 입금), `other`(기타). 목록 밖의 역할을 쓰지 않는다.
+- 판독 원문을 `fields`·`conflicts`·`questions`에 되풀이하지 않는다.
+  발화 원문은 `utterances[].text`에만 넣는다.
 
 ## 하지 않을 일
 
 - 사건의 결론이나 전망을 단정하는 말을 쓰지 않는다.
 - 발화에 법적 성격을 붙이지 않는다. 갚겠다는 말도 약속 태그만 붙일 뿐이다.
-- 시효를 계산하거나 판단하지 않는다.
+- 시간이 흘러 권리가 없어지는지 계산하거나 판단하지 않는다.
 - 자격이나 공직을 내세우는 말을 출력에 쓰지 않는다.
 - 법률 상담을 하지 않는다.
 - 필드 이름표는 출력하지 않는다. 값·근거·충돌·질문·태그만 낸다.
@@ -39,7 +46,7 @@
 ## 출력
 
 - Review JSON 스키마만 따른다.
-  `{"fields": [{"field", "value", "sources": [{"ex_id", "item_id"}], "conflict"}],
+  `{"fields": [{"field", "value", "sources": [{"ex_id", "item_id"}], "conflict", "null_reason"}],
   "conflicts": [{"fields", "note"}], "questions": [{"field", "question"}],
   "utterances": [{"ex_id", "item_id", "speaker", "text", "tags"}],
   "evidence_roles": [{"ex_id", "suggested_role"}]}`

@@ -1,8 +1,8 @@
 """Shared Spark call helper for the three M2a AI workers.
 
-One place for prompt loading, JSON parsing, cost accounting
-(replay: usage estimate; live/record: ledger diff), and the uniform
-IncompleteResponse policy (retry once with 8,000 output tokens).
+One place for prompt loading, JSON parsing, per-call cost accounting
+(usage estimate in every mode; ledger diff mixes parallel calls), and
+the uniform IncompleteResponse policy (retry once with 8,000 tokens).
 """
 
 from __future__ import annotations
@@ -43,10 +43,6 @@ def field_summary(exc: ValidationError) -> str:
     return ", ".join(unique[:12])
 
 
-def _ledger_total_for(run_id: str) -> float:
-    return float(deps.ledger_summary(run_id_prefix=run_id)["total_usd"])
-
-
 def run_spark_json(
     *,
     model: str,
@@ -62,17 +58,14 @@ def run_spark_json(
     Returns ``(parsed, info)`` where info holds latency_ms, attempts,
     tokens_in/out, cost_usd, and the final response body. Raises
     IncompleteResponse (after one 8,000-token retry), FixtureNotFound,
-    or BudgetError.
+    or BudgetError. Costs always come from this call's own response
+    usage so parallel calls never mix (C9).
     """
     client = deps.MetaClient(mode=meta_mode, run_id=run_id)
     info: Dict[str, Any] = {
         "latency_ms": 0, "attempts": 0, "tokens_in": 0,
         "tokens_out": 0, "cost_usd": 0.0, "body": None,
     }
-    replay = str(meta_mode).strip().lower() == "replay"
-    ledger_before = 0.0
-    if not replay:
-        ledger_before = _ledger_total_for(run_id)
     bodies: list = []
     latencies: list = []
     attempts = 0
@@ -85,6 +78,11 @@ def run_spark_json(
                 text_format=text_format,
                 reasoning={"effort": reasoning_effort},
             )
+        except deps.IncompleteResponse as exc:
+            truncated = getattr(exc, "body", None)
+            if truncated is not None:
+                bodies.append(truncated)
+            raise
         finally:
             latencies.append(int((time.perf_counter() - started) * 1000))
             attempts += 1
@@ -118,10 +116,7 @@ def run_spark_json(
     info["tokens_in"] = tokens_in
     info["tokens_out"] = tokens_out
     info["body"] = body
-    if replay:
-        info["cost_usd"] = round(
-            sum(deps.estimate_cost_from_body(model, "responses", item)
-                for item in bodies), 6)
-    else:
-        info["cost_usd"] = round(_ledger_total_for(run_id) - ledger_before, 6)
+    info["cost_usd"] = round(
+        sum(deps.estimate_cost_from_body(model, "responses", item)
+            for item in bodies), 6)
     return parse_json_text(deps.extract_output_text(body)), info

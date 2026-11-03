@@ -10,8 +10,10 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import secrets
 import threading
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
@@ -131,8 +133,32 @@ class CaseState(BaseModel):
         raise KeyError(f"unknown step: {key}")
 
 
+_CASE_ID_RE = re.compile(r"^case_[0-9a-f]{12}$")
+
+
+def valid_case_id(case_id: Any) -> bool:
+    return isinstance(case_id, str) and _CASE_ID_RE.match(case_id) is not None
+
+
+def _inside_root(root: Path, path: Path) -> bool:
+    try:
+        text_root = str(root.absolute())
+        text_candidate = str(path.absolute())
+        sep = "\\" if "\\" in text_root else "/"
+        prefix = text_root.rstrip("\\/") + sep
+        return text_candidate == text_root or text_candidate.startswith(prefix)
+    except OSError:
+        return False
+
+
 def case_dir(case_id: str) -> Path:
-    return get_cases_root() / case_id
+    if not valid_case_id(case_id):
+        raise ValueError(f"invalid case_id: {case_id!r}")
+    root = get_cases_root()
+    path = root / case_id
+    if not _inside_root(root, path):
+        raise ValueError(f"case path escapes root: {case_id!r}")
+    return path
 
 
 def evidence_dir(case_id: str) -> Path:
@@ -148,20 +174,35 @@ def case_file(case_id: str) -> Path:
 
 
 def load_case(case_id: str) -> Optional[CaseState]:
-    """Load a case, or None when the id is unknown/corrupt."""
-    if not case_id or "/" in case_id or "\\" in case_id or ".." in case_id:
-        return None
-    path = case_file(case_id)
-    if not path.exists():
+    """Load a case, None when unknown; read errors raise (never 404)."""
+    if not valid_case_id(case_id):
         return None
     try:
-        return CaseState.model_validate_json(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+        path = case_file(case_id)
+    except ValueError:
         return None
+    if not path.exists():
+        return None
+    last: Optional[BaseException] = None
+    for _ in range(6):
+        try:
+            return CaseState.model_validate_json(
+                path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return None
+        except (PermissionError, OSError) as exc:
+            last = exc
+            time.sleep(0.02)
+            continue
+    if last is not None:
+        raise last
+    raise OSError(f"cannot read case file: {path}")
 
 
 def save_case(state: CaseState) -> CaseState:
     """Bump version and persist atomically. Returns the state."""
+    if not valid_case_id(state.case_id):
+        raise ValueError(f"invalid case_id: {state.case_id!r}")
     with _save_lock(state.case_id):
         state.version += 1
         state.updated_at = utc_now_iso()
@@ -171,15 +212,28 @@ def save_case(state: CaseState) -> CaseState:
         tmp.write_text(
             state.model_dump_json(ensure_ascii=False), encoding="utf-8"
         )
-        os.replace(tmp, target)
+        last: Optional[BaseException] = None
+        for _ in range(10):
+            try:
+                os.replace(tmp, target)
+                last = None
+                break
+            except (PermissionError, OSError) as exc:
+                last = exc
+                time.sleep(0.02)
+        if last is not None:
+            raise last
     return state
 
 
 def delete_case(case_id: str) -> bool:
     """Remove the whole case directory (uploads + generated files)."""
-    if not case_id or "/" in case_id or "\\" in case_id or ".." in case_id:
+    if not valid_case_id(case_id):
         return False
-    root = case_dir(case_id)
+    try:
+        root = case_dir(case_id)
+    except ValueError:
+        return False
     if not root.exists():
         return False
     import shutil

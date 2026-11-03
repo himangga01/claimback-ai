@@ -14,7 +14,7 @@ from app.agents.spark import field_summary, load_prompt, run_spark_json
 PROMPT_VERSION = "drafter.v1"
 PROMPT_FILE = "drafter.v1.md"
 MODEL = "muse-spark-1.3"
-MAX_OUTPUT_TOKENS = 4000
+MAX_OUTPUT_TOKENS = 6000
 REASONING_EFFORT = "medium"
 
 DRAFTER_TEXT_FORMAT: Dict[str, Any] = {
@@ -29,7 +29,8 @@ DRAFTER_TEXT_FORMAT: Dict[str, Any] = {
                     "type": "object",
                     "properties": {
                         "sentence_id": {"type": "string"},
-                        "type": {"type": "string"},
+                        "type": {"type": "string",
+                                 "enum": ["fact", "user"]},
                         "text_with_slots": {"type": "string"},
                         "ex_refs": {
                             "type": "array",
@@ -38,14 +39,14 @@ DRAFTER_TEXT_FORMAT: Dict[str, Any] = {
                     },
                     "required": ["sentence_id", "type", "text_with_slots",
                                  "ex_refs"],
-                    "additionalProperties": True,
+                    "additionalProperties": False,
                 },
             }
         },
         "required": ["sentences"],
         "additionalProperties": False,
     },
-    "strict": False,
+    "strict": True,
 }
 
 
@@ -56,6 +57,17 @@ class ModelDraftSentence(BaseModel):
     type: str
     text_with_slots: str
     ex_refs: List[str] = []
+
+    @classmethod
+    def _check_type(cls, value: str) -> str:
+        if value not in ("fact", "user"):
+            raise ValueError(f"type must be fact|user: {value}")
+        return value
+
+    def __init__(self, **data: Any) -> None:
+        if "type" in data:
+            data["type"] = self._check_type(data["type"])
+        super().__init__(**data)
 
 
 class ModelDraft(BaseModel):

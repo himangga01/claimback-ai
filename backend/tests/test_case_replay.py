@@ -204,6 +204,10 @@ def test_field_normalizers():
     assert normalize_field_value("due_date", "2026년 4월 10일") == "2026-04-10"
     assert normalize_field_value("interest_rate", "없음") is None
     assert normalize_field_value("interest_rate", None) is None
+    assert normalize_field_value("interest_rate", "null") is None
+    assert normalize_field_value("principal", "null") is None
+    assert normalize_field_value("creditor_name", "null") is None
+    assert normalize_field_value("repayments", "null") == []
     assert normalize_field_value("transaction_kind", "민사") == "civil"
     assert normalize_field_value("repayments", None) == []
     assert normalize_field_value(
@@ -252,3 +256,52 @@ def test_model_boxes_to_pixels():
     )
     assert items[0]["box"] == {"x1": 0, "y1": 0, "x2": 640, "y2": 480,
                                "system": "pixel", "ref_w": 640, "ref_h": 480}
+
+
+def test_p5_cross_check_flags_mismatched_principal():
+    readings = [{"ex_id": "EX4", "items": [
+        {"item_id": "item2", "kind": "amount", "text_verbatim": "5,000,000원",
+         "normalized": "5000000"}]}]
+    parsed = {
+        "fields": [
+            {"field": "principal", "value": "4000000",
+             "sources": [{"ex_id": "EX4", "item_id": "item2"}],
+             "conflict": False, "null_reason": None},
+        ],
+        "conflicts": [],
+        "questions": [{"field": "principal", "question": "원금을 확인하세요."}],
+        "utterances": [],
+        "evidence_roles": [],
+    }
+    review = normalize_review(parsed, readings, ["EX4"])
+    principal = next(f for f in review["fields"] if f["field"] == "principal")
+    assert principal["conflict"] is True
+    assert any("principal" in c["fields"] for c in review["conflicts"])
+    assert any(q["field"] == "principal" for q in review["questions"])
+
+
+def test_p6_questions_only_empty_or_conflict():
+    readings = [{"ex_id": "EX1", "items": [
+        {"item_id": "item1", "kind": "utterance", "text_verbatim": "안녕"}]}]
+    parsed = {
+        "fields": [
+            {"field": "principal", "value": "5000000",
+             "sources": [{"ex_id": "EX1", "item_id": "item1"}],
+             "conflict": False, "null_reason": None},
+            {"field": "creditor_phone", "value": None, "sources": [],
+             "conflict": False, "null_reason": "판독에 없음"},
+        ],
+        "conflicts": [],
+        "questions": [
+            {"field": "principal", "question": "원금을 확인하세요."},
+            {"field": "creditor_phone", "question": "연락처를 입력하세요."},
+        ],
+        "utterances": [],
+        "evidence_roles": [],
+    }
+    review = normalize_review(parsed, readings, ["EX1"])
+    assert [q["field"] for q in review["questions"]] == ["creditor_phone"]
+    phone = next(f for f in review["fields"] if f["field"] == "creditor_phone")
+    assert phone["null_reason"] == "판독에 없음"
+    principal = next(f for f in review["fields"] if f["field"] == "principal")
+    assert principal["null_reason"] is None

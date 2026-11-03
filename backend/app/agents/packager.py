@@ -44,14 +44,6 @@ def build_package(state: CaseState) -> Dict[str, Any]:
         target_date=as_of,
     )
     fact_sentences = approved_fact_sentences(state)
-
-    target_dir = files_dir(state.case_id)
-    target_dir.mkdir(parents=True, exist_ok=True)
-    pdf_path = target_dir / "content_proof.pdf"
-    deps.KoreanLegalDocumentCompiler.generate_content_proof_pdf(
-        loan_fact, verification, str(pdf_path), as_of=as_of,
-        fact_sentences=fact_sentences,
-    )
     packet = deps.KoreanLegalDocumentCompiler.generate_ecourt_clipboard_packet(
         loan_fact, verification, as_of=as_of, fact_sentences=fact_sentences
     )
@@ -64,6 +56,13 @@ def build_package(state: CaseState) -> Dict[str, Any]:
         raise NamingViolation(
             f"서류 문구에 쓸 수 없는 표현이 있습니다: {forbidden[0]}"
         )
+    target_dir = files_dir(state.case_id)
+    target_dir.mkdir(parents=True, exist_ok=True)
+    pdf_path = target_dir / "content_proof.pdf"
+    deps.KoreanLegalDocumentCompiler.generate_content_proof_pdf(
+        loan_fact, verification, str(pdf_path), as_of=as_of,
+        fact_sentences=fact_sentences,
+    )
     g1b = deps.GateResult(gate="G1b", status="pass", findings=[])
     g1b_dump = g1b.model_dump(mode="json")
     g1b_dump["status"] = "skipped"  # G1b lands in M5

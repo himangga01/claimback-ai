@@ -25,6 +25,7 @@ from decimal import Decimal
 from typing import Any, Callable, Dict, List, Optional
 
 from app.agents import deps
+from app.agents import draft_rules as draft_rules_mod
 from app.agents.base import AgentSchemaError, AuditRecord
 from app.agents.case_state import (
     CaseState,
@@ -52,10 +53,12 @@ class WrongState(Exception):
 
 
 class BadRequest(Exception):
-    def __init__(self, code: str, message: str):
+    def __init__(self, code: str, message: str,
+                 missing: Optional[List[str]] = None):
         super().__init__(message)
         self.code = code
         self.message = message
+        self.missing = list(missing or [])
 
 
 class ConcurrentRun(Exception):
@@ -208,10 +211,13 @@ def _mark_done(
         step.note = note
 
 
-def _mark_hold(step: StepState, latency_ms: int = 0, note: str = "") -> None:
+def _mark_hold(step: StepState, latency_ms: int = 0, note: str = "",
+               cost: Optional[float] = None) -> None:
     step.status = "hold"
     step.ended_at = utc_now_iso()
     step.latency_ms = int(latency_ms)
+    if cost is not None:
+        step.cost_usd = fmt_cost(cost)
     if note:
         step.note = note
 
@@ -225,7 +231,7 @@ def _mark_skipped(step: StepState, note: str = "") -> None:
 
 
 def _reset_from(state: CaseState, key: str) -> None:
-    """Reset a step and every later step back to waiting."""
+    """Reset a step and every later step back to waiting (costs kept)."""
     keys = [entry["key"] for entry in STEP_DEFS]
     try:
         start = keys.index(key)
@@ -239,7 +245,7 @@ def _reset_from(state: CaseState, key: str) -> None:
             entry.ended_at = None
             entry.latency_ms = 0
             entry.attempts = 0
-            entry.cost_usd = "0"
+            # cost_usd is kept so HOLD/rollback never loses billed spend.
             entry.note = ""
             entry.substeps = []
             entry.model = fresh[entry.key].model
@@ -251,15 +257,21 @@ def _hold(
     code: str,
     message: str,
     fields: Optional[List[str]] = None,
+    cost: Optional[float] = None,
 ) -> CaseState:
     state.state = "HOLD"
-    state.hold_reasons.append(
-        HoldReason(step=step, code=code, message=message, fields=list(fields or []))
-    )
+    candidate = HoldReason(step=step, code=code, message=message,
+                           fields=list(fields or []))
+    if not any(r.step == candidate.step and r.code == candidate.code
+               and r.message == candidate.message
+               and list(r.fields) == list(candidate.fields)
+               for r in state.hold_reasons):
+        state.hold_reasons.append(candidate)
     try:
-        _mark_hold(state.step(step), note=message[:120])
+        _mark_hold(state.step(step), note=message[:120], cost=cost)
     except KeyError:
         pass
+    _recompute_run_cost(state)
     return save_case(state)
 
 
@@ -319,6 +331,12 @@ def _valid_box(box: Any) -> bool:
     return ref_w > 0 and ref_h > 0 and x2 >= x1 and y2 >= y1
 
 
+def _clean_nullable(value: Any) -> Any:
+    if isinstance(value, str) and value.strip().lower() in ("null", "none", ""):
+        return None
+    return value
+
+
 def validate_reading_items(items: Any) -> List[Dict[str, Any]]:
     """Validate final (pixel) reading items; recode item_id by order."""
     if not isinstance(items, list):
@@ -336,18 +354,22 @@ def validate_reading_items(items: Any) -> List[Dict[str, Any]]:
             raise ValueError(f"items[{position}].text_verbatim is missing")
         if not _valid_box(box):
             raise ValueError(f"items[{position}].box is not a pixel box")
+        side = _clean_nullable(raw.get("side"))
+        if side is not None and side not in ("left", "right"):
+            raise ValueError(f"items[{position}].side must be left|right")
         cleaned.append({
             "item_id": f"item{position}",
             "kind": str(kind),
             "text_verbatim": str(verbatim),
-            "normalized": raw.get("normalized"),
+            "normalized": _clean_nullable(raw.get("normalized")),
             "box": {
                 "x1": int(box["x1"]), "y1": int(box["y1"]),
                 "x2": int(box["x2"]), "y2": int(box["y2"]),
                 "system": "pixel",
                 "ref_w": int(box["ref_w"]), "ref_h": int(box["ref_h"]),
             },
-            "speaker": raw.get("speaker"),
+            "speaker": _clean_nullable(raw.get("speaker")),
+            "side": side,
             "confidence": raw.get("confidence"),
         })
     return cleaned
@@ -366,6 +388,10 @@ def validate_review(review: Any) -> Dict[str, Any]:
             raise ValueError("review.fields[] entry is malformed")
         if "sources" not in entry or not isinstance(entry["sources"], list):
             raise ValueError(f"review.fields.{entry.get('field')}.sources is missing")
+        if "null_reason" not in entry:
+            value = entry.get("value")
+            empty = value is None or value == []
+            entry["null_reason"] = "판독에서 찾지 못함" if empty else None
     if not isinstance(review["utterances"], list):
         raise ValueError("review.utterances is not a list")
     if not isinstance(review["evidence_roles"], list):
@@ -435,8 +461,29 @@ def get_case(case_id: str) -> CaseState:
 
 
 def remove_case(case_id: str) -> None:
-    if not delete_case(case_id):
-        raise CaseNotFound(case_id)
+    lock = _run_lock(case_id)
+    if not lock.acquire(blocking=False):
+        raise ConcurrentRun(case_id)
+    try:
+        if not delete_case(case_id):
+            raise CaseNotFound(case_id)
+    finally:
+        lock.release()
+
+
+def _resume_step_for_hold(state: CaseState) -> Optional[str]:
+    if state.state != "HOLD" or not state.hold_reasons:
+        return None
+    if not all(r.code == "internal_error" for r in state.hold_reasons):
+        return None
+    steps = {r.step for r in state.hold_reasons}
+    if steps <= {"reading", "organizing", "intake"}:
+        return "intake"
+    if steps <= {"calculating", "drafting", "verifying"}:
+        return "calc"
+    if steps <= {"packaging"}:
+        return "package"
+    return None
 
 
 # --- POST /run ----------------------------------------------------------------------------
@@ -446,13 +493,47 @@ def run_case(case_id: str) -> CaseState:
         raise ConcurrentRun(case_id)
     try:
         state = get_case(case_id)
-        if state.state == "INTAKE":
-            return _run_intake_flow(state)
-        if state.state == "CALCULATING":
-            return _run_calc_flow(state)
-        if state.state == "DRAFT_APPROVAL":
-            return _run_package_flow(state)
-        raise WrongState("wrong_state", f"지금 상태({state.state})에서는 실행할 수 없습니다.")
+        try:
+            if state.state == "INTAKE":
+                return _run_intake_flow(state)
+            if state.state in ("READING", "ORGANIZING"):
+                return _run_intake_flow(state)
+            if state.state in ("CALCULATING", "DRAFTING", "VERIFYING"):
+                return _run_calc_flow(state)
+            if state.state == "DRAFT_APPROVAL":
+                return _run_package_flow(state)
+            if state.state == "PACKAGING":
+                return _run_package_flow(state)
+            if state.state == "HOLD":
+                resume = _resume_step_for_hold(state)
+                if resume == "intake":
+                    state.hold_reasons = []
+                    return _run_intake_flow(state)
+                if resume == "calc":
+                    state.hold_reasons = []
+                    return _run_calc_flow(state)
+                if resume == "package":
+                    state.hold_reasons = []
+                    return _run_package_flow(state)
+            raise WrongState("wrong_state", f"지금 상태({state.state})에서는 실행할 수 없습니다.")
+        except (CaseNotFound, WrongState, ConcurrentRun):
+            raise
+        except (deps.FixtureNotFound, deps.BudgetError, AgentSchemaError):
+            raise
+        except Exception as exc:
+            step = {
+                "READING": "reading", "ORGANIZING": "organizing",
+                "CALCULATING": "calculating", "DRAFTING": "drafting",
+                "VERIFYING": "verifying", "PACKAGING": "packaging",
+            }.get(state.state, "reading")
+            try:
+                current = load_case(case_id)
+                if current is not None:
+                    state = current
+            except Exception:
+                pass
+            return _hold(state, step, "internal_error",
+                         f"처리 중 오류가 생겨 멈췄습니다: {type(exc).__name__}")
     finally:
         lock.release()
 
@@ -511,6 +592,10 @@ def _run_intake_flow(state: CaseState) -> CaseState:
         except (deps.FixtureNotFound, deps.BudgetError, AgentSchemaError) as exc:
             return {"ex_id": record.ex_id, "error": exc,
                     "latency_ms": int((time.perf_counter() - started) * 1000)}
+        except Exception as exc:
+            return {"ex_id": record.ex_id,
+                    "error": AgentSchemaError(f"판독 중 오류: {type(exc).__name__}"),
+                    "latency_ms": int((time.perf_counter() - started) * 1000)}
         latency_ms = int((time.perf_counter() - started) * 1000)
         try:
             items = validate_reading_items(output.get("items"))
@@ -531,6 +616,11 @@ def _run_intake_flow(state: CaseState) -> CaseState:
                 return {"ex_id": record.ex_id, "error": exc, "latency_ms": latency_ms}
             except ValueError as exc:
                 return {"ex_id": record.ex_id, "error": AgentSchemaError(str(exc)),
+                        "latency_ms": latency_ms}
+            except Exception as exc:
+                return {"ex_id": record.ex_id,
+                        "error": AgentSchemaError(
+                            f"판독 중 오류: {type(exc).__name__}"),
                         "latency_ms": latency_ms}
         return {"ex_id": record.ex_id, "output": output, "items": items,
                 "latency_ms": latency_ms}
@@ -587,18 +677,21 @@ def _run_intake_flow(state: CaseState) -> CaseState:
                int(output.get("tokens_out", 0) or 0), cost)
     reading_step.substeps = substeps
     state.readings = readings
+    reading_step.cost_usd = fmt_cost(reading_cost)
+    reading_step.attempts = reading_attempts
     latency_ms = int((time.perf_counter() - phase_started) * 1000)
     if hold_case:
-        _mark_hold(reading_step, latency_ms)
+        _mark_hold(reading_step, latency_ms, cost=reading_cost)
         _recompute_run_cost(state)
         return save_case(state)
     if not state.evidence:
-        _mark_hold(reading_step, latency_ms)
-        return _hold(state, "reading", "missing_facts", "증거가 없습니다.", ["evidence"])
+        _mark_hold(reading_step, latency_ms, cost=reading_cost)
+        return _hold(state, "reading", "missing_facts", "증거가 없습니다.",
+                      ["evidence"], cost=reading_cost)
     if not readings:
-        _mark_hold(reading_step, latency_ms)
+        _mark_hold(reading_step, latency_ms, cost=reading_cost)
         return _hold(state, "reading", "schema_failed",
-                      "판독에 성공한 증거가 없습니다.")
+                      "판독에 성공한 증거가 없습니다.", cost=reading_cost)
     skipped_count = sum(1 for s in substeps if s.status == "skipped")
     held_count = sum(1 for s in substeps if s.status == "hold")
     note = f"{len(readings)}개 판독"
@@ -710,7 +803,7 @@ def _build_inputs_for_drafter(
         })
     return {
         "slots": {name: SLOT_DESCRIPTIONS.get(name, name)
-                  for name in deps.available_slots(values)},
+                  for name in draft_rules_mod.drafter_allowed_slots(values)},
         "utterances": utterances,
         "highlights": highlights,
         "evidence": evidence,
@@ -750,12 +843,17 @@ def _run_calc_flow(state: CaseState) -> CaseState:
     latency_ms = int((time.perf_counter() - phase_started) * 1000)
     if verification.missing_requirements:
         for message in verification.missing_requirements:
-            state.hold_reasons.append(HoldReason(
+            candidate = HoldReason(
                 step="calculating", code="missing_facts", message=message,
                 fields=_hold_fields_from_messages([message]),
-            ))
+            )
+            if not any(r.step == candidate.step and r.code == candidate.code
+                       and r.message == candidate.message
+                       for r in state.hold_reasons):
+                state.hold_reasons.append(candidate)
         state.state = "HOLD"
         _mark_hold(calculating_step, latency_ms)
+        _recompute_run_cost(state)
         return save_case(state)
     calculation_json = deps.calculation_to_json(calc)
     state.calculation = calculation_json
@@ -766,17 +864,18 @@ def _run_calc_flow(state: CaseState) -> CaseState:
                f"남은 원금 {int(calc.remaining_principal):,}원")
     save_case(state)
 
-    # drafting <-> verifying (G1a + G3 + naming, max 2 revisions)
+    # drafting <-> verifying (G1a + G3 + naming + DRAFT, max 2 revisions)
     drafter = get_agent("drafter")
     drafting_step = state.step("drafting")
     verifying_step = state.step("verifying")
+    state.state = "DRAFTING"
     _mark_running(drafting_step)
     _mark_running(verifying_step)
     save_case(state)
     phase_started = time.perf_counter()
 
     values = deps.build_slot_values(fields, calculation_json)
-    allowed = deps.available_slots(values)
+    allowed = draft_rules_mod.drafter_allowed_slots(values)
     parties = [str(fields.get("creditor_name", "") or ""),
                str(fields.get("debtor_name", "") or "")]
     ex_ids = [record.ex_id for record in state.evidence]
@@ -829,34 +928,43 @@ def _run_calc_flow(state: CaseState) -> CaseState:
                 except ValueError as exc:
                     return _hold(state, "drafting", "schema_failed",
                                   f"문안 출력 형식이 맞지 않습니다: {exc}")
+            state.state = "VERIFYING"
             g1a = deps.check_g1a_case(sentences, allowed, parties, ex_ids)
             g3 = deps.check_g3_case(sentences, ex_ids)
             naming = deps.check_naming_case(sentences)
+            draft_gate = draft_rules_mod.check_draft_rules(sentences)
             quote_findings = _unresolved_quotes(sentences, quotes)
             if quote_findings:
                 g1a.findings.extend(quote_findings)
                 g1a.status = "fail"
-            if g1a.status == "pass" and g3.status == "pass" and naming.status == "pass":
-                final_gates = [g1a, g3, naming]
+            if (g1a.status == "pass" and g3.status == "pass"
+                    and naming.status == "pass"
+                    and draft_gate.status == "pass"):
+                final_gates = [g1a, g3, naming, draft_gate]
                 final_sentences = sentences
                 break
+            state.state = "DRAFTING"
             revisions.append({
                 "round": attempt + 1,
                 "gate_results": [
                     g1a.model_dump(mode="json"), g3.model_dump(mode="json"),
                     naming.model_dump(mode="json"),
+                    draft_gate.model_dump(mode="json"),
                 ],
             })
             feedback = []
-            for gate in (g1a, g3, naming):
+            for gate in (g1a, g3, naming, draft_gate):
                 for finding in gate.findings:
                     dumped = finding.model_dump(mode="json")
                     dumped["gate"] = gate.gate
                     feedback.append(dumped)
         else:
-            _mark_hold(drafting_step, draft_latency)
+            failed_ms = int((time.perf_counter() - phase_started) * 1000)
+            _mark_hold(drafting_step, draft_latency, cost=draft_cost)
+            _mark_hold(verifying_step, failed_ms)
             return _hold(state, "verifying", "revision_exceeded",
-                         "문안 수정 2회를 넘겨도 지적이 남았습니다.")
+                         "문안 수정 2회를 넘겨도 지적이 남았습니다.",
+                         cost=draft_cost)
     finally:
         pass
     assert final_gates is not None and final_sentences is not None
@@ -864,7 +972,7 @@ def _run_calc_flow(state: CaseState) -> CaseState:
     _mark_done(drafting_step, draft_latency or latency_ms, draft_attempts,
                draft_cost, f"{len(final_sentences)}개 문장")
     _mark_done(verifying_step, latency_ms, len(revisions) + 1, 0.0,
-               "G1a·G3·명칭 통과" if not revisions else f"{len(revisions)}회 수정 후 통과")
+               "G1a·G3·명칭·DRAFT 통과" if not revisions else f"{len(revisions)}회 수정 후 통과")
 
     by_sentence: Dict[str, List[Dict[str, Any]]] = {}
     for gate in final_gates:
@@ -882,8 +990,8 @@ def _run_calc_flow(state: CaseState) -> CaseState:
             "findings": by_sentence.get(entry["sentence_id"], []),
             "approved": False,
         })
-    g2 = deps.GateResult(gate="G2", status="pass", findings=[])
-    g4 = deps.GateResult(gate="G4", status="pass", findings=[])
+    g2 = _g2_from_verification(verification)
+    g4 = _g4_from_calculation(calculation_json)
     state.drafts = {
         "calculation": calculation_json,
         "gate_results": [
@@ -891,6 +999,7 @@ def _run_calc_flow(state: CaseState) -> CaseState:
             final_gates[0].model_dump(mode="json"),
             final_gates[1].model_dump(mode="json"),
             final_gates[2].model_dump(mode="json"),
+            final_gates[3].model_dump(mode="json"),
         ],
         "sentences": stored_sentences,
         "revision_rounds": len(revisions),
@@ -903,6 +1012,40 @@ def _run_calc_flow(state: CaseState) -> CaseState:
     state.state = "DRAFT_APPROVAL"
     _recompute_run_cost(state)
     return save_case(state)
+
+
+def _g2_from_verification(verification: Any) -> Any:
+    """G2 (required slots) from the real verification result (P8)."""
+    missing = list(getattr(verification, "missing_requirements", []) or [])
+    if not missing:
+        return deps.GateResult(gate="G2", status="pass", findings=[])
+    findings = [
+        deps.Finding(
+            sentence_id="",
+            field="calculation",
+            message=text,
+            fix_hint="확인할 칸을 채우세요.",
+        )
+        for text in missing
+    ]
+    return deps.GateResult(gate="G2", status="fail", findings=findings)
+
+
+def _g4_from_calculation(calculation: Dict[str, Any]) -> Any:
+    """G4 (limits) from the real calculation output (P8)."""
+    limit = (calculation or {}).get("limit_check") or {}
+    if not limit.get("exceeded"):
+        return deps.GateResult(gate="G4", status="pass", findings=[])
+    compared = limit.get("compared_amount", "")
+    threshold = limit.get("threshold", "")
+    message = limit.get("message") or (
+        f"청구 금액 {compared}원이 기준 {threshold}원을 넘습니다.")
+    return deps.GateResult(
+        gate="G4", status="fail",
+        findings=[deps.Finding(
+            sentence_id="", field="calculation", message=str(message),
+            fix_hint="청구 범위를 확인하세요.")],
+    )
 
 
 _QUOTE_RE = re.compile(r"\{\{\s*(quote:[A-Za-z0-9_]+:[A-Za-z0-9_]+)\s*\}\}")
@@ -935,7 +1078,7 @@ def _run_package_flow(state: CaseState) -> CaseState:
     confirmed = state.confirmed_facts or {}
     fields = confirmed.get("fields", {}) or {}
     values = deps.build_slot_values(fields, state.calculation or {})
-    allowed = deps.available_slots(values)
+    allowed = draft_rules_mod.drafter_allowed_slots(values)
     parties = [str(fields.get("creditor_name", "") or ""),
                str(fields.get("debtor_name", "") or "")]
     ex_ids = [record.ex_id for record in state.evidence]
@@ -945,9 +1088,17 @@ def _run_package_flow(state: CaseState) -> CaseState:
     g1a = deps.check_g1a_case(slim, allowed, parties, ex_ids)
     g3 = deps.check_g3_case(slim, ex_ids)
     naming = deps.check_naming_case(slim)
-    if g1a.status != "pass" or g3.status != "pass" or naming.status != "pass":
+    draft_gate = draft_rules_mod.check_draft_rules(slim)
+    if (g1a.status != "pass" or g3.status != "pass"
+            or naming.status != "pass" or draft_gate.status != "pass"):
         raise WrongState("unapproved_sentences", "검사를 통과하지 못한 문장이 있습니다.")
 
+    try:
+        approval_step = state.step("draft_approval")
+        approval_step.status = "done"
+        approval_step.ended_at = utc_now_iso()
+    except KeyError:
+        pass
     state.state = "PACKAGING"
     packaging_step = state.step("packaging")
     _mark_running(packaging_step)
@@ -980,6 +1131,15 @@ KNOWN_FACT_FIELDS = tuple(REVIEW_FIELD_ORDER)
 VALID_ROLES = ("loan_transfer", "repayment", "other")
 
 
+def _has_fullwidth_digits(text: str) -> bool:
+    return any("\uff10" <= ch <= "\uff19" for ch in text)
+
+
+def _is_ascii_digits(text: str) -> bool:
+    cleaned = text.replace(",", "")
+    return bool(cleaned) and all("0" <= ch <= "9" for ch in cleaned)
+
+
 def _validate_facts_body(
     body: Any, state: CaseState
 ) -> Dict[str, Any]:
@@ -987,7 +1147,8 @@ def _validate_facts_body(
         raise BadRequest("bad_request", "요청 본문이 올바르지 않습니다.")
     for key in ("fields", "evidence_roles", "highlight", "as_of"):
         if key not in body:
-            raise BadRequest("missing_facts", f"요청에 {key}이(가) 없습니다.")
+            raise BadRequest("missing_facts", f"요청에 {key}이(가) 없습니다.",
+                             missing=[key])
     fields = body["fields"]
     roles = body["evidence_roles"]
     highlight = body["highlight"]
@@ -1001,9 +1162,12 @@ def _validate_facts_body(
     for name in REQUIRED_FACT_FIELDS:
         raw = fields.get(name)
         if raw is None or (isinstance(raw, str) and not raw.strip()):
-            raise BadRequest("missing_facts", f"확정값에 {name}이(가) 없습니다.")
+            raise BadRequest("missing_facts", f"확정값에 {name}이(가) 없습니다.",
+                             missing=[name])
     principal = str(fields.get("principal", "")).strip()
-    if not principal.replace(",", "").isdigit():
+    if _has_fullwidth_digits(principal):
+        raise BadRequest("bad_request", "principal에 전각 숫자를 쓸 수 없습니다.")
+    if not _is_ascii_digits(principal):
         raise BadRequest("bad_request", "principal은 숫자 문자열이어야 합니다.")
     for name in ("loan_date", "due_date"):
         try:
@@ -1012,9 +1176,14 @@ def _validate_facts_body(
             raise BadRequest("bad_request", f"{name}은 YYYY-MM-DD여야 합니다.")
     interest = fields.get("interest_rate")
     if interest is not None and str(interest).strip():
+        raw_interest = str(interest).strip()
+        if _has_fullwidth_digits(raw_interest):
+            raise BadRequest("bad_request", "interest_rate에 전각 숫자를 쓸 수 없습니다.")
         try:
-            Decimal(str(interest).strip().rstrip("%"))
+            parsed = Decimal(raw_interest.rstrip("%").strip())
         except Exception:
+            raise BadRequest("bad_request", "interest_rate는 숫자 또는 null이어야 합니다.")
+        if parsed.is_nan() or parsed.is_infinite():
             raise BadRequest("bad_request", "interest_rate는 숫자 또는 null이어야 합니다.")
     kind = fields.get("transaction_kind", "civil")
     if str(kind).strip().lower() not in ("civil", "commercial"):
@@ -1032,7 +1201,9 @@ def _validate_facts_body(
         except (ValueError, AttributeError):
             raise BadRequest("bad_request", "repayments.date는 YYYY-MM-DD여야 합니다.")
         amount = str(entry.get("amount", "")).strip()
-        if not amount.replace(",", "").isdigit():
+        if _has_fullwidth_digits(amount):
+            raise BadRequest("bad_request", "repayments.amount에 전각 숫자를 쓸 수 없습니다.")
+        if not _is_ascii_digits(amount):
             raise BadRequest("bad_request", "repayments.amount는 숫자 문자열이어야 합니다.")
     known_ex = {record.ex_id for record in state.evidence}
     for ex_id, role in roles.items():
@@ -1069,101 +1240,136 @@ def _validate_facts_body(
 
 
 def apply_facts(case_id: str, body: Any) -> CaseState:
-    state = get_case(case_id)
-    if state.state != "CHECKPOINT_1" and not hold_from_calc_or_draft(state):
-        raise WrongState("wrong_state",
-                         f"지금 상태({state.state})에서는 확정값을 저장할 수 없습니다.")
-    cleaned = _validate_facts_body(body, state)
-    state.confirmed_facts = cleaned
-    state.calculation = None
-    state.drafts = None
-    state.package = None
-    state.hold_reasons = []
-    _reset_from(state, "calculating")
-    state.state = "CALCULATING"
-    state.meta_mode = deps.meta_mode()
-    _recompute_run_cost(state)
-    return save_case(state)
+    lock = _run_lock(case_id)
+    if not lock.acquire(blocking=False):
+        raise ConcurrentRun(case_id)
+    try:
+        state = get_case(case_id)
+        if state.state != "CHECKPOINT_1" and not hold_from_calc_or_draft(state):
+            raise WrongState("wrong_state",
+                             f"지금 상태({state.state})에서는 확정값을 저장할 수 없습니다.")
+        cleaned = _validate_facts_body(body, state)
+        state.confirmed_facts = cleaned
+        state.calculation = None
+        state.drafts = None
+        state.package = None
+        state.hold_reasons = []
+        try:
+            done_step = state.step("checkpoint_1")
+            done_step.status = "done"
+            done_step.ended_at = utc_now_iso()
+        except KeyError:
+            pass
+        _reset_from(state, "calculating")
+        state.state = "CALCULATING"
+        state.meta_mode = deps.meta_mode()
+        _recompute_run_cost(state)
+        return save_case(state)
+    finally:
+        lock.release()
 
 
 # --- PUT /drafts ----------------------------------------------------------------------------
 def apply_drafts(case_id: str, body: Any) -> Dict[str, Any]:
-    state = get_case(case_id)
-    if state.state != "DRAFT_APPROVAL":
-        raise WrongState("wrong_state",
-                         f"지금 상태({state.state})에서는 문장을 고칠 수 없습니다.")
-    if not isinstance(body, dict) or "sentences" not in body:
-        raise BadRequest("bad_request", "요청에 sentences가 없습니다.")
-    updates = body["sentences"]
-    if not isinstance(updates, list):
-        raise BadRequest("bad_request", "sentences는 목록이어야 합니다.")
-    drafts = state.drafts or {}
-    stored = {entry["sentence_id"]: dict(entry)
-              for entry in drafts.get("sentences", []) or []}
-    if not stored:
-        raise WrongState("wrong_state", "초안이 없습니다.")
-    for entry in updates:
-        if not isinstance(entry, dict) or "sentence_id" not in entry:
-            raise BadRequest("bad_request", "sentences 항목에 sentence_id가 없습니다.")
-        sid = str(entry["sentence_id"])
-        if sid not in stored:
-            raise BadRequest("bad_request", f"알 수 없는 문장입니다: {sid}")
-        if "text_with_slots" in entry and entry["text_with_slots"] is not None:
-            if not isinstance(entry["text_with_slots"], str):
-                raise BadRequest("bad_request", "text_with_slots는 문자열이어야 합니다.")
-            stored[sid]["text_with_slots"] = entry["text_with_slots"]
-        if "approved" in entry and entry["approved"] is not None:
-            if not isinstance(entry["approved"], bool):
-                raise BadRequest("bad_request", "approved는 true|false여야 합니다.")
-            stored[sid]["_requested_approved"] = entry["approved"]
-    confirmed = state.confirmed_facts or {}
-    fields = confirmed.get("fields", {}) or {}
-    values = deps.build_slot_values(fields, state.calculation or {})
-    allowed = deps.available_slots(values)
-    parties = [str(fields.get("creditor_name", "") or ""),
-               str(fields.get("debtor_name", "") or "")]
-    ex_ids = [record.ex_id for record in state.evidence]
-    quotes = deps.build_quotes(state.readings)
-    slim = [{"sentence_id": sid, "type": stored[sid]["type"],
-             "text_with_slots": stored[sid]["text_with_slots"],
-             "ex_refs": stored[sid]["ex_refs"]} for sid in stored]
-    g1a = deps.check_g1a_case(slim, allowed, parties, ex_ids)
-    g3 = deps.check_g3_case(slim, ex_ids)
-    by_sentence: Dict[str, List[Dict[str, Any]]] = {}
-    for gate in (g1a, g3):
-        for finding in gate.findings:
-            by_sentence.setdefault(finding.sentence_id, []).append(
-                finding.model_dump(mode="json")
-            )
-    ordered = [stored[entry["sentence_id"]] for entry in drafts.get("sentences", [])]
-    for entry in ordered:
-        sid = entry["sentence_id"]
-        findings = by_sentence.get(sid, [])
-        entry["findings"] = findings
-        requested = entry.pop("_requested_approved", entry.get("approved", False))
-        if findings:
-            entry["approved"] = False
-        else:
-            entry["approved"] = bool(requested)
+    lock = _run_lock(case_id)
+    if not lock.acquire(blocking=False):
+        raise ConcurrentRun(case_id)
+    try:
+        state = get_case(case_id)
+        if state.state != "DRAFT_APPROVAL":
+            raise WrongState("wrong_state",
+                             f"지금 상태({state.state})에서는 문장을 고칠 수 없습니다.")
+        if not isinstance(body, dict) or "sentences" not in body:
+            raise BadRequest("bad_request", "요청에 sentences가 없습니다.")
+        updates = body["sentences"]
+        if not isinstance(updates, list):
+            raise BadRequest("bad_request", "sentences는 목록이어야 합니다.")
+        drafts = state.drafts or {}
+        stored = {entry["sentence_id"]: dict(entry)
+                  for entry in drafts.get("sentences", []) or []}
+        if not stored:
+            raise WrongState("wrong_state", "초안이 없습니다.")
+        edited: set = set()
+        for entry in updates:
+            if not isinstance(entry, dict) or "sentence_id" not in entry:
+                raise BadRequest("bad_request", "sentences 항목에 sentence_id가 없습니다.")
+            sid = str(entry["sentence_id"])
+            if sid not in stored:
+                raise BadRequest("bad_request", f"알 수 없는 문장입니다: {sid}")
+            if "text_with_slots" in entry and entry["text_with_slots"] is not None:
+                if not isinstance(entry["text_with_slots"], str):
+                    raise BadRequest("bad_request", "text_with_slots는 문자열이어야 합니다.")
+                if entry["text_with_slots"] != stored[sid].get("text_with_slots"):
+                    edited.add(sid)
+                stored[sid]["text_with_slots"] = entry["text_with_slots"]
+            if "approved" in entry and entry["approved"] is not None:
+                if not isinstance(entry["approved"], bool):
+                    raise BadRequest("bad_request", "approved는 true|false여야 합니다.")
+                stored[sid]["_requested_approved"] = entry["approved"]
+        confirmed = state.confirmed_facts or {}
+        fields = confirmed.get("fields", {}) or {}
+        values = deps.build_slot_values(fields, state.calculation or {})
+        allowed = draft_rules_mod.drafter_allowed_slots(values)
+        parties = [str(fields.get("creditor_name", "") or ""),
+                   str(fields.get("debtor_name", "") or "")]
+        ex_ids = [record.ex_id for record in state.evidence]
+        quotes = deps.build_quotes(state.readings)
+        slim = [{"sentence_id": sid, "type": stored[sid]["type"],
+                 "text_with_slots": stored[sid]["text_with_slots"],
+                 "ex_refs": stored[sid]["ex_refs"]} for sid in stored]
+        g1a = deps.check_g1a_case(slim, allowed, parties, ex_ids)
+        g3 = deps.check_g3_case(slim, ex_ids)
+        naming = deps.check_naming_case(slim)
+        draft_gate = draft_rules_mod.check_draft_rules(slim)
+        quote_findings = _unresolved_quotes(slim, quotes)
+        if quote_findings:
+            g1a.findings.extend(quote_findings)
+            g1a.status = "fail"
+        by_sentence: Dict[str, List[Dict[str, Any]]] = {}
+        for gate in (g1a, g3, naming, draft_gate):
+            for finding in gate.findings:
+                by_sentence.setdefault(finding.sentence_id, []).append(
+                    finding.model_dump(mode="json")
+                )
+        ordered = [stored[entry["sentence_id"]] for entry in drafts.get("sentences", [])]
+        for entry in ordered:
+            sid = entry["sentence_id"]
+            findings = by_sentence.get(sid, [])
+            entry["findings"] = findings
+            if sid in edited and "_requested_approved" not in entry:
+                requested: Any = False
+            else:
+                requested = entry.pop("_requested_approved",
+                                      entry.get("approved", False))
+            if findings:
+                entry["approved"] = False
+            else:
+                entry["approved"] = bool(requested)
             try:
                 entry["rendered_text"] = deps.render_sentence(
                     entry["text_with_slots"], values, quotes
                 )
             except ValueError:
                 entry["approved"] = False
-                entry["findings"] = findings + [{
-                    "sentence_id": sid, "field": "text_with_slots",
-                    "message": "슬롯 값을 채울 수 없습니다.",
-                    "fix_hint": "슬롯 이름을 확인하세요.",
-                }]
-    gate_results = list(drafts.get("gate_results", []) or [])
-    gate_map = {gate.get("gate"): gate for gate in gate_results if isinstance(gate, dict)}
-    gate_map["G1a"] = g1a.model_dump(mode="json")
-    gate_map["G3"] = g3.model_dump(mode="json")
-    order = ["G2", "G4", "G1a", "G3", "NAMING"]
-    drafts["gate_results"] = [gate_map[name] for name in order if name in gate_map]
-    drafts["sentences"] = ordered
-    state.drafts = drafts
-    state.meta_mode = deps.meta_mode()
-    save_case(state)
-    return drafts
+                if not any(f.get("message") == "슬롯 값을 채울 수 없습니다."
+                           for f in entry["findings"]):
+                    entry["findings"] = findings + [{
+                        "sentence_id": sid, "field": "text_with_slots",
+                        "message": "슬롯 값을 채울 수 없습니다.",
+                        "fix_hint": "슬롯 이름을 확인하세요.",
+                    }]
+        gate_results = list(drafts.get("gate_results", []) or [])
+        gate_map = {gate.get("gate"): gate for gate in gate_results if isinstance(gate, dict)}
+        gate_map["G1a"] = g1a.model_dump(mode="json")
+        gate_map["G3"] = g3.model_dump(mode="json")
+        gate_map["NAMING"] = naming.model_dump(mode="json")
+        gate_map["DRAFT"] = draft_gate.model_dump(mode="json")
+        order = ["G2", "G4", "G1a", "G3", "NAMING", "DRAFT"]
+        drafts["gate_results"] = [gate_map[name] for name in order if name in gate_map]
+        drafts["sentences"] = ordered
+        state.drafts = drafts
+        state.meta_mode = deps.meta_mode()
+        save_case(state)
+        return drafts
+    finally:
+        lock.release()

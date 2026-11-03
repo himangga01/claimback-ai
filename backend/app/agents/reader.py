@@ -17,6 +17,11 @@ PROMPT_FILE = "reader.v1.md"
 MAX_OUTPUT_TOKENS = 4000
 REASONING_EFFORT = "low"
 
+READER_KINDS = (
+    "utterance", "amount", "date", "party_name", "account_number",
+    "id_number", "address", "phone", "label", "header",
+)
+
 READING_TEXT_FORMAT: Dict[str, Any] = {
     "type": "json_schema",
     "name": "reading",
@@ -28,27 +33,30 @@ READING_TEXT_FORMAT: Dict[str, Any] = {
                 "items": {
                     "type": "object",
                     "properties": {
-                        "kind": {"type": "string"},
+                        "kind": {"type": "string", "enum": list(READER_KINDS)},
                         "text_verbatim": {"type": "string"},
-                        "normalized": {"type": "string"},
+                        "normalized": {"type": ["string", "null"]},
                         "box": {
                             "type": "array",
                             "items": {"type": "number"},
                             "minItems": 4,
                             "maxItems": 4,
                         },
-                        "speaker": {"type": "string"},
-                        "confidence": {"type": "number"},
+                        "speaker": {"type": ["string", "null"]},
+                        "side": {"type": ["string", "null"],
+                                 "enum": ["left", "right", None]},
+                        "confidence": {"type": ["number", "null"]},
                     },
-                    "required": ["kind", "text_verbatim", "box"],
-                    "additionalProperties": True,
+                    "required": ["kind", "text_verbatim", "normalized", "box",
+                                 "speaker", "side", "confidence"],
+                    "additionalProperties": False,
                 },
             }
         },
         "required": ["items"],
         "additionalProperties": False,
     },
-    "strict": False,
+    "strict": True,
 }
 
 _IMAGE_MIME = {
@@ -69,6 +77,7 @@ class ModelReadingItem(BaseModel):
     normalized: Optional[str] = None
     box: List[float]
     speaker: Optional[str] = None
+    side: Optional[str] = None
     confidence: Optional[float] = None
 
     @field_validator("box")
@@ -77,6 +86,27 @@ class ModelReadingItem(BaseModel):
         if len(value) != 4:
             raise ValueError("box must have 4 numbers")
         return [float(v) for v in value]
+
+    @field_validator("normalized", "speaker", "side", mode="before")
+    @classmethod
+    def _null_string(cls, value: Any) -> Any:
+        if isinstance(value, str) and value.strip().lower() in ("null", "none", ""):
+            return None
+        return value
+
+    @field_validator("kind")
+    @classmethod
+    def _kind_enum(cls, value: str) -> str:
+        if value not in READER_KINDS:
+            raise ValueError(f"unknown kind: {value}")
+        return value
+
+    @field_validator("side")
+    @classmethod
+    def _side_enum(cls, value: Optional[str]) -> Optional[str]:
+        if value is not None and value not in ("left", "right"):
+            raise ValueError(f"side must be left|right: {value}")
+        return value
 
 
 class ModelReading(BaseModel):
@@ -141,13 +171,17 @@ def model_items_to_pixels(
             system="norm1000", ref_w=width, ref_h=height,
         )
         x1, y1, x2, y2 = deps.box_to_pixels(box, width, height)
+        normalized = item.normalized
+        if item.kind not in ("amount", "date", "phone", "account_number"):
+            normalized = None
         out.append({
             "kind": item.kind,
             "text_verbatim": item.text_verbatim,
-            "normalized": item.normalized,
+            "normalized": normalized,
             "box": {"x1": x1, "y1": y1, "x2": x2, "y2": y2,
                     "system": "pixel", "ref_w": width, "ref_h": height},
             "speaker": item.speaker,
+            "side": item.side,
             "confidence": item.confidence,
         })
     return out
