@@ -22,12 +22,13 @@
 - **Track**: Indie developer (사용자 확인 필요)
 - **Problem statement**: Build for Your World
 - **One-liner**: A free self-help agent that turns your own messy loan evidence (chats, transfer receipts, an IOU, a screen recording) into confirmed facts and filled Korean court-document text — with every number checked by code, not by the AI.
-- **Meta tooling used**: Muse Spark 1.3 (evidence reading with boxes, fact organizing, slot-only drafting), SAM 3.1 (signature/stamp/chat-bubble segmentation, privacy masking) [M4a 병합 후 확정], Muse Image (textless timeline illustration) [P1, 쓰면 추가], Muse Code (all implementation from 2026-11-03).
+- **Meta tooling used** (18:29 확정): Muse Spark 1.2 (evidence reading with boxes; long screenshots in overlapping tiles — chosen over 1.3 by measured accuracy and latency), Muse Spark 1.3 (fact organizing with evidence links, slot-only drafting), SAM 3.1 (chat bubbles, profile pictures, stamps, signature boxes), Muse Code (all implementation from 2026-11-03). Muse Image was only tried in the first spike and is not in the app.
 - **What's agentic**: a rule-based coordinator runs role agents (reader, fact organizer, drafter, verifier, packager) with two human checkpoints; the drafter ⇄ verifier loop rejects drafts with literal numbers/names or missing evidence tags and asks for a rewrite.
 - **Safety**: no legal advice or outcome prediction; the AI writes only slots, values come from user-confirmed facts and deterministic calculation; personal numbers are burned out of image pixels; synthetic SAMPLE data only.
 
-## 남은 일 (Claude가 진행)
+## 상태 (18:29)
 
-- M4a·M4b·M5 병합 후 대본의 [M4a]·[M4b]·[M5] 표시 정리
-- M6: 화면 마무리(호출 수 표시, 게이트 줄 색, 폴링 등), Pages 처리
-- M8: README 모델 표·실행 방법·런북 최종화, 영상 링크 자리
+- M4a(SAM·가림)·M4b(판독 모델·조각 읽기)·M5(갑호증·G1b)·M6(화면)·INT-3(통합·재기록) 모두 main에 병합(f4fad58). 실호출로 샘플 사건이 끝까지 통과(`reports/M7-live-check.md`).
+- README·데모 대본·녹화 런북(`submission/runbook.md`) 갱신.
+- 남은 작은 항목(크레딧이 확인되면): 갑호증에서 차용증 쪽이 두 쪽으로 잘림, G1b 실패 시 패키지 내려받기 막기, 인용문 줄바꿈·조사 다듬기(`reports/INT-3-review.md` F1~F3·F6).
+- 사용자: 영상 녹화(런북), 영상 링크를 이 파일과 제출 양식에, 제출.
