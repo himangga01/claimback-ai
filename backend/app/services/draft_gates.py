@@ -108,17 +108,31 @@ _AMOUNT_RE = re.compile(
     r"[일이삼사오육\ub959칠팔구십백천만억조]*)"
     r"\s*원"
 )
-_MONTH_RE = re.compile(r"[일이삼사오육유칠팔구십시]+월")
-_DAY_RE = re.compile(r"[일이삼사오육\ub959칠팔구십]+일")
-_YEAR_RE = re.compile(r"[일이삼사오육\ub959칠팔구십백천만억]+년")
+_DATE_JOSA = r"(?:부터|까지|에|의|을|를|이|가|은|는|도|말|초|중)"
+_MONTH_RE = re.compile(
+    r"(?<![가-힣])[일이삼사오육유칠팔구십시]+월(?=$|[^가-힣]|" + _DATE_JOSA + r")"
+)
+_DAY_RE = re.compile(r"(?<![가-힣])(?!일일이)[일이삼사오육\ub959칠팔구십]+일(?=$|[^가-힣]|" + _DATE_JOSA + r")")
+_YEAR_RE = re.compile(r"(?<![가-힣])[일이삼사오육\ub959칠팔구십백천만억]+년(?=$|[^가-힣]|" + _DATE_JOSA + r")")
 _DOTTED_DATE_RE = re.compile(r"\d+\.\s*\d+\.\s*\d+\.?")
 _RELATIVE_RE = re.compile(
-    r"오늘|내일|모레|글피|어제|그제|그저께|엊그제|올해|작년|내년|이듬해"
-    r"|(?:이번|다음|지난|다다음)\s?(?:주|달|해|날)"
-    r"|(?:하루|이틀|사흘|나흘|닷새|열흘|보름|며칠|일주일|한\s?주|[한두세]\s?달)"
-    r"\s?(?:뒤|후|안|내|만에)"
+    r"(?<![가-힣])(?:오늘|내일|모레|글피|어제|그제(?!야|서)|그저께|엊그제|올해|작년|내년|이듬해)"
+    r"|(?<![가-힣])(?:이번|다음|지난|다다음)\s?(?:주|달|해|날)"
+    r"(?=$|[^가-힣]|[에의을를이가은는도뒤후안내만로과와부까으])"
+    r"|(?<![가-힣])(?:하루|이틀|사흘|나흘|닷새|열흘|보름|며칠|일주일"
+    r"|[한두세네]\s?(?:달|주|해)|(?:몇|석|넉|두어)\s?(?:달|주|해)|반\s?년)"
+    r"\s?(?:쯤|정도)?\s?(?:뒤|후|안|내)"
     r"|[월연주]말|[월연]초|[초중하]순|[월화수목금토일]요일"
 )
+_NUMERAL_CLS = "[" + _SINO_ALL + "]"
+_APPROX_RE = re.compile(
+    _NUMERAL_CLS + r"+(?:여|쯤|가량|정도|남짓|씩)\s*(?:원|일|개월|년|주|번|월)"
+)
+_NUMERAL_UNIT_RE = re.compile(
+    r"(?<![가-힣])" + _NUMERAL_CLS + r"+\s+(?:원|일|개월|년|주|번|월|만|억|조)"
+    r"(?=$|[^가-힣]|[에의을를이가은는도뒤후안내만로과와부까으])"
+)
+_UNIT_PREFIX_RE = re.compile(r"(?:개월|원|일|월|년|주|번|차례)")
 
 RELATIVE_DATES: List[str] = [
     "다음 달", "다음달",
@@ -167,9 +181,16 @@ def _has_sino_numeral_word(outside: str) -> bool:
         if i == 0:
             continue
         prefix = tok[:i]
-        if not any(ch in _SINO_SIZE_SET for ch in prefix):
+        if prefix.startswith("조"):
+            sized = any(ch in _SINO_SIZE_SET for ch in prefix[1:])
+        else:
+            sized = any(ch in _SINO_SIZE_SET for ch in prefix)
+        if not sized:
             continue
         rest = tok[i:]
+        if len(prefix) == 1 and prefix in _SINO_SIZE_SET:
+            if _UNIT_PREFIX_RE.match(rest) is None:
+                continue
         if rest == "" or _ALLOWED_SUFFIX_RE.fullmatch(rest) is not None:
             return True
     return False
@@ -235,7 +256,10 @@ def _check_names_outside(
                         break
         else:
             base_low = base.lower()
-            if base_low and base_low in lowered_outside:
+            if base_low and re.search(
+                r"(?<![A-Za-z0-9])" + re.escape(base_low) + r"(?![A-Za-z0-9])",
+                lowered_outside,
+            ):
                 findings.append(
                     Finding(
                         sentence_id=sentence_id,
@@ -247,7 +271,10 @@ def _check_names_outside(
                 continue
             parts = [p for p in base.split() if p]
             for part in parts:
-                if len(part) >= 2 and part.lower() in lowered_outside:
+                if len(part) >= 2 and re.search(
+                    r"(?<![A-Za-z0-9])" + re.escape(part.lower()) + r"(?![A-Za-z0-9])",
+                    lowered_outside,
+                ):
                     findings.append(
                         Finding(
                             sentence_id=sentence_id,
@@ -271,11 +298,12 @@ def check_g1a(
     draft: SlotDraft,
     allowed_slots: List[str],
     party_names: List[str],
-    existing_exhibits: Optional[List[str]] = None,
+    *,
+    existing_exhibits: List[str],
 ) -> GateResult:
     findings: List[Finding] = []
     allowed = set(allowed_slots)
-    existing = set(str(e) for e in (existing_exhibits or []))
+    existing = set(str(e) for e in existing_exhibits)
     for s in draft.sentences:
         text = normalize_text(s.text_with_slots)
         for m in _SLOT_RE.finditer(text):
@@ -300,7 +328,7 @@ def check_g1a(
                             fix_hint="{{quote:EX번호:항목ID}} 형식을 쓰세요.",
                         )
                     )
-                elif existing:
+                else:
                     parts = content.split(":")
                     if len(parts) == 3:
                         ex_no = _quote_exhibit_no(parts[1])
@@ -387,6 +415,24 @@ def check_g1a(
                     fix_hint="날짜는 슬롯으로 넣으세요.",
                 )
             )
+        if _APPROX_RE.search(outside):
+            findings.append(
+                Finding(
+                    sentence_id=s.sentence_id,
+                    field="text_with_slots",
+                    message="슬롯 밖에 어림 수량이 있습니다.",
+                    fix_hint="금액과 수량은 슬롯으로 넣으세요.",
+                )
+            )
+        if _NUMERAL_UNIT_RE.search(outside):
+            findings.append(
+                Finding(
+                    sentence_id=s.sentence_id,
+                    field="text_with_slots",
+                    message="슬롯 밖에 한글 수사와 단위가 있습니다.",
+                    fix_hint="금액과 수량은 슬롯으로 넣으세요.",
+                )
+            )
         if _RELATIVE_RE.search(outside):
             mrel = _RELATIVE_RE.search(outside)
             rel = mrel.group(0) if mrel else ""
@@ -414,13 +460,50 @@ def check_g1a(
     return GateResult(gate="G1a", status=status, findings=findings)
 
 
-_LEADING_EX_RE = re.compile(r"^\s*((?:\[\[EX:[A-Za-z0-9]+\]\]\s*)+)")
-
-
 def _split_fact_pieces(text: str) -> List[str]:
-    raw = re.split(r"[.!?]+", text)
+    pieces: List[str] = []
+    buf: List[str] = []
+    in_single = False
+    in_double = False
+    i = 0
+    n = len(text)
+    while i < n:
+        ch = text[i]
+        if ch == '"':
+            in_double = not in_double
+            buf.append(ch)
+        elif ch == "\u201c":
+            in_double = True
+            buf.append(ch)
+        elif ch == "\u201d":
+            in_double = False
+            buf.append(ch)
+        elif ch == "\u2018":
+            in_single = True
+            buf.append(ch)
+        elif ch == "\u2019":
+            in_single = False
+            buf.append(ch)
+        elif ch == "'":
+            prev_word = i > 0 and (text[i - 1].isalnum() or text[i - 1] == "_")
+            next_word = i + 1 < n and (text[i + 1].isalnum() or text[i + 1] == "_")
+            if not (prev_word and next_word):
+                in_single = not in_single
+            buf.append(ch)
+        elif ch in ".!?" and not in_single and not in_double:
+            nxt = text[i + 1] if i + 1 < n else ""
+            if nxt == "" or nxt.isspace():
+                pieces.append("".join(buf))
+                buf = []
+                i += 1
+                continue
+            buf.append(ch)
+        else:
+            buf.append(ch)
+        i += 1
+    pieces.append("".join(buf))
     filtered: List[str] = []
-    for p in raw:
+    for p in pieces:
         if p.strip() == "" and "[[EX:" not in p:
             continue
         filtered.append(p)
@@ -433,16 +516,7 @@ def _split_fact_pieces(text: str) -> List[str]:
             else:
                 result.append(p)
             continue
-        m = _LEADING_EX_RE.match(p)
-        if m and result:
-            leading = m.group(1)
-            rest = p[m.end():]
-            result[-1] = result[-1] + " " + leading
-            if rest.strip() == "":
-                continue
-            result.append(rest)
-        else:
-            result.append(p)
+        result.append(p)
     return result
 
 
@@ -491,6 +565,18 @@ def check_g3(draft: SlotDraft, existing_exhibits: List[str]) -> GateResult:
                                 field="text_with_slots",
                                 message="사실 문장의 일부에 근거 태그가 없습니다.",
                                 fix_hint="문장마다 [[EX:번호]]를 넣으세요.",
+                            )
+                        )
+                        break
+                for piece in pieces:
+                    stripped = _EX_TAG_RE.sub(" ", piece).replace(_USER_TAG, " ")
+                    if re.search(r"(?:[았었였했겠]다|니다|어요|아요|해요)(?=\s+(?!고|며|하|말|라)\S)", stripped):
+                        findings.append(
+                            Finding(
+                                sentence_id=s.sentence_id,
+                                field="text_with_slots",
+                                message="마침표 없이 두 문장이 이어져 있습니다.",
+                                fix_hint="문장마다 마침표를 찍으세요.",
                             )
                         )
                         break
@@ -553,17 +639,29 @@ def _hangul_jong(code_ch: str) -> Optional[int]:
     return None
 
 
+_DOTTED_DATE_END_RE = re.compile(r"\d+\.\s*\d+\.\s*\d+\.?$")
+_JOSA_XY_RE = re.compile(
+    r"^(?:은\(는\)|는\(은\)|이\(가\)|가\(이\)|을\(를\)|를\(을\)"
+    r"|과\(와\)|와\(과\)|으로\(로\)|로\(으로\))"
+)
+_JOSA_BASES = ("으로", "은", "는", "이", "가", "을", "를", "과", "와", "로")
+_JOSA_CONTS = ("부터", "라는", "라고", "의", "서")
+
+
 def _value_ending(value: str) -> Optional[tuple]:
     v = value.strip()
     if v.endswith(")"):
         idx = v.rfind("(")
         if idx != -1:
             v = v[:idx].strip()
+    if _DOTTED_DATE_END_RE.search(v):
+        return ("hangul", True, True)
+    if v.endswith("%"):
+        return ("percent", False, False)
     for ch in reversed(v):
         jong = _hangul_jong(ch)
         if jong is not None:
             return ("hangul", jong != 0, jong == 8)
-    for ch in reversed(v):
         if "0" <= ch <= "9":
             d = ord(ch) - ord("0")
             has = d in (0, 1, 3, 6, 7, 8)
@@ -579,36 +677,71 @@ def _is_hangul(ch: str) -> bool:
 def _detect_trailing_particle(after: str) -> Optional[str]:
     if after.startswith("이에요") or after.startswith("예요"):
         return None
-    if after.startswith("으로"):
-        nxt = after[2:3]
-        if nxt == "" or not _is_hangul(nxt):
-            return "으로"
-        return None
-    if not after:
-        return None
-    c0 = after[0]
-    if c0 in ("은", "는", "이", "가", "을", "를", "과", "와", "로"):
-        nxt = after[1:2]
-        if nxt == "" or not _is_hangul(nxt):
-            return c0
+    m = _JOSA_XY_RE.match(after)
+    if m:
+        return m.group(0)
+    for base in _JOSA_BASES:
+        if after.startswith(base):
+            rest = after[len(base):]
+            for cont in _JOSA_CONTS:
+                if rest.startswith(cont):
+                    tail = rest[len(cont):]
+                    if tail == "" or not _is_hangul(tail[0]):
+                        return base + cont
+            if rest == "" or not _is_hangul(rest[0]):
+                return base
     return None
+
+
+def _split_josa_chunk(chunk: str) -> tuple:
+    for cont in _JOSA_CONTS:
+        if len(chunk) > len(cont) and chunk.endswith(cont):
+            base = chunk[: -len(cont)]
+            if base in _JOSA_BASES:
+                return base, cont
+    return chunk, ""
 
 
 def _correct_particle(orig: str, ending: Optional[tuple]) -> Optional[str]:
     if ending is None:
         return None
     _, has, rieul = ending
-    if orig in ("은", "는"):
+    if orig in ("은(는)", "는(은)"):
         return "은" if has else "는"
-    if orig in ("이", "가"):
+    if orig in ("이(가)", "가(이)"):
         return "이" if has else "가"
-    if orig in ("을", "를"):
+    if orig in ("을(를)", "를(을)"):
         return "을" if has else "를"
-    if orig in ("과", "와"):
+    if orig in ("과(와)", "와(과)"):
         return "과" if has else "와"
-    if orig in ("으로", "로"):
+    if orig in ("으로(로)", "로(으로)"):
         return "으로" if (has and not rieul) else "로"
-    return None
+    base, cont = _split_josa_chunk(orig)
+    if base in ("이", "가") and cont in ("라는", "라고"):
+        return ("이" if has else "") + cont
+    if base in ("은", "는"):
+        fixed = "은" if has else "는"
+    elif base in ("이", "가"):
+        fixed = "이" if has else "가"
+    elif base in ("을", "를"):
+        fixed = "을" if has else "를"
+    elif base in ("과", "와"):
+        fixed = "과" if has else "와"
+    elif base in ("으로", "로"):
+        fixed = "으로" if (has and not rieul) else "로"
+    else:
+        return None
+    return fixed + cont
+
+
+_ISO_DATE_RE = re.compile(r"^(\d{4})-(\d{1,2})-(\d{1,2})$")
+
+
+def _to_dotted_date(value: str) -> str:
+    m = _ISO_DATE_RE.match(value.strip())
+    if m:
+        return f"{int(m.group(1))}. {int(m.group(2))}. {int(m.group(3))}."
+    return value
 
 
 def substitute_text(
@@ -631,7 +764,7 @@ def substitute_text(
                     raise ValueError(f"인용 원문이 없습니다: {content}")
         else:
             if content in values:
-                repl = str(values[content])
+                repl = _to_dotted_date(str(values[content]))
             else:
                 raise ValueError(f"확인값이 없습니다: {content}")
         out_parts.append(text[last_end:m.start()])
