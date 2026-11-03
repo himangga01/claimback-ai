@@ -576,6 +576,10 @@ def _acquire_file_lock(lock_path: Path) -> str:
                 # cannot both delete-and-recreate; then remove the
                 # victim. The victim keeps a ".lock" suffix so the
                 # *.lock gitignore covers it if removal fails.
+                try:
+                    observed = lock_path.read_text(encoding="ascii")
+                except (OSError, ValueError):
+                    observed = None
                 victim = lock_path.with_name(
                     f"{lock_path.stem}.{os.getpid()}.{uuid.uuid4().hex[:8]}"
                     ".lock"
@@ -591,7 +595,40 @@ def _acquire_file_lock(lock_path: Path) -> str:
                         )
                     time.sleep(0.02)
                     continue
-                _unlink_best_effort(victim)
+                # N2: re-verify the claimed victim is actually stale. A
+                # fresh lock created between our stat and rename must not
+                # be stolen: only a victim that is still old (and still
+                # carries the observed content) is removed.
+                try:
+                    victim_mtime = victim.stat().st_mtime
+                    victim_content = victim.read_text(encoding="ascii")
+                except (OSError, ValueError):
+                    continue
+                victim_age = time.time() - victim_mtime
+                still_stale = (victim_age > _LOCK_STALE_S
+                               or victim_age < -_LOCK_FUTURE_GRACE_S)
+                if (observed is not None and victim_content != observed):
+                    still_stale = False
+                if still_stale:
+                    _unlink_best_effort(victim)
+                    continue
+                # Fresh victim: give it back when the path is free so its
+                # owner keeps the lock; otherwise drop it (the current
+                # holder wins) and retry within the limit.
+                restored = False
+                if not lock_path.exists():
+                    try:
+                        victim.rename(lock_path)
+                        restored = True
+                    except OSError:
+                        pass
+                if not restored:
+                    _unlink_best_effort(victim)
+                if time.monotonic() >= deadline:
+                    raise BudgetLedgerError(
+                        f"could not acquire ledger lock: {lock_path}"
+                    )
+                time.sleep(0.02)
                 continue
             if time.monotonic() >= deadline:
                 raise BudgetLedgerError(
@@ -1226,6 +1263,11 @@ class MetaClient:
         if self.mode == "replay":
             fixture = self._load_fixture(digest)
             return fixture["response"]
+        # N1: the delete record would create a missing ledger, defeating
+        # the E7 guard (past spend would read as $0). Refuse like every
+        # other live/record method; D11 still holds because the guard
+        # ignores caps, and cleanup_files stays warning-only.
+        self._require_ledger_ready()
         client = self._live_transport()
         started = time.perf_counter()
 
