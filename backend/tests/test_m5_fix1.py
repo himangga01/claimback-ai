@@ -363,7 +363,10 @@ def test_k7_multiple_joined_with_chungdanghago():
     ])
     calc = calculate_kr(loan, date(2026, 6, 1))
     sentence = pdf_compiler_mod.build_repayment_sentence(loan, calc, style="ecourt")
-    assert "충당하고, 채권자는" in sentence
+    # M5-fix2: later clauses drop the repeated subject.
+    assert "충당하고, 채권자는" not in sentence
+    assert "충당하고, 2026. 5. 20." in sentence
+    assert sentence.count("채권자는") == 1
     assert "2026. 5. 1." in sentence and "2026. 5. 20." in sentence
     assert "600,000원" in sentence and "400,000원" in sentence
 
@@ -379,8 +382,11 @@ def test_k7_overpayment_states_remainder_only():
     assert calc.remaining_principal == Decimal("0")
     assert calc.overpayment_amount > 0
     sentence = pdf_compiler_mod.build_repayment_sentence(loan, calc, style="ecourt")
-    assert "원금을 모두 갚고" in sentence and "이 남습니다" in sentence
+    # M5-fix2: overpayment is stated as a fact (no "원금을 모두 갚고").
+    assert "받은 돈이 원금과 지연손해금을 넘어" in sentence
+    assert "이 더 들어왔습니다" in sentence
     assert "남은 원금은" not in sentence
+    assert "원금을 모두 갚고" not in sentence
 
 
 def test_k7_less_than_interest_partial_charge():
@@ -452,8 +458,10 @@ def test_k9_display_names_and_no_filenames(case_env):
     case_id, _package, _state = _run_to_package(case_env)
     files = case_state_mod.files_dir(case_id)
     text = _norm(_pdf_text(files / "evidence_list.pdf"))
-    for name in ("대화 화면 캡처", "대화 화면 녹화", "송금확인증", "차용증"):
+    # M5-fix2: role/kind names only (sample has no loan_agreement role).
+    for name in ("대화 화면 캡처", "대화 화면 녹화", "송금 기록 화면", "문서 사본"):
         assert name in text
+    assert "송금확인증" not in text
     assert ".png" not in text and "chat_01" not in text
     for banned in ("사용자 지정", "발화", "입증"):
         assert banned not in text
@@ -471,7 +479,9 @@ def test_k9_created_only_confirmed_no_guessing():
     assert exhibit_bundle_mod.evidence_created_label(ex1, confirmed, readings) == "-"
     assert exhibit_bundle_mod.evidence_created_label(ex6, confirmed, readings) == "-"
     assert exhibit_bundle_mod.evidence_summary(ex1, confirmed) == "대화 기록"
-    assert exhibit_bundle_mod.evidence_summary(ex6, confirmed) == "차용증 사본"
+    # M5-fix2: role other + pdf is 문서 사본 (filename iou must not guess 차용증).
+    assert exhibit_bundle_mod.evidence_summary(ex6, confirmed) == "문서 사본"
+    assert exhibit_bundle_mod.evidence_display_name(ex6, confirmed) == "문서 사본"
 
 
 def test_k9_repayment_rows_show_own_payment_only():

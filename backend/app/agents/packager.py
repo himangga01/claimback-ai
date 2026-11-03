@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from app.agents import deps
 from app.agents.case_state import CaseState, evidence_dir, files_dir
@@ -52,6 +54,70 @@ def approved_fact_sentences(state: CaseState) -> List[str]:
     ]
 
 
+# M5-fix2 (1): per-document name voice via slot re-rendering (josa fitted).
+LETTER_NAMES = {"creditor_name": "본인", "debtor_name": "귀하"}
+ECOURT_NAMES = {"creditor_name": "채권자", "debtor_name": "채무자"}
+
+
+def style_slot_values(
+    base_values: Mapping[str, str], style: str
+) -> Dict[str, str]:
+    """Copy of slot values with only the party names switched per doc."""
+    values = dict(base_values or {})
+    overrides = LETTER_NAMES if str(style or "").lower().startswith("letter") else ECOURT_NAMES
+    values.update(overrides)
+    return values
+
+
+def render_sentence_for_style(
+    text_with_slots: str,
+    base_values: Mapping[str, str],
+    quotes: Mapping[str, str],
+    style: str,
+) -> str:
+    """Re-render stored slots with per-doc names (quotes untouched)."""
+    return deps.render_sentence(
+        str(text_with_slots or ""),
+        style_slot_values(base_values, style),
+        dict(quotes or {}),
+    )
+
+
+def styled_fact_sentences(
+    state: CaseState,
+    calculation_json: Mapping[str, Any],
+    style: str,
+) -> List[str]:
+    """Unprefixed fact sentences re-rendered for one doc style.
+
+    Falls back to the stored ``rendered_text`` when a sentence has no
+    slots or re-rendering fails (user-edited plain text).
+    """
+    confirmed = state.confirmed_facts or {}
+    fields = confirmed.get("fields", {}) or {}
+    try:
+        base_values = deps.build_slot_values(fields, dict(calculation_json or {}))
+    except Exception:
+        base_values = deps.build_slot_values(fields, {})
+    try:
+        quotes = deps.build_quotes(list(state.readings or []))
+    except Exception:
+        quotes = {}
+    out: List[str] = []
+    sentences = (state.drafts or {}).get("sentences", []) or []
+    for entry in sentences:
+        slots = entry.get("text_with_slots", "") if isinstance(entry, dict) else ""
+        stored = entry.get("rendered_text", "") if isinstance(entry, dict) else ""
+        if slots:
+            try:
+                out.append(render_sentence_for_style(slots, base_values, quotes, style))
+                continue
+            except ValueError:
+                pass
+        out.append(str(stored or ""))
+    return out
+
+
 def build_repayment_sentence(first: Any, second: Any = None, style: str = "ecourt") -> str:
     """Shared repayment wording (canonical in pdf_compiler, K6/K7)."""
     return _shared_repayment_sentence(first, second, style=style)
@@ -93,19 +159,102 @@ def _first_existing(paths: List[Path]) -> Optional[Path]:
     return None
 
 
-def discover_redacted_paths(state: CaseState) -> Dict[str, str]:
-    """Redacted copy per ex_id (K3: only files/redacted_{ex_id}.png)."""
+def _sha256_file(path: Path) -> Optional[str]:
+    try:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError:
+        return None
+
+
+def load_redaction_previews(state: CaseState) -> Dict[str, Dict[str, Any]]:
+    """Previews by ex_id from files/redactions.json ({} when absent)."""
+    target = files_dir(state.case_id) / "redactions.json"
+    try:
+        if not target.exists() or not target.is_file():
+            return {}
+        data = json.loads(target.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    previews = data.get("previews", []) if isinstance(data, dict) else []
+    out: Dict[str, Dict[str, Any]] = {}
+    if isinstance(previews, list):
+        for entry in previews:
+            if isinstance(entry, dict) and entry.get("ex_id"):
+                out[str(entry["ex_id"])] = dict(entry)
+    return out
+
+
+def is_redaction_confirmed(state: CaseState) -> bool:
+    """True only when the user set redaction_confirmed: true."""
+    confirmed = state.confirmed_facts or {}
+    return confirmed.get("redaction_confirmed") is True
+
+
+def get_redaction_status(
+    state: CaseState,
+) -> Tuple[Dict[str, str], set, set]:
+    """Valid redacted copies + needs-review/identical exclusions (M5-fix2).
+
+    A copy whose SHA-256 equals the original (images) or the PDF preview
+    PNG is not a redacted copy and is excluded. A preview flagged
+    ``needs_review``/``not_redacted`` is excluded unless the user confirmed.
+    """
     files_base = files_dir(state.case_id)
-    resolved: Dict[str, str] = {}
+    evidence_base = evidence_dir(state.case_id)
+    previews = load_redaction_previews(state)
+    confirmed = is_redaction_confirmed(state)
+    valid: Dict[str, str] = {}
+    needs_review: set = set()
+    identical: set = set()
     for record in state.evidence:
-        ex_id = record.ex_id
+        kind = str(getattr(record, "kind", "image"))
+        if kind not in ("image", "pdf"):
+            continue
+        ex_id = str(getattr(record, "ex_id", ""))
+        if not ex_id:
+            continue
         candidate = files_base / f"redacted_{ex_id}.png"
         try:
-            if candidate.exists() and candidate.is_file():
-                resolved[ex_id] = str(candidate)
+            if not candidate.exists() or not candidate.is_file():
+                continue
         except OSError:
             continue
-    return resolved
+        preview = previews.get(ex_id, {})
+        if (
+            preview.get("needs_review") is True
+            or preview.get("status") == "not_redacted"
+        ) and not confirmed:
+            needs_review.add(ex_id)
+            continue
+        red_hash = _sha256_file(candidate)
+        if red_hash is not None:
+            compare: List[Path] = []
+            try:
+                stored = str(getattr(record, "stored_name", "") or "")
+                if stored:
+                    compare.append(evidence_base / stored)
+                if kind == "pdf":
+                    compare.append(evidence_base / f"{ex_id}_preview.png")
+            except OSError:
+                compare = []
+            for other in compare:
+                try:
+                    if other.exists() and other.is_file():
+                        if _sha256_file(other) == red_hash:
+                            identical.add(ex_id)
+                            break
+                except OSError:
+                    continue
+            if ex_id in identical:
+                continue
+        valid[ex_id] = str(candidate)
+    return valid, needs_review, identical
+
+
+def discover_redacted_paths(state: CaseState) -> Dict[str, str]:
+    """Redacted copy per ex_id (K3 + M5-fix2 validation)."""
+    valid, _, _ = get_redaction_status(state)
+    return valid
 
 
 def discover_still_paths(state: CaseState) -> Dict[str, str]:
@@ -176,22 +325,24 @@ def build_package(state: CaseState) -> Dict[str, Any]:
         claim_draft=deps.synthetic_claim_draft(loan_fact, remaining),
         target_date=as_of,
     )
-    fact_sentences = approved_fact_sentences(state)
+    calc_json = deps.calculation_to_json(calc)
+    # M5-fix2 (1): per-doc slot re-rendering (letter 본인/귀하, ecourt 채권자/채무자).
+    letter_inputs = styled_fact_sentences(state, calc_json, "letter")
+    ecourt_inputs = styled_fact_sentences(state, calc_json, "ecourt")
     # K6: both docs share pdf_compiler wording (no packager copies).
     packet = deps.KoreanLegalDocumentCompiler.generate_ecourt_clipboard_packet(
-        loan_fact, verification, as_of=as_of, fact_sentences=fact_sentences
+        loan_fact, verification, as_of=as_of, fact_sentences=ecourt_inputs
     )
     claim_purpose = packet.get("claim_purpose", "")
     claim_cause = packet.get("claim_cause_payment_order", "")
     evidence_dicts = [record.model_dump() for record in state.evidence]
     # K5: pre-write naming screen covers names/addresses/phones/evidence names.
-    numbered = _ensure_numbered(fact_sentences)
-    letter_facts = [
-        _format_letter_fact(s, loan_fact.creditor.name, loan_fact.debtor.name)
-        for s in numbered
+    letter_facts = [_format_letter_fact(s) for s in _ensure_numbered(letter_inputs)]
+    ecourt_facts = [_format_ecourt_fact(s) for s in _ensure_numbered(ecourt_inputs)]
+    pre_texts = [
+        claim_purpose, claim_cause,
+        *letter_inputs, *ecourt_inputs, *letter_facts, *ecourt_facts,
     ]
-    ecourt_facts = [_format_ecourt_fact(s) for s in numbered]
-    pre_texts = [claim_purpose, claim_cause, *fact_sentences, *letter_facts, *ecourt_facts]
     for key in (
         "creditor_name", "creditor_address", "creditor_phone",
         "debtor_name", "debtor_address", "debtor_phone",
@@ -216,12 +367,12 @@ def build_package(state: CaseState) -> Dict[str, Any]:
         )
     target_dir = files_dir(state.case_id)
     target_dir.mkdir(parents=True, exist_ok=True)
-    redacted_map = discover_redacted_paths(state)
+    redacted_map, needs_review_ids, identical_ids = get_redaction_status(state)
     still_map = discover_still_paths(state)
     content_pdf = target_dir / "content_proof.pdf"
     deps.KoreanLegalDocumentCompiler.generate_content_proof_pdf(
         loan_fact, verification, str(content_pdf), as_of=as_of,
-        fact_sentences=fact_sentences,
+        fact_sentences=letter_inputs,
     )
     exhibits_pdf = target_dir / "exhibits.pdf"
     evidence_list_pdf = target_dir / "evidence_list.pdf"
@@ -229,11 +380,13 @@ def build_package(state: CaseState) -> Dict[str, Any]:
         evidence_dicts, evidence_dir(state.case_id), str(exhibits_pdf),
         redacted=redacted_map,
         stills=still_map,
+        needs_review=needs_review_ids,
+        confirmed=confirmed,
     )
     exhibit_bundle_mod.build_evidence_list_pdf(
         evidence_dicts, confirmed, str(evidence_list_pdf),
         readings=state.readings,
-        calculation=deps.calculation_to_json(calc),
+        calculation=calc_json,
     )
     docs = {
         "content_proof.pdf": final_check_mod.extract_pdf_text(content_pdf),
@@ -241,9 +394,9 @@ def build_package(state: CaseState) -> Dict[str, Any]:
         "evidence_list.pdf": final_check_mod.extract_pdf_text(evidence_list_pdf),
         "ecourt": f"{claim_purpose}\n{claim_cause}",
     }
-    calc_json = deps.calculation_to_json(calc)
     g1b = final_check_mod.check_g1b(
-        final_check_mod.build_expected_amounts(fields, calc_json),
+        final_check_mod.build_expected_amounts(
+            fields, calc_json, confirmed.get("as_of")),
         final_check_mod.build_expected_dates(fields, calc_json, confirmed.get("as_of")),
         final_check_mod.build_expected_names(fields),
         docs,
@@ -265,17 +418,29 @@ def build_package(state: CaseState) -> Dict[str, Any]:
                 message=f"{doc_name}에 계좌/주민번호로 보이는 값이 있습니다: {hit}",
                 fix_hint="가림 사본을 확인하세요.",
             ))
-    # K3: missing redacted copies are G1b findings naming the evidence.
+    # K3 + M5-fix2: missing/identical/needs-review copies are G1b findings.
     for record in _missing_redacted_ex_ids(evidence_dicts, redacted_map):
         ex_id = str(record.get("ex_id", ""))
         label = str(record.get("label", ex_id))
+        if ex_id in needs_review_ids:
+            message = (
+                f"exhibits.pdf: {label}({ex_id})의 가림 확인이 필요해 "
+                f"이미지를 넣지 않았습니다."
+            )
+        elif ex_id in identical_ids:
+            message = (
+                f"exhibits.pdf: {label}({ex_id})의 가림 사본이 원본과 같아 "
+                f"이미지를 넣지 않았습니다."
+            )
+        else:
+            message = (
+                f"exhibits.pdf: {label}({ex_id})의 가림 사본("
+                f"files/redacted_{ex_id}.png)이 없어 이미지를 넣지 않았습니다."
+            )
         findings.append(deps.Finding(
             sentence_id="",
             field=str(ex_id or "exhibits.pdf"),
-            message=(
-                f"exhibits.pdf: {label}({ex_id})의 가림 사본("
-                f"files/redacted_{ex_id}.png)이 없어 이미지를 넣지 않았습니다."
-            ),
+            message=message,
             fix_hint="가림 사본을 확인하세요.",
         ))
     g1b = deps.GateResult(

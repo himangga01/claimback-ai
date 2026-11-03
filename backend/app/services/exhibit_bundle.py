@@ -40,6 +40,8 @@ VIDEO_PLACEHOLDER = "영상 증거, 파일 별도 제출"
 PDF_PLACEHOLDER = "PDF 증거, 파일 별도 제출"
 # K3: images/PDF previews without a redacted copy embed no picture.
 MISSING_REDACTED_LINE = "가림 사본이 없어 이 쪽에 이미지를 넣지 않았습니다. 원본 파일은 따로 제출하세요."
+# M5-fix2: flagged previews wait for user confirmation (no picture either).
+NEEDS_REVIEW_LINE = "가림 확인이 필요해 이 쪽에 이미지를 넣지 않았습니다."
 # K11: cover guide (remove before filing).
 COVER_REMOVE_GUIDE = "법원에 낼 때는 이 쪽을 빼세요."
 
@@ -116,11 +118,13 @@ def resolve_evidence_source(
     evidence_dir: Union[str, Path],
     redacted: Optional[Mapping[str, Union[str, Path]]] = None,
     stills: Optional[Mapping[str, Union[str, Path]]] = None,
+    needs_review: Optional[Any] = None,
 ) -> Tuple[Optional[Path], bool, Optional[str]]:
     """Pick the file to embed for one evidence (K3: redacted copies only).
 
     Returns ``(path, used_redacted, placeholder)``. Images and PDF previews
-    without a redacted copy embed no picture (``MISSING_REDACTED_LINE``);
+    without a redacted copy embed no picture (``MISSING_REDACTED_LINE``,
+    or ``NEEDS_REVIEW_LINE`` when the preview awaits user confirmation);
     original bytes never enter the bundle. Video without a still keeps
     ``VIDEO_PLACEHOLDER``.
     """
@@ -150,6 +154,12 @@ def resolve_evidence_source(
     red = _exists((redacted or {}).get(ex_id)) if redacted else None
     if red is not None:
         return (red, True, None)
+    try:
+        pending = ex_id in (needs_review or set())
+    except TypeError:
+        pending = False
+    if pending:
+        return (None, False, NEEDS_REVIEW_LINE)
     return (None, False, MISSING_REDACTED_LINE)
 
 
@@ -220,6 +230,8 @@ def build_exhibits_pdf(
     output_path: Union[str, Path],
     redacted: Optional[Mapping[str, Union[str, Path]]] = None,
     stills: Optional[Mapping[str, Union[str, Path]]] = None,
+    needs_review: Optional[Any] = None,
+    confirmed: Optional[Mapping[str, Any]] = None,
 ) -> str:
     """Write the exhibit bundle (cover + evidence pages, K3/K10/K11)."""
     ordered = _sorted_evidence(evidence)
@@ -267,10 +279,16 @@ def build_exhibits_pdf(
     ]
     for record in ordered:
         label = _xml_escape(str(_field(record, "label", "")))
-        filename = _xml_escape(str(_field(record, "filename", "")))
+        # M5-fix2: cover shows the role/kind display name (same as list).
+        shown = str(_field(record, "filename", ""))
+        if confirmed is not None:
+            try:
+                shown = evidence_display_name(record, confirmed)
+            except Exception:
+                pass
         rows.append([
             Paragraph(label, meta_style),
-            Paragraph(filename, meta_style),
+            Paragraph(_xml_escape(shown), meta_style),
         ])
     index = Table(rows, colWidths=[140, usable_w - 140])
     index.setStyle(TableStyle([
@@ -294,6 +312,7 @@ def build_exhibits_pdf(
             sub = _xml_escape(f"{filename} · SHA-256 앞 8자리 {sha}" if sha else filename)
             source, _used_redacted, placeholder = resolve_evidence_source(
                 record, evidence_dir, redacted=redacted, stills=stills,
+                needs_review=needs_review,
             )
             if source is None:
                 elements.append(PageBreak())
@@ -381,12 +400,42 @@ def _repayment_ex_ids_sorted(confirmed: Mapping[str, Any]) -> List[str]:
     return sorted(ids, key=ex_num)
 
 
+def _as_of_day(confirmed: Mapping[str, Any]):
+    raw = (confirmed or {}).get("as_of", "")
+    match = _ISO_DATE_RE.match(str(raw or "").strip())
+    if not match:
+        return None
+    try:
+        return date(int(match.group(1)), int(match.group(2)), int(match.group(3)))
+    except ValueError:
+        return None
+
+
 def _repayments_of(confirmed: Mapping[str, Any]) -> List[Dict[str, Any]]:
     fields = _fields_of(confirmed)
     repayments = fields.get("repayments", []) or []
     if not isinstance(repayments, list):
         return []
-    return [entry for entry in repayments if isinstance(entry, dict)]
+    entries = [entry for entry in repayments if isinstance(entry, dict)]
+    # M5-fix2: repayments after as_of are never rendered (calculation drops
+    # them, so the evidence list hides their details to match G1b).
+    as_of = _as_of_day(confirmed)
+    if as_of is None:
+        return entries
+    kept: List[Dict[str, Any]] = []
+    for entry in entries:
+        match = _ISO_DATE_RE.match(str(entry.get("date", "") or "").strip())
+        if not match:
+            kept.append(entry)
+            continue
+        try:
+            pay = date(int(match.group(1)), int(match.group(2)), int(match.group(3)))
+        except ValueError:
+            kept.append(entry)
+            continue
+        if pay <= as_of:
+            kept.append(entry)
+    return kept
 
 
 def _own_repayments(
@@ -414,22 +463,19 @@ def evidence_display_name(
     record: EvidenceLike,
     confirmed: Mapping[str, Any],
 ) -> str:
-    """증거 이름 cell by role/kind (K9; no filenames, no guessing)."""
+    """증거 이름 cell by role/kind only (M5-fix2; never filenames)."""
     roles = _roles_of(confirmed)
     ex_id = str(_field(record, "ex_id", ""))
     kind = str(_field(record, "kind", ""))
     role = roles.get(ex_id, "other")
-    filename = str(_field(record, "filename", "")).lower()
-    if role in ("loan_transfer", "repayment"):
-        return "송금확인증"
+    if role == "loan_agreement":
+        return "차용증"
     if kind == "video":
         return "대화 화면 녹화"
     if kind == "pdf":
-        if "iou" in filename or "차용" in filename or "loan" in filename:
-            return "차용증"
         return "문서 사본"
-    if "iou" in filename or "차용" in filename:
-        return "차용증"
+    if role in ("loan_transfer", "repayment"):
+        return "송금 기록 화면"
     return "대화 화면 캡처"
 
 
@@ -490,11 +536,12 @@ def evidence_summary(
             core = f"변제 이체 기록 {len(parts)}건({joined})" if joined else "변제 이체 기록"
             return f"{legs}, {core}" if legs else core
         return "변제 이체 기록"
+    if role == "loan_agreement":
+        return "차용증 사본"
     if kind == "video":
         return "대화 기록"
-    filename = str(_field(record, "filename", "")).lower()
-    if kind == "pdf" or "iou" in filename or "차용" in filename:
-        return "차용증 사본"
+    if kind == "pdf":
+        return "문서 사본"
     return "대화 기록"
 
 
@@ -558,6 +605,7 @@ def build_evidence_list_pdf(
 __all__ = [
     "COVER_REMOVE_GUIDE",
     "MISSING_REDACTED_LINE",
+    "NEEDS_REVIEW_LINE",
     "PDF_PLACEHOLDER",
     "PRE_REDACTION_MARK",
     "VIDEO_PLACEHOLDER",

@@ -172,16 +172,20 @@ def _amount_value(raw: Any) -> Union[int, None]:
 def build_expected_amounts(
     fields: Mapping[str, Any],
     calculation: Mapping[str, Any],
+    as_of: Any = None,
 ) -> Dict[str, int]:
     """Expected amounts from confirmed fields + calculation (zeros skipped).
 
     K2: only values actually rendered. Intermediate
     ``remaining_principal_after`` values are not required (the wording
     shows only the last remaining); overpayment is required when > 0.
+    M5-fix2: repayments after ``as_of`` are excluded (the calculation
+    drops them, so the wording never prints them).
     """
     expected: Dict[str, int] = {}
     fields = fields or {}
     calculation = calculation or {}
+    as_of_day = _parse_iso_day(as_of) if as_of else None
 
     def _put(name: str, raw: Any) -> None:
         value = _amount_value(raw)
@@ -193,6 +197,10 @@ def build_expected_amounts(
     if isinstance(repayments, list):
         for index, entry in enumerate(repayments):
             if isinstance(entry, dict):
+                if as_of_day is not None:
+                    pay_day = _parse_iso_day(entry.get("date"))
+                    if pay_day is not None and pay_day > as_of_day:
+                        continue
                 _put(f"repayments[{index}].amount", entry.get("amount"))
     _put("remaining_principal", calculation.get("remaining_principal"))
     allocations = calculation.get("allocations", []) or []
@@ -260,6 +268,7 @@ def build_expected_dates(
     K1/K7: allocation interest-period starts (agreed/delay) are expected
     because the repayment wording prints them. Only periods with actual
     interest (applied_to_interest > 0) are required.
+    M5-fix2: repayments after ``as_of`` are excluded (never rendered).
     """
     expected: Dict[str, str] = {}
 
@@ -270,6 +279,7 @@ def build_expected_dates(
 
     fields = fields or {}
     calculation = calculation or {}
+    as_of_day = _parse_iso_day(as_of) if as_of else None
     _put("loan_date", fields.get("loan_date"))
     _put("due_date", fields.get("due_date"))
     demand = fields.get("demand_date")
@@ -279,6 +289,10 @@ def build_expected_dates(
     if isinstance(repayments, list):
         for index, entry in enumerate(repayments):
             if isinstance(entry, dict) and entry.get("date"):
+                if as_of_day is not None:
+                    pay_day = _parse_iso_day(entry.get("date"))
+                    if pay_day is not None and pay_day > as_of_day:
+                        continue
                 _put(f"repayments[{index}].date", entry.get("date"))
     accrual = calculation.get("accrual_start_date")
     if accrual:
@@ -380,9 +394,16 @@ _DATE_DOCS: List[Tuple[str, Tuple[str, ...]]] = [
 ]
 
 _NAME_DOCS: List[Tuple[str, Tuple[str, ...]]] = [
-    ("creditor_name", (CONTENT_DOC, EVIDENCE_LIST_DOC)),
-    ("debtor_name", (CONTENT_DOC, EVIDENCE_LIST_DOC)),
+    ("creditor_name", (CONTENT_DOC, EVIDENCE_LIST_DOC, ECOURT_DOC)),
+    ("debtor_name", (CONTENT_DOC, EVIDENCE_LIST_DOC, ECOURT_DOC)),
 ]
+
+# M5-fix2: ecourt facts use role terms, so either the real name or the
+# role term satisfies the ecourt name check.
+_ECOURT_NAME_ALIASES = {
+    "creditor_name": ("채권자",),
+    "debtor_name": ("채무자",),
+}
 
 
 def _required_docs(field: str, table: List[Tuple[str, Tuple[str, ...]]]) -> Tuple[str, ...]:
@@ -412,6 +433,37 @@ def _allowlisted_dates(expected_dates: Mapping[str, str]) -> set:
     if day is not None:
         allowed.add((day + timedelta(days=7)).isoformat())
     return allowed
+
+
+def _date_occurrences(text: str) -> List[Tuple[str, int, int]]:
+    """(ISO, start, end) for every year-form date in ``text``."""
+    found: List[Tuple[str, int, int]] = []
+    blob = text or ""
+    for pattern in (_DATE_DOT_RE, _DATE_ISO_RE, _DATE_KO_RE):
+        for match in pattern.finditer(blob):
+            try:
+                found.append((_iso(*match.groups()), match.start(), match.end()))
+            except ValueError:
+                continue
+    return found
+
+
+def _date_has_keyword_near(
+    text: str, want_iso: str, keyword: str, window: int = 40
+) -> bool:
+    """True when any ``want_iso`` is followed by ``keyword`` (directional).
+
+    Only the text *after* the date counts (fixed clauses read
+    "2026. 3. 10.에 … 대여", "2026. 4. 10.까지 … 변제"). A symmetric
+    window would see the other clause's keyword and miss a swap.
+    """
+    blob = text or ""
+    for iso, _start, end in _date_occurrences(blob):
+        if iso != want_iso:
+            continue
+        if keyword in blob[end: end + window]:
+            return True
+    return False
 
 
 def check_g1b(
@@ -511,7 +563,18 @@ def check_g1b(
                     fix_hint="편철 출력을 확인하세요.",
                 ))
             continue
-        missing = [doc for doc in required if needle not in texts.get(doc, "")]
+
+        def _name_ok(doc: str) -> bool:
+            text = texts.get(doc, "")
+            if needle in text:
+                return True
+            if doc == ECOURT_DOC:
+                for alias in _ECOURT_NAME_ALIASES.get(str(field), ()):
+                    if alias and alias in text:
+                        return True
+            return False
+
+        missing = [doc for doc in required if not _name_ok(doc)]
         if missing:
             findings.append(Finding(
                 sentence_id="",
@@ -523,6 +586,38 @@ def check_g1b(
                 ),
                 fix_hint="편철 출력을 확인하세요.",
             ))
+
+    # --- date context (M5-fix2): catch loan/due swaps inside one doc ---
+    loan_iso = str((expected_dates or {}).get("loan_date", "") or "").strip()
+    due_iso = str((expected_dates or {}).get("due_date", "") or "").strip()
+    if loan_iso and due_iso and loan_iso != due_iso:
+        for doc_name in (CONTENT_DOC, ECOURT_DOC):
+            text = texts.get(doc_name, "")
+            if not text:
+                continue
+            seen = per_doc_dates.get(doc_name, set())
+            if loan_iso not in seen or due_iso not in seen:
+                continue  # missing is already reported above
+            if not _date_has_keyword_near(text, loan_iso, "대여"):
+                findings.append(Finding(
+                    sentence_id="",
+                    field="loan_date",
+                    message=(
+                        f"{doc_name}에서 대여일 {loan_iso} 뒤에 '대여'가 "
+                        f"없습니다(뒤바뀜 가능)."
+                    ),
+                    fix_hint="편철 출력을 확인하세요.",
+                ))
+            if not _date_has_keyword_near(text, due_iso, "변제"):
+                findings.append(Finding(
+                    sentence_id="",
+                    field="due_date",
+                    message=(
+                        f"{doc_name}에서 변제기 {due_iso} 뒤에 '변제'가 "
+                        f"없습니다(뒤바뀜 가능)."
+                    ),
+                    fix_hint="편철 출력을 확인하세요.",
+                ))
 
     # --- extra (per-doc) ---
     allowed_amounts = {int(v) for v in (expected_amounts or {}).values()}

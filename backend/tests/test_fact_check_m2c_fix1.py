@@ -262,4 +262,7 @@ def test_fix1_replayed_documents_keep_sample_mark(replay_env):
     assert res.status_code == 200, res.text
     assert res.json()["state"] == "CHECKPOINT_2", res.text
     package = client.get(f"/api/cases/{case_id}/package").json()
-    assert "(SAMPLE)" in package["ecourt"]["claim_cause_payment_order"]
+    # M5-fix2: ecourt facts use role terms, not names (names stay in drafts/header/list).
+    cause = package["ecourt"]["claim_cause_payment_order"]
+    assert "채권자" in cause and "채무자" in cause
+    assert "(SAMPLE)" not in cause
