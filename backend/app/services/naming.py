@@ -89,6 +89,13 @@ _DRAFT_PATTERNS: List[Tuple[str, str]] = [
     ("fraud", r"사기(?:를|죄|꾼)"),
     ("legal-duty", r"법적\s*(?:책임|의무)"),
     ("can-claim", r"청구할\s*수\s*있"),
+    ("duty-admission", r"의무를?\s*인정"),
+    ("prescription", r"시효"),
+    ("fraud-labels", r"편취|기망|횡령"),
+    ("right-exists", r"권리가\s*있"),
+    ("falls-under", r"에\s*해당(?:한다|함|하므로)"),
+    ("counsel-ko2", r"변호인"),
+    ("legal-pro", r"법률\s*(?:비서|전문가)"),
 ]
 
 _DOC_ONLY_PATTERNS: List[Tuple[str, str]] = [

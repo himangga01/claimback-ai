@@ -108,16 +108,19 @@ _AMOUNT_RE = re.compile(
     r"[일이삼사오육\ub959칠팔구십백천만억조]*)"
     r"\s*원"
 )
-_MONTH_RE = re.compile(r"(?<![가-힣])[일이삼사오육유칠팔구십시]+월(?![가-힣])")
-_DAY_RE = re.compile(r"(?<![가-힣])[일이삼사오육\ub959칠팔구십]+일(?![가-힣])")
-_YEAR_RE = re.compile(r"(?<![가-힣])[일이삼사오육\ub959칠팔구십백천만억]+년(?![가-힣])")
+_DATE_JOSA = r"(?:부터|까지|에|의|을|를|이|가|은|는|도|말|초|중)"
+_MONTH_RE = re.compile(
+    r"(?<![가-힣])[일이삼사오육유칠팔구십시]+월(?=$|[^가-힣]|" + _DATE_JOSA + r")"
+)
+_DAY_RE = re.compile(r"(?<![가-힣])(?!일일이)[일이삼사오육\ub959칠팔구십]+일(?=$|[^가-힣]|" + _DATE_JOSA + r")")
+_YEAR_RE = re.compile(r"(?<![가-힣])[일이삼사오육\ub959칠팔구십백천만억]+년(?=$|[^가-힣]|" + _DATE_JOSA + r")")
 _DOTTED_DATE_RE = re.compile(r"\d+\.\s*\d+\.\s*\d+\.?")
 _RELATIVE_RE = re.compile(
     r"(?<![가-힣])(?:오늘|내일|모레|글피|어제|그제(?!야|서)|그저께|엊그제|올해|작년|내년|이듬해)"
     r"|(?<![가-힣])(?:이번|다음|지난|다다음)\s?(?:주|달|해|날)"
     r"(?=$|[^가-힣]|[에의을를이가은는도뒤후안내만로과와부까으])"
     r"|(?<![가-힣])(?:하루|이틀|사흘|나흘|닷새|열흘|보름|며칠|일주일"
-    r"|[한두세네]\s?(?:달|주|해)|(?:몇|석|넉)\s?(?:달|주|해))"
+    r"|[한두세네]\s?(?:달|주|해)|(?:몇|석|넉|두어)\s?(?:달|주|해)|반\s?년)"
     r"\s?(?:쯤|정도)?\s?(?:뒤|후|안|내)"
     r"|[월연주]말|[월연]초|[초중하]순|[월화수목금토일]요일"
 )
@@ -126,7 +129,7 @@ _APPROX_RE = re.compile(
     _NUMERAL_CLS + r"+(?:여|쯤|가량|정도|남짓|씩)\s*(?:원|일|개월|년|주|번|월)"
 )
 _NUMERAL_UNIT_RE = re.compile(
-    r"(?<![가-힣])" + _NUMERAL_CLS + r"+\s+(?:원|일|개월|년|주|번|월)"
+    r"(?<![가-힣])" + _NUMERAL_CLS + r"+\s+(?:원|일|개월|년|주|번|월|만|억|조)"
     r"(?=$|[^가-힣]|[에의을를이가은는도뒤후안내만로과와부까으])"
 )
 _UNIT_PREFIX_RE = re.compile(r"(?:개월|원|일|월|년|주|번|차례)")
@@ -567,7 +570,7 @@ def check_g3(draft: SlotDraft, existing_exhibits: List[str]) -> GateResult:
                         break
                 for piece in pieces:
                     stripped = _EX_TAG_RE.sub(" ", piece).replace(_USER_TAG, " ")
-                    if re.search(r"[다요]\s+\S", stripped):
+                    if re.search(r"(?:[았었였했겠]다|니다|어요|아요|해요)(?=\s+(?!고|며|하|말|라)\S)", stripped):
                         findings.append(
                             Finding(
                                 sentence_id=s.sentence_id,
@@ -731,6 +734,16 @@ def _correct_particle(orig: str, ending: Optional[tuple]) -> Optional[str]:
     return fixed + cont
 
 
+_ISO_DATE_RE = re.compile(r"^(\d{4})-(\d{1,2})-(\d{1,2})$")
+
+
+def _to_dotted_date(value: str) -> str:
+    m = _ISO_DATE_RE.match(value.strip())
+    if m:
+        return f"{int(m.group(1))}. {int(m.group(2))}. {int(m.group(3))}."
+    return value
+
+
 def substitute_text(
     text: str, values: Dict[str, str], quotes: Optional[Dict[str, str]] = None
 ) -> str:
@@ -751,7 +764,7 @@ def substitute_text(
                     raise ValueError(f"인용 원문이 없습니다: {content}")
         else:
             if content in values:
-                repl = str(values[content])
+                repl = _to_dotted_date(str(values[content]))
             else:
                 raise ValueError(f"확인값이 없습니다: {content}")
         out_parts.append(text[last_end:m.start()])

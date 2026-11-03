@@ -831,6 +831,13 @@ class VerificationGateService:
             if loan_fact.service_date is not None and today <= loan_fact.service_date:
                 breakdown["post_service_interest"] = Decimal("0.00")
             expected_total = calc_obj.reference_total.amount
+            if target_date is None:
+                calculated_interest = Decimal("0")
+                expected_total = remaining_principal
+                calc_obj.accrued_interest = Decimal("0")
+                calc_obj.reference_total.amount = Decimal("0")
+                breakdown["pre_service_interest"] = Decimal("0.00")
+                breakdown["post_service_interest"] = Decimal("0.00")
             if "repayments" in calc_obj.missing_fields and calc_obj.rate_clause.sentence == "":
                 missing_requirements.append(_UNSUPPORTED_REPAYMENT_MSG)
             if "agreed_interest_rate" in calc_obj.missing_fields and calc_obj.rate_clause.sentence == "":
@@ -844,6 +851,11 @@ class VerificationGateService:
             )
             audit_notes.extend(calc_logs)
             expected_total = remaining_principal + calculated_interest
+            if target_date is None:
+                calculated_interest = Decimal("0.00")
+                expected_total = remaining_principal
+                breakdown["pre_service_interest"] = Decimal("0.00")
+                breakdown["post_service_interest"] = Decimal("0.00")
 
         is_satisfied = remaining_principal == Decimal("0.00") and calculated_interest == Decimal("0.00")
         if is_satisfied:
@@ -866,6 +878,8 @@ class VerificationGateService:
         draft_claimed = claim_draft.claim_amount_claimed
         matches_remaining = draft_claimed == remaining_principal
         matches_total = draft_claimed == expected_total
+        if target_date is None:
+            matches_total = matches_remaining
         if not matches_remaining and not matches_total:
             tampering_reconciliations.append(
                 f"초안 금액({draft_claimed})이 계산값(남은 원금 {remaining_principal}, "
