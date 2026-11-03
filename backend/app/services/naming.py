@@ -60,15 +60,15 @@ _DRAFT_PATTERNS: List[Tuple[str, str]] = [
     ("law-office", r"법률\s*사무소"),
     ("law-firm-ko", r"법무\s*법인"),
     ("lawfirm-short", r"로\s*펌"),
-    ("lawyer", r"\blawyer\b"),
-    ("attorney", r"\battorney\b"),
+    ("lawyer", r"\blawyers?\b"),
+    ("attorney", r"\battorneys?\b"),
     ("law-firm", r"\blaw[\s-]+firm\b"),
     ("paralegal", r"\bparalegal\b"),
     ("legal-assistant", r"\blegal\s+assistant\b"),
     ("counsel", r"\bcounsel\b"),
     ("legal-advice", r"\blegal[\s-]+advice\b"),
-    ("win-ko", r"승\s*소"),
-    ("lose-ko", r"패\s*소"),
+    ("win-ko", r"승소"),
+    ("lose-ko", r"패소"),
     ("you-win", r"\byou(?:'ll| will| are likely to)\s+win\b"),
     ("win-case", r"\bwin\s+your\s+case\b"),
     ("chance-winning", r"\bchance\s+of\s+winning\b"),
@@ -85,6 +85,10 @@ _DRAFT_PATTERNS: List[Tuple[str, str]] = [
     ("win-chance", r"승산"),
     ("recoverable", r"돌려받을\s*수\s*있"),
     ("clearly-illegal", r"명백한\s*불법"),
+    ("debt-existence", r"채무의?\s*존재를?\s*(?:인정|승인)"),
+    ("fraud", r"사기(?:를|죄|꾼)"),
+    ("legal-duty", r"법적\s*(?:책임|의무)"),
+    ("can-claim", r"청구할\s*수\s*있"),
 ]
 
 _DOC_ONLY_PATTERNS: List[Tuple[str, str]] = [
@@ -92,8 +96,9 @@ _DOC_ONLY_PATTERNS: List[Tuple[str, str]] = [
     ("urge", r"촉구"),
 ]
 
-_DRAFT_RES = [(name, re.compile(pat, re.IGNORECASE)) for name, pat in _DRAFT_PATTERNS]
-_DOC_RES = [(name, re.compile(pat, re.IGNORECASE)) for name, pat in (_DRAFT_PATTERNS + _DOC_ONLY_PATTERNS)]
+_SHARED_PATTERNS = _DRAFT_PATTERNS + _DOC_ONLY_PATTERNS
+_DRAFT_RES = [(name, re.compile(pat, re.IGNORECASE)) for name, pat in _SHARED_PATTERNS]
+_DOC_RES = [(name, re.compile(pat, re.IGNORECASE)) for name, pat in _SHARED_PATTERNS]
 
 
 def normalize_text(text: str) -> str:

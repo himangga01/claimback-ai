@@ -169,6 +169,7 @@ def compile_ecourt_packet(req: VerifyRequest) -> Dict[str, str]:
     return KoreanLegalDocumentCompiler.generate_ecourt_clipboard_packet(
         loan_fact=req.loan_fact,
         verification=verification,
+        as_of=req.target_date,
     )
 
 

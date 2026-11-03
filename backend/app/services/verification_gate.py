@@ -69,6 +69,12 @@ def _format_rate(rate: Decimal) -> str:
     return format(d, "f")
 
 
+def _canon_rate(rate: Decimal) -> Decimal:
+    if rate == rate.to_integral_value():
+        return Decimal(int(rate))
+    return rate.normalize()
+
+
 def _format_kr_date(d: date) -> str:
     return f"{d.year}. {d.month}. {d.day}."
 
@@ -207,30 +213,32 @@ def calculate_kr(loan_fact: LoanFactSchema, as_of: date) -> Calculation:
     allocations: List[AllocationItem] = []
 
     agreed = loan_fact.agreed_interest_rate
+    if agreed is not None and agreed == 0:
+        agreed = None
     capped: Optional[Decimal] = None
     if agreed is not None:
-        if agreed > Decimal("20.0"):
+        if agreed > Decimal("20"):
             warnings.append(
                 f"입력한 약정 이율(연 {_format_rate(agreed)}%)이 계산 상한 연 20%보다 높아 "
                 "연 20%로 계산했습니다. 확인할 칸: 약정 이율"
             )
-            capped = Decimal("20.0")
+            capped = Decimal("20")
         else:
-            capped = agreed
+            capped = _canon_rate(agreed)
 
     statutory = (
-        Decimal("6.0")
+        Decimal("6")
         if loan_fact.transaction_kind == TransactionKindEnum.COMMERCIAL
-        else Decimal("5.0")
+        else Decimal("5")
     )
     if capped is not None and capped > statutory:
         pre_rate = capped
     else:
         pre_rate = statutory
     if capped is not None:
-        post_rate = capped if capped > Decimal("12.0") else Decimal("12.0")
+        post_rate = capped if capped > Decimal("12") else Decimal("12")
     else:
-        post_rate = Decimal("12.0")
+        post_rate = Decimal("12")
 
     if loan_fact.due_date > as_of:
         missing_fields.append("due_date")
@@ -366,6 +374,10 @@ def calculate_kr(loan_fact: LoanFactSchema, as_of: date) -> Calculation:
         reference_amount = Decimal("0")
 
     unsupported_rate = capped is not None and capped < statutory
+    if unsupported_rate:
+        last_alloc = sorted_reps[-1].payment_date if sorted_reps else loan_fact.loan_date
+        if last_alloc >= loan_fact.due_date:
+            unsupported_rate = False
     if unsupported_rate and "agreed_interest_rate" not in missing_fields:
         missing_fields.append("agreed_interest_rate")
     if capped is not None and capped >= statutory:
