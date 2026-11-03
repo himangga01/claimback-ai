@@ -334,8 +334,9 @@ def _drive_to_packaging(client, facts_patch=None):
 
 
 def test_k4_packaging_blocks_leak(case_env):
-    # INT-3 task 3: a G1b leak fail HOLDS after packaging (files stay
-    # for inspection); fixing the value recovers to CHECKPOINT_2.
+    # INT-3 task 3: a G1b leak fail HOLDS after packaging; fixing the value
+    # recovers to CHECKPOINT_2. INT-3c F1: the failed PDFs are deleted and
+    # neither the package nor a PDF can be fetched while on HOLD.
     client = case_env
     case_id = _drive_to_packaging(
         client, {"creditor_address": "서울시 계좌 123-456789-01234"})
@@ -346,7 +347,9 @@ def test_k4_packaging_blocks_leak(case_env):
     assert any(r["code"] == "g1b_failed" and r["step"] == "packaging"
                for r in view["hold_reasons"])
     files = case_state_mod.files_dir(case_id)
-    assert (files / "content_proof.pdf").exists()
+    for name in ("content_proof.pdf", "exhibits.pdf", "evidence_list.pdf"):
+        assert not (files / name).exists(), name
+    assert client.get(f"/api/cases/{case_id}/package").status_code == 409
     package = coord.get_case(case_id).package or {}
     gates = {entry["gate"]: entry for entry in package["gate_results"]}
     assert gates["G1b"]["status"] == "fail"
@@ -679,7 +682,11 @@ def test_k9_repayment_rows_show_own_payment_only():
 
 
 def _tall_png(path: Path, width: int = 640, height: int = 2400) -> None:
+    # Dark "text" lines every 100 px so no slice is blank (INT-3c F3 drops
+    # near-blank slices).
     image = PILImage.new("RGB", (width, height), (255, 255, 255))
+    for top in range(40, height, 100):
+        image.paste((0, 0, 0), (40, top, width - 40, top + 12))
     image.save(path)
 
 
