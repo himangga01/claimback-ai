@@ -13,3 +13,4 @@ dist/
 .local/
 backend/data/
 *.lock
+e2e/artifacts/

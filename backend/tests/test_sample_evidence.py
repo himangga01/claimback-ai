@@ -67,9 +67,14 @@ FORBIDDEN = (
     "요건사실 결손", "입증할",
 )
 
-SCREEN_FILES = ("frontend/index.html", "frontend/app.js",
-                "frontend/styles.css", "docs/index.html", "docs/app.js",
-                "docs/styles.css", "README.md")
+def screen_files() -> list[Path]:
+    """Screen texts: every frontend/docs page, script, and style, plus README."""
+    files: list[Path] = []
+    for folder in ("frontend", "docs"):
+        for ext in ("*.html", "*.js", "*.css"):
+            files.extend(sorted((ROOT / folder).glob(ext)))
+    files.append(ROOT / "README.md")
+    return files
 
 EXPECTED_SAMPLE_FILES = {
     "kr_transfer_receipt.txt", "kr_chat_log.txt", "us_wire_receipt.txt",
@@ -132,10 +137,27 @@ def test_manifest_files_exist_and_match():
         assert sha256_of(path) == expected, f"hash mismatch: {rel}"
 
 
+OFFLINE_RE = re.compile(r'<div id="offline-notice".*?</div>\s*', re.S)
+
+
+def _without_offline_notice(text: str) -> str:
+    return OFFLINE_RE.sub('<div id="offline-notice"></div>', text)
+
+
 def test_frontend_docs_mirrors_match():
-    for name in ("index.html", "app.js", "styles.css"):
-        left = (ROOT / "frontend" / name).read_bytes()
-        right = (ROOT / "docs" / name).read_bytes()
+    names = sorted(p.name for p in (ROOT / "frontend").glob("*")
+                   if p.suffix in (".html", ".js", ".css"))
+    assert names, "no frontend screen files"
+    for name in names:
+        left = (ROOT / "frontend" / name).read_text(encoding="utf-8")
+        right_path = ROOT / "docs" / name
+        assert right_path.is_file(), f"docs/{name} missing"
+        right = right_path.read_text(encoding="utf-8")
+        if name == "index.html":
+            # Explicit exception: the Pages copy may carry its own
+            # server-absent notice; everything else must match.
+            left = _without_offline_notice(left)
+            right = _without_offline_notice(right)
         assert left == right, f"frontend/{name} differs from docs/{name}"
 
 
@@ -467,6 +489,32 @@ def test_pdfs_single_page():
         assert len(reader.pages) == 1, rel
 
 
+def _load_generator_module():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "make_sample_evidence", ROOT / "tools" / "make_sample_evidence.py")
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_pdf_bytes_independent_of_build_path(tmp_path):
+    """G: the same preview PNG yields identical PDF bytes from any folder."""
+    gen = _load_generator_module()
+    src = SAMPLE_DIR / "kr" / "iou.png"
+    outs = []
+    for name in ("aaa", "bbb_different_folder"):
+        folder = tmp_path / name
+        folder.mkdir()
+        png = folder / "iou.png"
+        png.write_bytes(src.read_bytes())
+        out = folder / "out.pdf"
+        gen.render_iou_pdf(out, png)
+        outs.append(out.read_bytes())
+    assert outs[0] == outs[1]
+
+
 def ffprobe_stream(path: Path) -> dict:
     exe = shutil.which("ffprobe")
     if exe is None:
@@ -475,7 +523,8 @@ def ffprobe_stream(path: Path) -> dict:
         [exe, "-v", "error", "-select_streams", "v:0",
          "-show_entries", "stream=width,height,avg_frame_rate,duration",
          "-of", "json", str(path)],
-        capture_output=True, text=True, check=True)
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        check=True)
     return json.loads(proc.stdout)["streams"][0]
 
 
@@ -500,7 +549,7 @@ def test_scroll_video_late_bubble():
 
 
 BUBBLE_COLORS = ((0xE9, 0xEC, 0xEF), (0xCF, 0xEF, 0xEA))
-BAND_TOP = 36  # fixed SAMPLE band height; boxes must sit below it
+BAND_TOP = 37  # fixed SAMPLE band paints rows 0..36; boxes must sit below it
 
 
 def extract_frame(video: Path, index: int, out: Path) -> None:
@@ -510,7 +559,7 @@ def extract_frame(video: Path, index: int, out: Path) -> None:
     proc = subprocess.run(
         [exe, "-y", "-v", "error", "-i", str(video),
          "-vf", f"select=eq(n\\,{index})", "-frames:v", "1", str(out)],
-        capture_output=True, text=True)
+        capture_output=True, text=True, encoding="utf-8", errors="replace")
     assert proc.returncode == 0, proc.stderr
 
 
@@ -601,7 +650,7 @@ EXTRA_SCAN_FILES = ("tools/make_sample_evidence.py",
 
 
 def test_no_brands_or_forbidden_words():
-    files = [ROOT / rel for rel in SCREEN_FILES]
+    files = screen_files()
     files += sorted(SAMPLE_DIR.glob("*.txt"))
     files += [ROOT / rel for rel in EXTRA_SCAN_FILES]
     assert files, "no files scanned"
@@ -619,9 +668,11 @@ def test_disclaimers_present_verbatim():
         text = (ROOT / rel).read_text(encoding="utf-8")
         assert DISCLAIMER_KO in text, rel
         assert DISCLAIMER_EN in text, rel
-    header = (ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
-    assert BADGE_KO in header
-    assert BADGE_EN in header
+    first_screen = (ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
+    assert BADGE_KO in first_screen
+    # No English badge requirement on the first screen.
+    footer = first_screen.split("<footer", 1)[1]
+    assert DISCLAIMER_KO in footer and DISCLAIMER_EN in footer
 
 
 # --- 6. previous sample person names must not reappear ----------------------
@@ -671,7 +722,7 @@ def baseline_person_tokens() -> list[str]:
 
 def test_previous_sample_names_absent():
     tokens = baseline_person_tokens()
-    targets = [ROOT / rel for rel in SCREEN_FILES]
+    targets = screen_files()
     targets += sorted(SAMPLE_DIR.glob("*.txt"))
     targets.append(ROOT / "backend" / "app" / "api" / "routes.py")
     targets += [ROOT / rel for rel in EXTRA_SCAN_FILES]

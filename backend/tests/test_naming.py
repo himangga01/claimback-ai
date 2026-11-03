@@ -2,7 +2,6 @@ import pathlib
 from datetime import date
 from decimal import Decimal
 
-import pytest
 from pypdf import PdfReader
 
 from app.schemas.loan_fact import (
@@ -160,9 +159,8 @@ def test_naming_frontend_index_clean():
     assert find_forbidden(text) == []
 
 
-@pytest.mark.xfail(reason="M3에서 수정, 병합 후 통과해야 함")
-def test_naming_frontend_app_js_clean():
-    text = (_repo_root() / "frontend" / "app.js").read_text(encoding="utf-8")
+def test_naming_frontend_case_js_clean():
+    text = (_repo_root() / "frontend" / "case.js").read_text(encoding="utf-8")
     assert find_forbidden(text) == []
 
 
