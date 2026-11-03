@@ -65,6 +65,7 @@
           </div>
           <div class="viewer-row">
             <div class="viewer-col">
+              <p class="legend" data-testid="original-legend">원본</p>
               <div id="viewer" data-testid="viewer" class="viewer">
                 <div id="viewer-inner" class="viewer-inner">
                   <img id="viewer-img" data-testid="viewer-img" alt="선택한 증거 이미지" hidden>
@@ -74,7 +75,7 @@
               </div>
             </div>
             <div id="redaction-col" data-testid="redaction-col" class="viewer-col" hidden>
-              <p class="legend" data-testid="redaction-legend">가림 미리보기</p>
+              <p class="legend" data-testid="redaction-legend">가린 사본</p>
               <div class="viewer">
                 <div class="viewer-inner">
                   <img id="redaction-img" data-testid="redaction-img" alt="가림 미리보기">
@@ -83,7 +84,7 @@
             </div>
           </div>
           <p class="legend" data-testid="box-legend"><span class="legend-swatch" aria-hidden="true"></span>Spark 판독 박스</p>
-          <p id="segment-legend" data-testid="segment-legend" class="legend" hidden><span class="legend-swatch-segment" aria-hidden="true"></span>감식 결과 박스</p>
+          <p id="segment-legend" data-testid="segment-legend" class="legend" hidden><span class="legend-swatch-segment" aria-hidden="true"></span>SAM이 찾은 영역</p>
           <p id="reading-note" data-testid="reading-note" class="hint"></p>
         </div>
         <div class="cp-right">

@@ -150,26 +150,52 @@ class Steps:
         self.page.screenshot(
             path=str(self.outdir / f"{self.n:02d}-{name}.png"), full_page=True
         )
-        found = check_text(self.page.inner_text("body"))
+        body_text = self.page.inner_text("body")
+        for bad in ("null", '{"', "undefined"):
+            assert bad not in body_text, f"{bad!r} visible at step {name}"
+        found = check_text(body_text)
         assert found == [], f"forbidden names at step {name}: {found}"
 
 
 def expected_model_calls(case_view: dict) -> int:
-    """M6 rule: reading counts non-skipped substeps, other model steps
-    sum attempts."""
+    """M6-fix1 rule: reading/vision count done substeps, other model
+    steps sum attempts (held readings excluded). Stub-run cross-check
+    only; real-backend runs assert literal counts."""
     total = 0
     for s in case_view.get("steps", []):
         if not s.get("model"):
             continue
         subs = s.get("substeps") or []
-        if s["key"] == "reading" and subs:
-            total += sum(1 for x in subs if x.get("status") != "skipped")
+        if s["key"] in ("reading", "vision") and subs:
+            total += sum(1 for x in subs if (x or {}).get("status") == "done")
         else:
             total += int(s.get("attempts") or 0)
     return total
 
 
-def test_case_flow(page, base_url):
+def _delete_case_quietly(page, base_url) -> None:
+    try:
+        el = page.get_by_test_id("case-id")
+        if el.count() == 0:
+            return
+        cid = el.inner_text().strip()
+        if not cid:
+            return
+        try:
+            page.request.delete(f"{base_url}/api/cases/{cid}")
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+
+@pytest.fixture
+def case_cleanup(page, base_url):
+    yield
+    _delete_case_quietly(page, base_url)
+
+
+def test_case_flow(page, base_url, case_cleanup):
     expect_stub = not os.environ.get("E2E_BASE_URL")
     steps = Steps(page)
     page.goto(base_url + "/", wait_until="networkidle")
@@ -189,7 +215,8 @@ def test_case_flow(page, base_url):
     expect(page.get_by_test_id("board-summary")).to_contain_text("Meta 모델 호출")
     if expect_stub:
         expect(page.get_by_test_id("replay-badge")).to_be_visible()
-    # M6: board call count equals the rule computed from the case view.
+    # M6-fix1: real backend asserts literal counts; stub cross-checks
+    # the rule computed from the case view.
     _case_id = page.get_by_test_id("case-id").inner_text().strip()
     _case_resp = page.request.get(f"{base_url}/api/cases/{_case_id}")
     assert _case_resp.ok
@@ -197,9 +224,14 @@ def test_case_flow(page, base_url):
     _summary = page.get_by_test_id("board-summary").inner_text()
     _m = re.search(r"Meta 모델 호출 (\d+)회", _summary)
     assert _m, f"board summary shape changed: {_summary!r}"
-    assert int(_m.group(1)) == _want_calls, (
-        f"board shows {_m.group(1)} calls, case view gives {_want_calls}"
-    )
+    if expect_stub:
+        assert int(_m.group(1)) == _want_calls, (
+            f"board shows {_m.group(1)} calls, case view gives {_want_calls}"
+        )
+    else:
+        assert int(_m.group(1)) == 6, (
+            f"real backend CHECKPOINT_1 calls should be 6, board: {_summary!r}"
+        )
     assert "(재생)" in _summary, f"replay marker missing: {_summary!r}"
     steps.shot("board")
 
@@ -245,7 +277,7 @@ def test_case_flow(page, base_url):
     _utt_text = page.get_by_test_id("utterance-list").inner_text()
     assert "null" not in _utt_text
     if any(u.get("speaker") in (None, "null") for u in review.get("utterances", [])):
-        assert ("화자 미상" in _utt_text) or ("말풍선" in _utt_text), _utt_text
+        assert ("말한 사람 모름" in _utt_text) or ("말풍선" in _utt_text), _utt_text
     # M6: display hint only when it differs from the input value.
     if page.get_by_test_id("display-field-principal").count():
         expect(page.get_by_test_id("display-field-principal")).to_contain_text("5,000,000원")
@@ -290,6 +322,12 @@ def test_case_flow(page, base_url):
     expect(page.get_by_test_id("calc-section")).to_be_visible()
     expect(page.get_by_test_id("remaining-principal")).to_contain_text("4,014,383")
     expect(page.get_by_test_id("reference-total")).to_contain_text("4,031,430")
+    if not expect_stub:
+        _d_summary = page.get_by_test_id("board-summary").inner_text()
+        _dm = re.search(r"Meta 모델 호출 (\d+)회", _d_summary)
+        assert _dm and int(_dm.group(1)) == 8, (
+            f"real backend DRAFT_APPROVAL calls should be 8, board: {_d_summary!r}"
+        )
     steps.shot("calculation")
 
     # 5. drafts shown; slot source folded, edit box opens with "고치기".
@@ -298,17 +336,30 @@ def test_case_flow(page, base_url):
     rev = page.get_by_test_id("revision-rounds")
     if rev.is_visible():
         expect(rev).to_contain_text("문안 작성")
-    fact = page.locator(".sentence[data-sentence-type='fact']").first
-    if fact.count() == 0:
-        fact = first_sentence
-    sid = fact.get_attribute("data-testid").removeprefix("sentence-")
+    # M6-fix1: G1a scene uses the sentence holding {{principal}},
+    # else the first fact sentence.
+    _drafts_resp = page.request.get(f"{base_url}/api/cases/{case_id}/drafts")
+    assert _drafts_resp.ok
+    _sentences = _drafts_resp.json().get("sentences", [])
+    assert _sentences, "no draft sentences"
+    sid = None
+    for _s in _sentences:
+        if "{{principal}}" in (_s.get("text_with_slots") or ""):
+            sid = _s["sentence_id"]
+            break
+    if sid is None:
+        for _s in _sentences:
+            if _s.get("type") == "fact":
+                sid = _s["sentence_id"]
+                break
+    if sid is None:
+        sid = _sentences[0]["sentence_id"]
+    expect(page.get_by_test_id(f"sentence-{sid}")).to_be_visible()
     expect(page.get_by_test_id(f"slots-{sid}")).to_be_hidden()
     expect(page.get_by_test_id(f"edit-{sid}")).to_be_hidden()
     page.get_by_test_id(f"edit-toggle-{sid}").click()
     expect(page.get_by_test_id(f"edit-{sid}")).to_be_visible()
     # M6: NAMING/DRAFT gates show Korean names when the backend returns them.
-    _drafts_resp = page.request.get(f"{base_url}/api/cases/{case_id}/drafts")
-    assert _drafts_resp.ok
     _gates = {g["gate"] for g in _drafts_resp.json().get("gate_results", [])}
     _gate_text = page.get_by_test_id("gate-summary").inner_text()
     if "NAMING" in _gates:
@@ -317,17 +368,24 @@ def test_case_flow(page, base_url):
         assert "문안 규칙 검사" in _gate_text, _gate_text
     steps.shot("drafts")
 
-    # 6. G1a scene: digits outside slots are blocked.
+    # 6. G1a scene: digits outside slots are blocked. Only the
+    # {{principal}} slot is replaced so that only G1a trips.
     edit = page.get_by_test_id(f"edit-{sid}")
     original = edit.input_value()
     assert "{{" in original, "edit box should hold text_with_slots"
-    edit.fill("500만 원을 보냈습니다.")
+    if "{{principal}}" in original:
+        edit.fill(original.replace("{{principal}}", "500만 원", 1))
+    else:
+        _slot = re.search(r"\{\{.*?\}\}", original)
+        assert _slot, f"no slot to break G1a in {original!r}"
+        edit.fill(original.replace(_slot.group(0), "500만 원", 1))
     with page.expect_response(
         lambda r: r.request.method == "PUT" and "/drafts" in r.url
     ):
         page.get_by_test_id(f"update-{sid}").click()
     findings = page.get_by_test_id(f"findings-{sid}")
     expect(findings.locator("[data-gate='G1a']")).to_be_visible(timeout=15000)
+    assert findings.locator("[data-gate='G3']").count() == 0, "only G1a should trip"
     expect(findings).to_have_attribute("data-status", "fail")
     expect(page.get_by_test_id(f"notice-{sid}")).to_be_visible()
     expect(page.get_by_test_id(f"approve-{sid}")).to_be_disabled()
@@ -364,12 +422,20 @@ def test_case_flow(page, base_url):
     )
     expect(page.get_by_test_id("package-section")).to_be_visible()
     expect(page.get_by_test_id("file-content_proof.pdf")).to_be_visible()
-    # M6: package gate line (G1b) shows when the backend returns gate_results.
+    # M6-fix1: package gate lines show except skipped G1b.
     _pkg_resp = page.request.get(f"{base_url}/api/cases/{case_id}/package")
     assert _pkg_resp.ok
-    if _pkg_resp.json().get("gate_results"):
+    _visible_gates = [
+        g
+        for g in _pkg_resp.json().get("gate_results", [])
+        if not (g.get("gate") == "G1b" and g.get("status") == "skipped")
+    ]
+    if _visible_gates:
         expect(page.get_by_test_id("pkg-gates")).to_be_visible()
-        expect(page.get_by_test_id("pkg-gate-list")).to_contain_text("G1b")
+        for _g in _visible_gates:
+            expect(page.get_by_test_id("pkg-gate-list")).to_contain_text(_g["gate"])
+    else:
+        expect(page.get_by_test_id("pkg-gates")).to_be_hidden()
     expect(page.get_by_test_id("claim-purpose")).to_contain_text("2026. 5. 2.")
     copy_btn = page.get_by_test_id("copy-claim-purpose")
     expect(copy_btn).to_be_visible()
@@ -384,7 +450,7 @@ def test_case_flow(page, base_url):
     steps.shot("deleted")
 
 
-def test_m6_redaction_segments_show(page, base_url):
+def test_m6_redaction_segments_show(page, base_url, case_cleanup):
     """M6 task 6 show-path: mocked 6a responses render next to the original,
     hide per evidence without data, and mocked exhibits/G1b render."""
     steps = Steps(page)
@@ -530,5 +596,66 @@ def test_m6_redaction_segments_show(page, base_url):
     expect(page.get_by_test_id("file-evidence_list.pdf")).to_be_visible()
     expect(page.get_by_test_id("pkg-gate-list")).to_contain_text("최종 서류 검사")
     steps.shot("m6-package-mocked")
+    page.get_by_test_id("delete-case").click()
+    expect(page.get_by_test_id("board-section")).to_be_hidden(timeout=15000)
+
+
+def test_fix1_amount_rejected(page, base_url, case_cleanup):
+    """M6-fix1 item 1: display-format amounts ("5,000,000원") convert to
+    integers, but any other text ("500만 원", "1억 2천만원", "-1000") is
+    sent as-is so the backend rejects it with 400 shown next to the
+    field. Real backend only (the stub does not validate amounts)."""
+    if not os.environ.get("E2E_BASE_URL"):
+        pytest.skip("real backend only")
+    steps = Steps(page)
+    page.goto(base_url + "/", wait_until="networkidle")
+    page.get_by_test_id("load-sample").click()
+    expect(page.get_by_test_id("case-state")).to_have_attribute(
+        "data-state", "CHECKPOINT_1", timeout=30000
+    )
+    case_id = page.get_by_test_id("case-id").inner_text().strip()
+    resp = page.request.get(f"{base_url}/api/cases/{case_id}/review")
+    assert resp.ok
+    review = resp.json()
+    fallback = json.loads(CONFIRMED_EXAMPLE.read_text(encoding="utf-8"))[
+        "fallback_fields"
+    ]
+    expected = expected_confirmed_facts(review, fallback)
+    for f in review["fields"]:
+        name = f["field"]
+        if name in ("repayments", "transaction_kind"):
+            continue
+        if _is_empty(f["value"]) and not _is_empty(expected["fields"][name]):
+            page.get_by_test_id(f"field-{name}").fill(str(expected["fields"][name]))
+    steps.shot("fix1-amount-start")
+    for bad in ("500만 원", "1억 2천만원", "-1000"):
+        page.get_by_test_id("field-principal").fill(bad)
+        with page.expect_response(
+            lambda r: r.request.method == "PUT" and r.url.endswith("/facts")
+        ) as put_info:
+            page.get_by_test_id("confirm-facts").click()
+        assert put_info.value.status == 400, f"{bad!r} should be rejected"
+        put_body = json.loads(put_info.value.request.post_data)
+        assert put_body["fields"]["principal"] == bad, (
+            f"{bad!r} must reach the server unchanged, "
+            f"got {put_body['fields']['principal']!r}"
+        )
+        err = page.get_by_test_id("error-field-principal")
+        expect(err).to_be_visible()
+        expect(err).to_contain_text("숫자 문자열")
+        expect(page.get_by_test_id("case-state")).to_have_attribute(
+            "data-state", "CHECKPOINT_1"
+        )
+    steps.shot("fix1-amount-rejected")
+    page.get_by_test_id("field-principal").fill("5,000,000원")
+    with page.expect_response(
+        lambda r: r.request.method == "PUT" and r.url.endswith("/facts")
+    ) as put_info:
+        page.get_by_test_id("confirm-facts").click()
+    assert json.loads(put_info.value.request.post_data)["fields"]["principal"] == "5000000"
+    expect(page.get_by_test_id("case-state")).to_have_attribute(
+        "data-state", "DRAFT_APPROVAL", timeout=30000
+    )
+    steps.shot("fix1-amount-accepted")
     page.get_by_test_id("delete-case").click()
     expect(page.get_by_test_id("board-section")).to_be_hidden(timeout=15000)

@@ -309,17 +309,14 @@ button.danger {
 
 .viewer-row {
   display: flex;
+  flex-direction: column;
   gap: 12px;
-  align-items: flex-start;
+  align-items: stretch;
 }
 
 .viewer-col {
-  flex: 1 1 0;
+  flex: 1 1 auto;
   min-width: 0;
-}
-
-@media (max-width: 1000px) {
-  .viewer-row { flex-direction: column; }
 }
 
 .reading-box.flash { animation: boxflash 0.5s ease-in-out 4; }
@@ -385,6 +382,14 @@ button.danger {
   display: inline-block;
   font-size: 12px;
   color: var(--muted);
+  margin-top: 2px;
+}
+
+.field-error {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--danger);
   margin-top: 2px;
 }
 
@@ -457,7 +462,7 @@ button.danger {
 .gate-summary { font-size: 13px; margin-bottom: 12px; }
 .gate-row { padding: 3px 0; }
 .gate-row[data-status="fail"] { color: var(--danger); font-weight: 700; }
-.gate-row[data-status="pass"] { color: var(--muted); }
+.gate-row[data-status="pass"] { color: var(--accent); }
 .gate-row[data-status="skipped"] { color: var(--muted); }
 
 .footer {

@@ -55,7 +55,7 @@ const TAG_KO = {
   loan_request: "빌려 달라는 말",
   amount_mention: "금액 언급",
   repay_promise: "갚겠다는 말",
-  reminder: "독촉",
+  reminder: "갚아 달라는 말",
   other: "기타",
 };
 
@@ -183,7 +183,9 @@ function revealSection(sectionId, titleId) {
   const t = titleId ? $(titleId) : null;
   if (t) {
     t.focus({ preventScroll: true });
-    t.scrollIntoView({ block: "start" });
+    const reduce = window.matchMedia
+      && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    t.scrollIntoView({ block: "start", behavior: reduce ? "auto" : "smooth" });
   }
 }
 
@@ -390,8 +392,9 @@ function countModelCalls(v) {
   let calls = 0;
   for (const s of (v.steps || [])) {
     if (!s.model) continue;
-    if (s.key === "reading" && Array.isArray(s.substeps) && s.substeps.length > 0) {
-      calls += s.substeps.filter((x) => x.status !== "skipped").length;
+    if ((s.key === "reading" || s.key === "vision")
+      && Array.isArray(s.substeps) && s.substeps.length > 0) {
+      calls += s.substeps.filter((x) => x && x.status === "done").length;
     } else {
       calls += Number(s.attempts || 0);
     }
@@ -403,7 +406,7 @@ function renderBoardSummary(v) {
   const el = $("board-summary");
   const calls = countModelCalls(v);
   const cost = v.run_cost_usd || "0";
-  const mode = v.meta_mode === "replay" ? "(재생)" : "실호출";
+  const mode = v.meta_mode === "replay" ? "(재생)" : "실제 호출";
   el.textContent = `Meta 모델 호출 ${calls}회 · $${cost} · ${mode}`;
   el.dataset.calls = String(calls);
 }
@@ -456,7 +459,9 @@ function renderBoard() {
       if (s.status !== "waiting" && s.status !== "skipped") {
         const meta = document.createElement("span");
         meta.className = "step-meta";
-        meta.textContent = `${fmtLatency(s.latency_ms || 0)} · $${s.cost_usd || "0"}`;
+        meta.textContent = v.meta_mode === "replay"
+          ? `$${s.cost_usd || "0"}`
+          : `${fmtLatency(s.latency_ms || 0)} · $${s.cost_usd || "0"}`;
         head.appendChild(meta);
       }
       row.appendChild(head);
@@ -474,7 +479,9 @@ function renderBoard() {
         ul.className = "substeps";
         for (const sub of s.substeps) {
           const li = document.createElement("li");
-          li.textContent = `${exLabel(sub.ex_id)} · ${STATUS_KO[sub.status] || sub.status} · ${fmtLatency(sub.latency_ms || 0)}`;
+          li.textContent = v.meta_mode === "replay"
+            ? `${exLabel(sub.ex_id)} · ${STATUS_KO[sub.status] || sub.status}`
+            : `${exLabel(sub.ex_id)} · ${STATUS_KO[sub.status] || sub.status} · ${fmtLatency(sub.latency_ms || 0)}`;
           ul.appendChild(li);
         }
         row.appendChild(ul);
@@ -504,7 +511,8 @@ function renderUserStrip(v) {
     chip.className = "user-chip";
     chip.dataset.testid = `step-${s.key}`;
     chip.dataset.status = s.status;
-    chip.textContent = `${stepOrder(v, s)}. ${s.agent} · ${STATUS_KO[s.status] || s.status}`;
+    const label = s.status === "running" ? "확인 기다림" : (STATUS_KO[s.status] || s.status);
+    chip.textContent = `${stepOrder(v, s)}. ${s.agent} · ${label}`;
     strip.appendChild(chip);
   }
 }
@@ -567,13 +575,15 @@ function readingSide(exId, itemId) {
 }
 
 function redactionPreviewUrl(exId) {
-  const previews = (S.redactions && S.redactions.previews) || [];
-  const p = previews.find((x) => x.ex_id === exId);
+  const previews = S.redactions && S.redactions.previews;
+  if (!Array.isArray(previews)) return null;
+  const p = previews.find((x) => x && x.ex_id === exId);
   return p ? p.url : null;
 }
 
 function segmentsFor(exId) {
-  const entry = (S.segments || []).find((x) => x.ex_id === exId);
+  if (!Array.isArray(S.segments)) return [];
+  const entry = S.segments.find((x) => x && x.ex_id === exId);
   if (!entry || !Array.isArray(entry.objects)) return [];
   return entry.objects.filter((o) => o && o.box && o.box.ref_w && o.box.ref_h);
 }
@@ -734,6 +744,11 @@ function renderFields() {
         a.setAttribute("aria-label", `받은 돈 ${i + 1} 금액`);
         wrap.appendChild(d);
         wrap.appendChild(a);
+        const aErr = document.createElement("span");
+        aErr.className = "field-error";
+        aErr.dataset.testid = `error-field-repayments-${i}-amount`;
+        aErr.hidden = true;
+        wrap.appendChild(aErr);
         tdVal.appendChild(wrap);
       });
       const hint = displayHint(f);
@@ -759,6 +774,13 @@ function renderFields() {
       tdVal.appendChild(input);
       const hint = displayHint(f);
       if (hint) tdVal.appendChild(hint);
+      if (AMOUNT_FIELDS.has(f.field)) {
+        const err = document.createElement("span");
+        err.className = "field-error";
+        err.dataset.testid = `error-field-${f.field}`;
+        err.hidden = true;
+        tdVal.appendChild(err);
+      }
     }
     tr.appendChild(tdVal);
     const tdSrc = document.createElement("td");
@@ -777,24 +799,32 @@ function renderFields() {
 }
 
 function conflictText(c) {
-  if (typeof c === "string") return c;
-  if (c && typeof c === "object") {
+  if (typeof c === "string") return c || null;
+  if (c && typeof c === "object" && !Array.isArray(c)) {
     const labels = {};
-    for (const f of (S.review.fields || [])) labels[f.field] = f.label || f.field;
-    const names = (c.fields || []).map((f) => labels[f] || f).join(", ");
-    const note = c.note || "";
+    for (const f of ((S.review && S.review.fields) || [])) labels[f.field] = f.label || f.field;
+    let names = "";
+    if (Array.isArray(c.fields)) {
+      names = c.fields.map((f) => labels[f] || f).join(", ");
+    } else if (typeof c.fields === "string") {
+      names = c.fields;
+    }
+    const note = c.note || c.message || "";
     if (names && note) return `${names}: ${note}`;
-    return note || names || "";
+    return note || names || null;
   }
-  return String(c ?? "");
+  return null;
 }
 
 function renderConflicts() {
   const ul = $("conflict-list");
   ul.innerHTML = "";
   const items = [];
-  for (const c of (S.review.conflicts || [])) items.push(conflictText(c));
-  for (const q of (S.review.questions || [])) items.push(q.question || `${q.field} 입력 필요`);
+  for (const c of ((S.review && S.review.conflicts) || [])) {
+    const t = conflictText(c);
+    if (t) items.push(t);
+  }
+  for (const q of ((S.review && S.review.questions) || [])) items.push(q.question || `${q.field} 입력 필요`);
   if (items.length === 0) {
     const li = document.createElement("li");
     li.textContent = "없음";
@@ -815,7 +845,7 @@ function speakerLabel(u) {
   const side = readingSide(u.ex_id, u.item_id);
   if (side === "right") return "오른쪽 말풍선";
   if (side === "left") return "왼쪽 말풍선";
-  return "화자 미상";
+  return "말한 사람 모름";
 }
 
 function exNum(exId) {
@@ -850,9 +880,6 @@ function renderUtterances() {
     check.setAttribute("aria-label", `강조: ${who}: ${u.text}`);
     if (firstPromise === `${u.ex_id}:${u.item_id}`) check.checked = true;
     label.appendChild(check);
-    const em = document.createElement("span");
-    em.textContent = " 강조 ";
-    label.appendChild(em);
     li.appendChild(label);
     const body = document.createElement("span");
     body.textContent = `${who}: ${u.text} `;
@@ -891,11 +918,13 @@ function renderRoles() {
   }
 }
 
+const DISPLAY_AMOUNT_RE = /^\s*\d[\d,]*\s*원?\s*$/;
+
 function parseAmountInput(raw) {
   const t = String(raw ?? "").trim();
   if (t === "") return "";
-  const digits = t.replace(/[^0-9]/g, "");
-  return digits === "" ? t : digits;
+  if (!DISPLAY_AMOUNT_RE.test(t)) return t;
+  return t.replace(/[\s,원]/g, "");
 }
 
 const AMOUNT_FIELDS = new Set(["principal"]);
@@ -933,16 +962,43 @@ function gatherFacts() {
   return { fields, evidence_roles, highlight, as_of: $("asof").value };
 }
 
+function clearFactsErrors() {
+  document.querySelectorAll('[data-testid^="error-field-"]').forEach((el) => {
+    el.hidden = true;
+    el.textContent = "";
+  });
+}
+
+function showFactsErrorsFor(msg) {
+  if (!msg) return;
+  if (msg.includes("principal")) {
+    const el = document.querySelector('[data-testid="error-field-principal"]');
+    if (el) {
+      el.textContent = msg;
+      el.hidden = false;
+    }
+  }
+  if (msg.includes("repayments.amount")) {
+    document.querySelectorAll('[data-testid^="error-field-repayments-"]').forEach((el) => {
+      el.textContent = msg;
+      el.hidden = false;
+    });
+  }
+}
+
 async function confirmFacts() {
   if (S.putting || S.running) return;
   setStatus("");
+  clearFactsErrors();
   S.putting = true;
   $("btn-confirm").disabled = true;
   try {
     const body = gatherFacts();
     const put = await api("PUT", `/api/cases/${S.caseId}/facts`, body);
     if (!put.ok) {
-      setStatus("확정값을 저장하지 못했습니다. " + errText(put.data));
+      const msg = errText(put.data);
+      setStatus("확정값을 저장하지 못했습니다. " + msg);
+      if (put.status === 400) showFactsErrorsFor(msg);
       return;
     }
     S.caseView = put.data;
@@ -1046,13 +1102,17 @@ function renderDrafts() {
   }
 }
 
+function showGate(g) {
+  return !(g.gate === "G1b" && g.status === "skipped");
+}
+
 function gateRow(g) {
   const row = document.createElement("div");
   row.className = "gate-row";
   row.dataset.testid = `gate-${g.gate}`;
   row.dataset.gate = g.gate;
   row.dataset.status = g.status;
-  const state = g.status === "pass" ? "통과"
+  const state = g.status === "pass" ? "✓ 통과"
     : g.status === "fail" ? "지적 있음"
     : g.status === "skipped" ? "건너뜀" : g.status;
   row.textContent = `${gateName(g.gate)} (${g.gate}): ${state}`;
@@ -1241,7 +1301,7 @@ function renderDraftsGateSummary() {
   const gates = $("gate-summary");
   gates.innerHTML = "";
   for (const g of (S.drafts.gate_results || [])) {
-    gates.appendChild(gateRow(g));
+    if (showGate(g)) gates.appendChild(gateRow(g));
   }
 }
 
@@ -1309,10 +1369,13 @@ async function approveSentence(sid) {
 async function approveAndContinue() {
   if (S.putting || S.running) return;
   setStatus("");
-  const btn = $("btn-approve-continue");
-  btn.disabled = true;
+  S.running = true;
+  const gen = ++S.runGen;
+  setRunningUI(true);
+  $("run-progress").hidden = false;
   try {
     const res = await api("POST", `/api/cases/${S.caseId}/run`, {});
+    if (gen !== S.runGen) return;
     if (!res.ok) {
       setStatus("계속하지 못했습니다. " + errText(res.data));
       return;
@@ -1324,7 +1387,11 @@ async function approveAndContinue() {
       await loadPackage();
     }
   } finally {
-    btn.disabled = false;
+    if (gen === S.runGen) {
+      S.running = false;
+      setRunningUI(false);
+      $("run-progress").hidden = true;
+    }
   }
 }
 
@@ -1355,7 +1422,7 @@ async function loadPackage(opts) {
   const gates = $("pkg-gates");
   const gateList = $("pkg-gate-list");
   if (gates && gateList) {
-    const results = S.pkg.gate_results || [];
+    const results = (S.pkg.gate_results || []).filter(showGate);
     gateList.innerHTML = "";
     gates.hidden = results.length === 0;
     for (const g of results) {
