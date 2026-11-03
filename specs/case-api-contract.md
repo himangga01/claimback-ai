@@ -147,6 +147,20 @@ M4a(시각 감식·가림)와 M5(편철)가 더하는 응답입니다. 기존 �
 - `Package.files`에 M5가 `exhibits.pdf`(갑호증 통합, 가린 사본 + "갑 제N호증" 표시), `evidence_list.pdf`(증거 목록)를 더하고, `Package.gate_results`의 G1b가 `skipped`에서 `pass`/`fail`로 바뀝니다.
 - 증거 목록의 칸은 "호증 번호, 증거 이름, 작성일, 내용"이며 "내용"에는 사용자가 확인한 사실만 씁니다(법적 평가 문구 없음).
 
+## 6b. INT-2 반영 (14:45 KST, v2.1)
+
+INT-2(`reports/INT-2.md` 6절 제안)가 구현한 내용을 약속으로 고정합니다. 기존 키는 그대로이고 아래가 더해집니다.
+
+- 오류: 1장 모양을 500과 `/api/cases/*` 안의 없는 경로에도 씁니다(`internal_error`, `not_found`). 사건 ID가 `^case_[0-9a-f]{12}$`가 아니면 404이고 아무것도 지우지 않습니다.
+- 업로드(`POST /evidence`, 6장): 파일당 20MB, 사건당 10개, 확장자와 내용(매직 바이트)이 맞아야 함. 어기면 400 `bad_request`. `INTAKE`가 아니거나 실행 중이면 409 `wrong_state`.
+- 실행 중 잠금: 같은 사건에 실행 중 `PUT /facts`·`PUT /drafts`·업로드·`DELETE`는 409 `wrong_state`. 실행 중에도 `GET /api/cases/{id}`는 바로 응답합니다.
+- `hold_reasons[].code`: `replay_fixture_missing`, `budget_exceeded`, `missing_facts`(그 `fields`는 양식 칸 이름), `schema_failed`, `revision_exceeded`, `naming_violation`, `internal_error`(처리 중 오류, `POST /run`으로 다시 실행 가능).
+- `Readings.items[]`에 `side`(`left`|`right`|`null`, 말풍선 위치). 비어 있는 값은 문자열 `"null"`이 아니라 JSON `null`. `normalized`는 금액·날짜·전화·계좌에만 채우고, 연도가 보이지 않는 날짜는 `null`.
+- `Review.fields[]`에 `null_reason`(값이 있으면 `null`). `Review.conflicts[]`는 `{ "fields": [field], "note": str }`(화면은 `fields`의 칸 이름과 `note`를 문장으로 보여 줌). 질문은 비었거나 충돌한 칸에만.
+- `Drafts.gate_results` 순서: `G2`, `G4`, `G1a`, `G3`, `NAMING`, `DRAFT`. `DRAFT`는 문안 규칙(`agents/draft_rules.py`): 계산값 슬롯(`remaining_principal`, `accrual_start_date`, `total_claim_amount`, `calculated_interest`, `delay_rate`) 금지, 말하기 동사가 있는 `fact` 문장은 인용 슬롯 필수, `user` 문장은 발화 묘사 금지. 계산값은 편철 담당이 정형 문구로만 넣습니다. G2는 검증 결과의 `missing_requirements`, G4는 `limit_check.exceeded`에서 나오며, 한국 G4 초과는 HOLD가 아니라 안내입니다.
+- `PUT /drafts`: 고친 문장은 G1a·G3·NAMING·DRAFT를 다시 거치고, `approved` 없이 고치면 승인이 풀립니다. `rendered_text`는 고칠 때마다 다시 만듭니다.
+- 단계 상태: 지나간 사용자 단계(`checkpoint_1`, `draft_approval`)는 `done`. 사건 상태는 `DRAFTING`·`VERIFYING`을 실제로 거칩니다. 단계 비용은 응답 usage로 계산하고 HOLD·되돌리기 뒤에도 남습니다.
+
 ## 7. 재생 모드와 가짜 서버
 
 - `META_MODE=replay`(기본)에서 샘플 사건은 기록된 fixture만으로 `CHECKPOINT_2`까지 갑니다. 화면 수정 장면(문장에 "500만 원"을 넣으면 G1a가 막음)은 규칙만 쓰므로 재생에서도 됩니다.
