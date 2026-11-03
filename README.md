@@ -80,7 +80,8 @@ cd ..
 - Korean track only in this version (the US SC-100 path is partial).
 - Video evidence is stored and hashed, but frame reading is not in the case flow yet (it produced duplicates and timestamp drift in testing; see `reports/M4b-review.md`).
 - Reading boxes on very tall screenshots are still approximate; the privacy step refines boxes from the image pixels and flags anything it cannot confirm.
-- The draft-rule checker still misses a few reported-speech forms in sentences you type yourself (e.g. "…을 빌려 달라고 요청했습니다") and blocks a few harmless ones; review your own edits before approving (`reports/INT-3-review.md`).
+- The draft-rule checker is word-based; it can still block a few harmless sentences you type yourself (for example a promise phrase next to a date slot). Review your own edits before approving (`reports/INT-3c-review.md`).
+- Video evidence goes into the exhibit list as "submit the file separately" and is not redacted; check it yourself before filing.
 
 ---
 

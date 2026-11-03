@@ -16,7 +16,7 @@ models (`muse-spark-1.3`, `sam-3.1`, `muse-image-1.0`). Not legal advice.
 |---|---|---|
 | Muse Code (`muse --model muse-spark-1.3`) | Implements tasks from `specs/tasks/`, writes and runs tests (including live Meta API tests), writes `reports/M<N>.md` | Change `specs/` (propose changes in the report), add features outside the task, commit or push |
 | Claude Code | Maintains `specs/`, writes task briefs, runs Muse Code (`muse exec`), reviews (re-runs tests, reads diffs, checks rendered PDFs/UI) with independent Claude subagent reviewers that cross-check and critique each other, decides pass or fix, writes `reports/M<N>-review.md`, commits and pushes after each passing review | Write or edit product code |
-| User | Gets API keys and credits, records the demo, submits. Decided 2026-11-03 12:05 KST: Claude proceeds without asking for approval and commits and pushes along the way | — |
+| User | Gets API keys and credits, records the demo, submits. Decided 2026-11-03 12:05 KST: Claude proceeds without asking for approval and commits and pushes along the way. Decided 2026-11-03 evening (Meta credit low, dashboard unreachable from 18:08 KST): Claude Code implements the remaining fixes directly instead of Muse Code (first: INT-3c), still with two cross-checking subagent reviewers | — |
 
 ## Canonical documents (read before work, update after)
 
