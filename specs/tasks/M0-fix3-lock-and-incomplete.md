@@ -7,7 +7,7 @@
 
 ## 파일 범위
 
-고쳐도 되는 파일: `backend/app/meta/`(전부), `backend/tests/test_meta_client.py`. 그 밖은 건드리지 않습니다. 공개 함수 이름·인자는 바꾸지 않습니다(M2a가 쓰는 중).
+고쳐도 되는 파일: `backend/app/meta/`(전부), `backend/tests/test_meta_client.py`, `tools/m0_spike.py`(종료 코드만). 그 밖은 건드리지 않습니다. 공개 함수 이름·인자는 바꾸지 않습니다(M2a가 쓰는 중).
 
 ## 할 일
 
@@ -16,6 +16,8 @@
 3. **E3** 공유 `MetaClient`의 SDK 클라이언트 생성을 잠금으로 보호해 하나만 만들고, `close()`가 그 하나를 닫게 합니다.
 4. **E4** `IncompleteResponse`에 응답 `body`(또는 usage)를 담아, 재생에서도 끊긴 시도의 비용을 `estimate_cost_from_body`로 계산할 수 있게 합니다.
 5. **E6 사소** 잠금 해제 때 자기 잠금인지 확인(잠금 파일에 소유 토큰 기록), `estimate_cost_from_body`의 SAM 이미지 수·입력 0 처리를 실호출 기록과 같게, `Box`·`box_to_pixels`를 `app.meta`에서 내보내기, `ledger_summary`는 잠금 없이 읽기 전용으로(파일을 읽기만 하고 부분 줄은 무시하지 않고 오류).
+5a. **E7(망가뜨리기 시험) 원장이 없으면 $0**: live·record 모드에서는 `META_LEDGER_PATH`가 절대 경로여야 하고, 그 파일이 없으면 "새 원장을 만들겠다"는 명시 설정(`META_LEDGER_INIT=1`) 없이는 호출을 거부합니다(오타·상대 경로로 지난 사용액이 0이 되는 것 방지). 기본 저장소 경로를 쓸 때도 파일이 있어야 합니다.
+5b. **E8** `images_generate`에도 D2(키 확인·전송 계층 생성을 예약 전에, 실패는 `failed` 줄)를 적용하고 테스트를 더합니다. 오래된 잠금 정리 테스트에 시간 한도를 두고, 요청 해시 고정 테스트(알려진 요청 → 알려진 해시)를 `test_meta_client.py`에 넣습니다. `tools/m0_spike.py`는 실패한 프로브가 있으면 종료 코드 1(이 파일은 종료 코드 부분만 수정 허용).
 6. 테스트: 동시 스레드(8개) × 호출 50회에서 잠금 오류 0건(가짜 `PermissionError`를 주입하는 테스트 포함), 오래된 잠금 정리 중 CPU가 한도 안에서 멈춤, SDK 클라이언트 1개, `IncompleteResponse.body`로 비용 계산.
 7. 리포트 `reports/M0-fix3.md`(AGENTS.md 형식, 끝까지 저장 확인).
 

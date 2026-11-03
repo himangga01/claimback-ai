@@ -40,6 +40,7 @@ BASE_URL = "https://api.meta.ai/v1"
 KEY_ENV = "MODEL_API_KEY"
 MODE_ENV = "META_MODE"
 LEDGER_PATH_ENV = "META_LEDGER_PATH"
+LEDGER_INIT_ENV = "META_LEDGER_INIT"
 VALID_MODES = ("live", "record", "replay")
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -117,12 +118,16 @@ class IncompleteResponse(RuntimeError):
     """Response status is incomplete (e.g. max_output_tokens reached).
 
     The call was billed and its cost is already in the ledger. The caller
-    should retry with a larger max_output_tokens. Attributes: reason.
+    should retry with a larger max_output_tokens. Attributes: reason,
+    body (the recorded response body, for replay cost calculation via
+    estimate_cost_from_body).
     """
 
-    def __init__(self, message: str, reason: str | None = None) -> None:
+    def __init__(self, message: str, reason: str | None = None,
+                 body: Any = None) -> None:
         super().__init__(message)
         self.reason = reason
+        self.body = body
 
 
 def _utc_now_iso() -> str:
@@ -355,7 +360,7 @@ def extract_usage(response: Any) -> dict:
     if usage is None:
         return {"input_tokens": 0, "cached_input_tokens": 0, "output_tokens": 0,
                 "reasoning_tokens": 0, "video_frames_processed": 0,
-                "total_tokens": 0}
+                "images_processed": 0, "total_tokens": 0}
     input_tokens = int(_get_field(usage, "input_tokens", default=0) or 0)
     output_tokens = int(_get_field(usage, "output_tokens", default=0) or 0)
     total_tokens = int(_get_field(usage, "total_tokens", default=0) or 0)
@@ -376,9 +381,12 @@ def extract_usage(response: Any) -> dict:
         reasoning = int(_get_field(usage, "reasoning_tokens", default=0) or 0)
     frames = int(_get_field(usage, "video_frames_processed", "frames_processed",
                             default=0) or 0)
+    images = int(_get_field(usage, "images_processed", "image_count",
+                            default=0) or 0)
     return {"input_tokens": input_tokens, "cached_input_tokens": cached,
             "output_tokens": output_tokens, "reasoning_tokens": reasoning,
-            "video_frames_processed": frames, "total_tokens": total_tokens}
+            "video_frames_processed": frames, "images_processed": images,
+            "total_tokens": total_tokens}
 
 
 def extract_output_text(response: Any) -> str:
@@ -484,6 +492,7 @@ def _check_incomplete(body: Any) -> None:
         f"response incomplete (reason={reason}); increase max_output_tokens "
         "and retry",
         reason=reason,
+        body=body,
     )
 
 
@@ -524,7 +533,13 @@ def _unlink_best_effort(path: Path, attempts: int = _LOCK_RELEASE_ATTEMPTS) -> N
             time.sleep(0.02)
 
 
-def _acquire_file_lock(lock_path: Path) -> None:
+def _acquire_file_lock(lock_path: Path) -> str:
+    """Create the lock file, retrying contention until the wait limit.
+
+    Returns the owner token written to the file; the releaser only
+    unlinks when the file still carries its token (E6). Raises
+    BudgetLedgerError past the deadline.
+    """
     try:
         lock_path.parent.mkdir(parents=True, exist_ok=True)
     except OSError:
@@ -532,17 +547,28 @@ def _acquire_file_lock(lock_path: Path) -> None:
     deadline = time.monotonic() + _LOCK_TIMEOUT_S
     while True:
         try:
+            token = f"{os.getpid()}.{uuid.uuid4().hex}"
             fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
             try:
-                os.write(fd, str(os.getpid()).encode("ascii"))
+                os.write(fd, token.encode("ascii"))
             finally:
                 os.close(fd)
-            return
-        except FileExistsError:
+            return token
+        except (FileExistsError, PermissionError):
+            # PermissionError: on Windows os.open fails this way when the
+            # previous lock file is delete-pending (E1); treat it like
+            # contention and retry until the deadline.
             try:
                 mtime = lock_path.stat().st_mtime
             except OSError:
-                continue  # Removed between attempts; retry immediately.
+                # Removed between attempts; re-check the limit and yield
+                # instead of spinning (E2).
+                if time.monotonic() >= deadline:
+                    raise BudgetLedgerError(
+                        f"could not acquire ledger lock: {lock_path}"
+                    )
+                time.sleep(0.02)
+                continue
             age = time.time() - mtime
             if age > _LOCK_STALE_S or age < -_LOCK_FUTURE_GRACE_S:
                 # Stale (or far-future, D11): claim it atomically by
@@ -557,7 +583,14 @@ def _acquire_file_lock(lock_path: Path) -> None:
                 try:
                     lock_path.rename(victim)
                 except OSError:
-                    continue  # Someone else claimed it; retry.
+                    # Someone else claimed it; re-check the limit and
+                    # yield instead of spinning (E2).
+                    if time.monotonic() >= deadline:
+                        raise BudgetLedgerError(
+                            f"could not acquire ledger lock: {lock_path}"
+                        )
+                    time.sleep(0.02)
+                    continue
                 _unlink_best_effort(victim)
                 continue
             if time.monotonic() >= deadline:
@@ -571,8 +604,18 @@ def _acquire_file_lock(lock_path: Path) -> None:
             ) from exc
 
 
-def _release_file_lock(lock_path: Path) -> None:
-    # Retried (D5); leftovers self-heal via the stale timeout.
+def _release_file_lock(lock_path: Path, expected: str | None = None) -> None:
+    # Retried (D5); leftovers self-heal via the stale timeout. When the
+    # caller passes its owner token, only unlink when the file still
+    # carries it, so a slow releaser cannot delete a new owner's lock
+    # after its own went stale and was claimed (E6).
+    if expected is not None:
+        try:
+            actual = lock_path.read_text(encoding="ascii").strip()
+        except OSError:
+            return
+        if actual != expected:
+            return
     _unlink_best_effort(lock_path)
 
 
@@ -592,7 +635,7 @@ def _holding_ledger_lock(ledger_path: Path):
                 _LEDGER_FILE_STATE.depth = depth
         return
     lock_path = _ledger_lock_path(Path(ledger_path))
-    _acquire_file_lock(lock_path)
+    token = _acquire_file_lock(lock_path)
     try:
         with _LEDGER_THREAD_LOCK:
             _LEDGER_FILE_STATE.depth = 1
@@ -602,14 +645,17 @@ def _holding_ledger_lock(ledger_path: Path):
             with _LEDGER_THREAD_LOCK:
                 _LEDGER_FILE_STATE.depth = 0
     finally:
-        _release_file_lock(lock_path)
+        _release_file_lock(lock_path, token)
 
 
 def _read_ledger_file(ledger_path: Path) -> list[dict]:
     """Read and validate all ledger entries.
 
-    Caller must hold _holding_ledger_lock. Raises BudgetLedgerError when
-    the file cannot be read or any line is uninterpretable (fail closed).
+    Writers and check-and-reserve callers must hold
+    _holding_ledger_lock; ledger_summary reads without the lock
+    (read-only) and a torn line then raises instead of being skipped.
+    Raises BudgetLedgerError when the file cannot be read or any line
+    is uninterpretable (fail closed).
     """
     if not ledger_path.exists():
         return []
@@ -681,11 +727,12 @@ def ledger_summary(run_id_prefix: str | None = None,
     completed/failed line with the same reservation_id exists; an
     unfinalized reservation counts at face value. Counts include every
     ledger line, offset or not. Lines without a status (pre-M0-fix1
-    ledger) count as completed costs.
+    ledger) count as completed costs. The file is only read, without
+    taking the ledger lock; a partial (torn) line raises
+    BudgetLedgerError instead of being skipped.
     """
     path = resolve_ledger_path(ledger_path)
-    with _holding_ledger_lock(path):
-        entries = _read_ledger_file(path)
+    entries = _read_ledger_file(path)
     if run_id_prefix:
         entries = [e for e in entries
                    if str(e.get("run_id") or "").startswith(run_id_prefix)]
@@ -719,8 +766,10 @@ def estimate_cost_from_body(model: str, endpoint: str, body: Any) -> float:
     Replay mode writes no ledger, so per-call costs for display are
     derived from the response usage with the pricing table. Returns 0.0
     for free endpoints (models.list, files.*) and for uninterpretable
-    bodies; never raises. SAM image bodies carry no image count, so one
-    image is assumed.
+    bodies; never raises. SAM image counts come from
+    usage.images_processed (1 when absent), the same rule as the live
+    record path; Spark responses always price the reported usage,
+    including output-only bodies (E6).
     """
     try:
         usage = extract_usage(body)
@@ -735,10 +784,9 @@ def estimate_cost_from_body(model: str, endpoint: str, body: Any) -> float:
             frames = int(usage.get("video_frames_processed", 0) or 0)
             if frames > 0:
                 return pricing.sam_video_cost_usd(frames)
-            return pricing.sam_image_cost_usd(1)
+            images = int(usage.get("images_processed", 0) or 0)
+            return pricing.sam_image_cost_usd(images if images > 0 else 1)
         if endpoint == "responses":
-            if int(usage.get("input_tokens", 0) or 0) <= 0:
-                return 0.0
             return pricing.spark_cost_usd(
                 usage.get("input_tokens", 0), usage.get("output_tokens", 0),
                 usage.get("cached_input_tokens", 0),
@@ -780,9 +828,12 @@ class MetaClient:
             raise ValueError("run_id is required in live/record mode (C6)")
         self.run_id = run_id or f"run-{uuid.uuid4().hex[:8]}"
         self.ledger_path = resolve_ledger_path(ledger_path)
+        self._ledger_explicit = bool(
+            ledger_path is not None and str(ledger_path).strip())
         self.fixture_dir = Path(fixture_dir) if fixture_dir else DEFAULT_FIXTURE_DIR
         self.transport = transport
         self._sdk_client: Any = None
+        self._sdk_lock = threading.Lock()
         self.base_url = base_url
         self.timeout = timeout
         self.max_retries = max_retries
@@ -818,30 +869,71 @@ class MetaClient:
             )
         return key or ""
 
+    def _require_ledger_ready(self) -> None:
+        """Refuse live/record calls on a missing or guessed ledger (E7).
+
+        When the ledger path comes from META_LEDGER_PATH or the repo
+        default (not an explicit argument), a typo or relative path
+        would read past spend as $0. So in live/record mode the env
+        path must be absolute, and the file must already exist unless
+        META_LEDGER_INIT=1 explicitly allows creating a new ledger.
+        The existence rule also applies to the default path. Explicit
+        ledger_path arguments are intentional and skip this check.
+        """
+        if self.mode not in ("live", "record"):
+            return
+        if self._ledger_explicit:
+            return
+        env = os.environ.get(LEDGER_PATH_ENV)
+        if env is not None and str(env).strip():
+            if not Path(str(env).strip()).is_absolute():
+                raise BudgetLedgerError(
+                    f"{LEDGER_PATH_ENV} must be an absolute path: {env!r}"
+                )
+        try:
+            exists = self.ledger_path.exists()
+        except OSError as exc:
+            raise BudgetLedgerError(
+                f"cannot read ledger {self.ledger_path}: {exc}"
+            ) from exc
+        if not exists and os.environ.get(LEDGER_INIT_ENV) != "1":
+            raise BudgetLedgerError(
+                f"ledger {self.ledger_path} does not exist; set "
+                f"{LEDGER_INIT_ENV}=1 to create a new ledger"
+            )
+
     def _live_transport(self) -> Any:
         if self.transport is not None:
             return self.transport
         if self._sdk_client is not None:
             return self._sdk_client
-        try:
-            from openai import OpenAI
-        except ImportError as exc:
-            raise RuntimeError("openai package is required for live/record mode") from exc
-        # SDK retries off: _with_retry is the only retry (M0-fix1 C1).
-        # One client per MetaClient, reused across calls (M0-fix2 D7).
-        self._sdk_client = OpenAI(
-            api_key=self._require_key(), base_url=self.base_url,
-            timeout=self.timeout, max_retries=0)
-        return self._sdk_client
+        # One client per MetaClient even under threads (E3): hold the
+        # instance lock while creating so concurrent calls share it.
+        with self._sdk_lock:
+            if self._sdk_client is not None:
+                return self._sdk_client
+            try:
+                from openai import OpenAI
+            except ImportError as exc:
+                raise RuntimeError(
+                    "openai package is required for live/record mode") from exc
+            # SDK retries off: _with_retry is the only retry (M0-fix1 C1).
+            # One client per MetaClient, reused across calls (M0-fix2 D7).
+            self._sdk_client = OpenAI(
+                api_key=self._require_key(), base_url=self.base_url,
+                timeout=self.timeout, max_retries=0)
+            return self._sdk_client
 
     def close(self) -> None:
         """Close the cached SDK client, if any (M0-fix2 D7).
 
         Safe to call repeatedly and safe when no client was created
         (injected transports are owned by the caller and never closed).
+        Thread-safe: exactly the one shared client is closed (E3).
         """
-        client = self._sdk_client
-        self._sdk_client = None
+        with self._sdk_lock:
+            client = self._sdk_client
+            self._sdk_client = None
         if client is None:
             return
         close_fn = getattr(client, "close", None)
@@ -1036,6 +1128,7 @@ class MetaClient:
         if self.mode == "replay":
             fixture = self._load_fixture(digest)
             return fixture["response"]
+        self._require_ledger_ready()
         self.check_budget(0.0)
         client = self._live_transport()
         started = time.perf_counter()
@@ -1082,6 +1175,7 @@ class MetaClient:
         if self.mode == "replay":
             fixture = self._load_fixture(digest)
             return fixture["response"]
+        self._require_ledger_ready()
         self.check_budget(0.0)
         client = self._live_transport()
         started = time.perf_counter()
@@ -1237,6 +1331,7 @@ class MetaClient:
             fixture = self._load_fixture(digest)
             _check_incomplete(fixture["response"])
             return fixture["response"]
+        self._require_ledger_ready()
 
         has_video_block = bool(_count_blocks(payload_input, "input_video"))
         inferred_images = image_count or _count_blocks(payload_input, "input_image")
@@ -1286,6 +1381,16 @@ class MetaClient:
                        "output_tokens": 0, "reasoning_tokens": 0,
                        "video_frames_processed": 0, "total_tokens": 0}
 
+        def _save_response_fixture(body: Any, usage: dict,
+                                   latency_ms: int) -> None:
+            self._save_fixture(digest, {
+                "request": {"endpoint": endpoint, "model": model,
+                            "params": _to_jsonable(canonicalize_for_hash(params)),
+                            "payload": _to_jsonable(
+                                canonicalize_for_hash(payload_input))},
+                "response": body, "usage": usage, "latency_ms": latency_ms,
+            })
+
         def _fail(exc: BaseException) -> None:
             # D1: no automatic file cleanup here; the caller may retry
             # with the same file_id and cleans up explicitly.
@@ -1319,6 +1424,7 @@ class MetaClient:
                 body = _to_jsonable(response)
             usage = extract_usage(body)
             billed_frames = int(usage.get("video_frames_processed", 0) or 0)
+            billed_images = int(usage.get("images_processed", 0) or 0)
             if is_sam:
                 if is_sam_video or billed_frames:
                     final_frames = max(billed_frames or inferred_frames or 50,
@@ -1326,7 +1432,10 @@ class MetaClient:
                     cost = pricing.sam_video_cost_usd(final_frames)
                     final_images = 0
                 else:
-                    final_images = max(1, inferred_images or 1)
+                    if billed_images > 0:
+                        final_images = billed_images
+                    else:
+                        final_images = max(1, inferred_images or 1)
                     cost = pricing.sam_image_cost_usd(final_images)
                     final_frames = 0
             else:
@@ -1340,23 +1449,40 @@ class MetaClient:
                         usage.get("reasoning_tokens", 0))
                 final_images = inferred_images
                 final_frames = billed_frames or inferred_frames
-            self._record(model=model, endpoint=endpoint, usage=usage,
-                         image_count=final_images, frame_count=final_frames,
-                         cost_usd=cost, latency_ms=latency_ms,
-                         status="completed", reservation_id=reservation_id,
-                         expected_usd=expected)
+            try:
+                self._record(model=model, endpoint=endpoint, usage=usage,
+                             image_count=final_images, frame_count=final_frames,
+                             cost_usd=cost, latency_ms=latency_ms,
+                             status="completed", reservation_id=reservation_id,
+                             expected_usd=expected)
+            except (BudgetError, OSError) as ledger_exc:
+                # E1: the call was billed; never lose the response
+                # because the completed-ledger write failed (e.g. the
+                # lock stayed busy past the retry limit). Save the
+                # fixture first, warn that the cost is unrecorded, and
+                # return (or raise IncompleteResponse carrying the body).
+                if self.mode == "record":
+                    try:
+                        _save_response_fixture(body, usage, latency_ms)
+                    except Exception:
+                        pass
+                warnings.warn(
+                    f"ledger write failed after billed call "
+                    f"({endpoint} {model} ${cost:.6f}); cost NOT "
+                    f"recorded: {ledger_exc}",
+                    RuntimeWarning, stacklevel=2)
+                _check_incomplete(body)
+                return body
         except Exception as exc:
+            if isinstance(exc, IncompleteResponse):
+                # Raised by the preservation path above (fixture saved,
+                # warning issued); do not finalize it as failed.
+                raise
             _fail(exc)
             raise
 
         if self.mode == "record":
-            self._save_fixture(digest, {
-                "request": {"endpoint": endpoint, "model": model,
-                            "params": _to_jsonable(canonicalize_for_hash(params)),
-                            "payload": _to_jsonable(
-                                canonicalize_for_hash(payload_input))},
-                "response": body, "usage": usage, "latency_ms": latency_ms,
-            })
+            _save_response_fixture(body, usage, latency_ms)
         # D1: no automatic cleanup; the caller calls
         # cleanup_files(file_ids) after its final attempt.
         _check_incomplete(body)
@@ -1448,6 +1574,7 @@ class MetaClient:
         if self.mode == "replay":
             fixture = self._load_fixture(digest)
             return fixture["response"]
+        self._require_ledger_ready()
         expected = pricing.image_cost_usd(int(n))
         # D2: transport creation BEFORE the reservation (key/transport
         # failures must not leave a dangling reserved line).
@@ -1465,8 +1592,22 @@ class MetaClient:
         def _call():
             return client.images.generate(**kwargs)
 
+        def _save_image_fixture(body: Any, usage: dict,
+                                latency_ms: int) -> None:
+            # Redact image bytes from the fixture summary is unnecessary;
+            # b64 bytes stay in "response" for replay use, never in "request".
+            self._save_fixture(digest, {
+                "request": {"endpoint": endpoint, "model": model, "params": params,
+                            "payload": {"prompt": prompt,
+                                        "prompt_sha256": _sha256_hex(
+                                            prompt.encode("utf-8"))}},
+                "response": body, "usage": usage, "latency_ms": latency_ms,
+            })
+
         # D2: every exception after the request was sent finalizes the
-        # reservation with a failed line, then re-raises.
+        # reservation with a failed line, then re-raises — except a
+        # completed-ledger write failure, which preserves the billed
+        # response with a warning instead (E1).
         try:
             response = self._with_retry(_call, label=endpoint)
             latency_ms = int((time.perf_counter() - started) * 1000)
@@ -1476,11 +1617,24 @@ class MetaClient:
             usage = extract_usage(body)
             # Flat per image; usage tokens are reference only (pricing page).
             cost = pricing.image_cost_usd(count)
-            self._record(model=model, endpoint=endpoint, usage=usage,
-                         image_count=count, frame_count=0, cost_usd=cost,
-                         latency_ms=latency_ms, status="completed",
-                         reservation_id=reservation_id,
-                         expected_usd=expected)
+            try:
+                self._record(model=model, endpoint=endpoint, usage=usage,
+                             image_count=count, frame_count=0, cost_usd=cost,
+                             latency_ms=latency_ms, status="completed",
+                             reservation_id=reservation_id,
+                             expected_usd=expected)
+            except (BudgetError, OSError) as ledger_exc:
+                if self.mode == "record":
+                    try:
+                        _save_image_fixture(body, usage, latency_ms)
+                    except Exception:
+                        pass
+                warnings.warn(
+                    f"ledger write failed after billed call "
+                    f"({endpoint} {model} ${cost:.6f}); cost NOT "
+                    f"recorded: {ledger_exc}",
+                    RuntimeWarning, stacklevel=2)
+                return body
         except Exception:
             latency_ms = int((time.perf_counter() - started) * 1000)
             empty = {"input_tokens": 0, "cached_input_tokens": 0,
@@ -1496,13 +1650,5 @@ class MetaClient:
                 pass
             raise
         if self.mode == "record":
-            # Redact image bytes from the fixture summary is unnecessary;
-            # b64 bytes stay in "response" for replay use, never in "request".
-            self._save_fixture(digest, {
-                "request": {"endpoint": endpoint, "model": model, "params": params,
-                            "payload": {"prompt": prompt,
-                                        "prompt_sha256": _sha256_hex(
-                                            prompt.encode("utf-8"))}},
-                "response": body, "usage": usage, "latency_ms": latency_ms,
-            })
+            _save_image_fixture(body, usage, latency_ms)
         return body
