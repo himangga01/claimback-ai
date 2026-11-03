@@ -27,6 +27,7 @@ from app.meta.client import (  # noqa: E402
     MetaClient,
     extract_output_text,
     extract_usage,
+    ledger_summary,
 )
 from app.meta.coords import denormalize_box, mean_best_iou  # noqa: E402
 from app.meta import pricing  # noqa: E402
@@ -34,7 +35,8 @@ from app.meta import pricing  # noqa: E402
 INPUTS = ROOT / "backend" / "tests" / "fixtures" / "spike_inputs"
 OUTPUTS = ROOT / "backend" / "tests" / "fixtures" / "spike_outputs"
 REPORT_JSON = ROOT / "reports" / "M0-spike.json"
-LEDGER = ROOT / "reports" / "cost_ledger.jsonl"
+# Ledger location resolves inside ledger_summary (META_LEDGER_PATH or the
+# repo default); no hard-coded path here (M0-fix2 D3/D4).
 
 M0_BUDGET_USD = 3.0
 ALL_PROBES = ["P0", "P1", "P2", "P3", "P4", "P5", "P6", "P7", "P8"]
@@ -94,21 +96,15 @@ def load_truth() -> dict:
 
 
 def ledger_total() -> tuple[float, int]:
-    total = 0.0
-    lines = 0
-    if not LEDGER.exists():
-        return (0.0, 0)
-    for raw in LEDGER.read_text(encoding="utf-8").splitlines():
-        raw = raw.strip()
-        if not raw:
-            continue
-        try:
-            entry = json.loads(raw)
-            total += float(entry.get("cost_usd", 0.0) or 0.0)
-            lines += 1
-        except (ValueError, TypeError):
-            continue
-    return (round(total, 6), lines)
+    """Ledger (total_usd, lines) via ledger_summary (M0-fix2 D3).
+
+    Reservations are offset against their final lines instead of being
+    double-counted; a missing ledger reports (0.0, 0).
+    """
+    summary = ledger_summary()
+    lines = sum(slot.get("count", 0)
+                for slot in summary["by_status"].values())
+    return (summary["total_usd"], lines)
 
 
 def data_url(path: Path, mime: str) -> str:

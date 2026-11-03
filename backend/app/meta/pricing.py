@@ -24,6 +24,7 @@ Values marked "미확인" below could not be confirmed on the official pricing
 page and use a documented assumption.
 """
 
+import math
 import os
 
 # Muse Spark (Standard mode, USD per 1M tokens). Confirmed 2026-11-03.
@@ -65,10 +66,15 @@ def _cap_from_env(name: str, default: float) -> float:
         return default
     try:
         value = float(str(raw).strip())
-    except (TypeError, ValueError):
-        return default
-    if not (value > 0):
-        return default
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"invalid {name}: {raw!r} (must be a number, e.g. \"2\" or \"0\")"
+        ) from exc
+    if not math.isfinite(value):
+        raise ValueError(f"invalid {name}: {raw!r} (must be finite)")
+    if value < 0:
+        raise ValueError(f"invalid {name}: {raw!r} (must be >= 0)")
+    # "0" is honoured as zero: every billable live call is then refused.
     return value
 
 

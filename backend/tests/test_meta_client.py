@@ -11,6 +11,7 @@ import pytest
 
 from app.meta import pricing
 from app.meta.client import (
+    BudgetError,
     BudgetExceeded,
     BudgetLedgerError,
     ContributorModelError,
@@ -18,9 +19,13 @@ from app.meta.client import (
     IncompleteResponse,
     MetaClient,
     MissingKeyError,
+    _collect_file_ids,
     _to_jsonable,
+    estimate_cost_from_body,
     estimate_input_tokens,
+    ledger_summary,
     request_hash,
+    resolve_ledger_path,
 )
 from app.meta.coords import Box, box_iou, box_iou_boxes, box_to_pixels, denormalize_box
 
@@ -38,7 +43,9 @@ def load_secret_rules():
 
 @pytest.fixture(autouse=True)
 def _no_sleep(monkeypatch):
-    monkeypatch.setattr("app.meta.client.time.sleep", lambda s: None)
+    # Narrowed to retry waits only (M0-fix2 item 8): lock waits and
+    # test-side sleeps stay real so the concurrency test is honest.
+    monkeypatch.setattr("app.meta.client._sleep_retry", lambda s: None)
 
 
 class FakeStatusError(Exception):
@@ -181,6 +188,7 @@ def make_client(tmp_path, mode, transport=None, run_id="test-run",
         monkeypatch.setenv("META_MODE", mode)
         monkeypatch.delenv("META_RUN_CAP_USD", raising=False)
         monkeypatch.delenv("META_TOTAL_CAP_USD", raising=False)
+        monkeypatch.delenv("META_LEDGER_PATH", raising=False)
     return MetaClient(mode=mode, run_id=run_id,
                       ledger_path=tmp_path / "ledger.jsonl",
                       fixture_dir=tmp_path / "fixtures",
@@ -435,7 +443,7 @@ def test_400_is_not_retried(tmp_path, monkeypatch):
 
 def test_retry_after_capped_at_30s(tmp_path, monkeypatch):
     sleeps: list[float] = []
-    monkeypatch.setattr("app.meta.client.time.sleep", sleeps.append)
+    monkeypatch.setattr("app.meta.client._sleep_retry", sleeps.append)
     transport = FakeTransport(
         failures=[(429, "slow", {"retry-after": "120"})])
     client = make_client(tmp_path, "live", transport, run_id="ra",
@@ -657,19 +665,23 @@ def test_sam_video_via_input_file_uses_frames(tmp_path, monkeypatch):
     payload = [{"role": "user", "content": [
         {"type": "input_text", "text": "track"},
         {"type": "input_file", "file_id": "file-fake123"}]}]
+    # D6: an input_file alone is an image (no frame_count needed).
     client = make_client(tmp_path, "live", FakeTransport(), run_id="samf",
                          monkeypatch=monkeypatch)
-    with pytest.raises(ValueError):
-        client.responses_create("sam-3.1", payload)
+    client.responses_create("sam-3.1", payload)
+    entry = finals(read_ledger(tmp_path))[0]
+    assert entry["cost_usd"] == pytest.approx(pricing.sam_image_cost_usd(1))
+    assert entry["frame_count"] == 0
+    # The same payload with frame_count is video.
     transport = FakeTransport(next_response={
         "id": "r", "object": "response", "status": "completed",
         "output_text": "", "usage": {"video_frames_processed": 60}})
     client2 = MetaClient(mode="live", run_id="samf2",
-                         ledger_path=tmp_path / "ledger.jsonl",
+                         ledger_path=tmp_path / "ledger2.jsonl",
                          fixture_dir=tmp_path / "fixtures",
                          transport=transport)
     client2.responses_create("sam-3.1", payload, frame_count=60)
-    entry = finals(read_ledger(tmp_path))[0]
+    entry = finals(read_ledger(tmp_path, "ledger2.jsonl"))[0]
     assert entry["cost_usd"] == pytest.approx(pricing.sam_video_cost_usd(60))
 
 
@@ -794,17 +806,22 @@ def test_files_delete_roundtrip_and_auto_cleanup(tmp_path, monkeypatch):
     assert replayer.files_delete("file-fake123")["deleted"] is True
 
 
-def test_auto_cleanup_warns_only_on_delete_failure(tmp_path, monkeypatch):
+def test_cleanup_files_warns_only_on_delete_failure(tmp_path, monkeypatch):
+    # D1: no automatic deletion; explicit cleanup_files warns (never
+    # raises) when a delete fails.
     transport = FakeTransport(delete_failures=[(500, "gone")] * 5)
     client = make_client(tmp_path, "live", transport, run_id="clean",
                          monkeypatch=monkeypatch)
     payload = [{"role": "user", "content": [
         {"type": "input_text", "text": "watch"},
         {"type": "input_file", "file_id": "file-fake123"}]}]
-    with pytest.warns(RuntimeWarning, match="file delete failed"):
-        body = client.responses_create("muse-spark-1.3", payload,
-                                       max_output_tokens=10)
+    body = client.responses_create("muse-spark-1.3", payload,
+                                   max_output_tokens=10)
     assert body["id"] == "resp-fake"
+    assert not [c for c in transport.calls if c[0] == "files.delete"]
+    with pytest.warns(RuntimeWarning, match="file delete failed"):
+        client.cleanup_files(_collect_file_ids(payload))
+    assert ("files.delete", {"file_id": "file-fake123"}) in transport.calls
 
 
 def test_coords_denormalize_and_iou():
@@ -852,48 +869,74 @@ def test_box_mixing_systems_errors():
 
 def test_concurrent_reservation_blocks_overspend(tmp_path, monkeypatch):
     # Two concurrent $1.70-expected calls on a $2 run cap: the second must
-    # see the first reservation and refuse (C8). Without reservation both
-    # would pass the check.
+    # see the first reservation and refuse (C8). The ledger read holds the
+    # lock for an extra 0.3s so both threads overlap inside check+reserve;
+    # without the lock both read an empty ledger and pass, so the test
+    # fails (M0-fix2 item 8). The winner is gated in the transport layer
+    # so its reservation stays open while the loser checks. Sleeps here
+    # are real: only retry waits are patched.
+    import concurrent.futures
     import threading
+    import time as real_time
+    monkeypatch.delenv("MODEL_API_KEY", raising=False)
+    monkeypatch.delenv("META_RUN_CAP_USD", raising=False)
+    monkeypatch.delenv("META_TOTAL_CAP_USD", raising=False)
+    monkeypatch.delenv("META_LEDGER_PATH", raising=False)
+    real_read = MetaClient._read_ledger_unlocked
+
+    def slow_read(self):
+        entries = real_read(self)
+        real_time.sleep(0.3)  # Widen the check+reserve race window (locked).
+        return entries
+
+    monkeypatch.setattr(MetaClient, "_read_ledger_unlocked", slow_read)
+    ledger_path = tmp_path / "ledger.jsonl"
+    fixture_dir = tmp_path / "fixtures"
+    go = threading.Event()
     entered = threading.Event()
     release = threading.Event()
     transport = FakeTransport()
+    gate_lock = threading.Lock()
     blocked_once = {"done": False}
     base_create = transport.responses.create
 
     def single_create(**kwargs):
-        if not blocked_once["done"]:
+        with gate_lock:
+            do_gate = not blocked_once["done"]
             blocked_once["done"] = True
+        if do_gate:
             entered.set()
             assert release.wait(timeout=10)
         return base_create(**kwargs)
 
     transport.responses.create = single_create  # type: ignore[method-assign]
-    ledger_path = tmp_path / "ledger.jsonl"
-    fixture_dir = tmp_path / "fixtures"
-    monkeypatch.delenv("MODEL_API_KEY", raising=False)
-    monkeypatch.delenv("META_RUN_CAP_USD", raising=False)
-    monkeypatch.delenv("META_TOTAL_CAP_USD", raising=False)
 
     def big_call():
-        client = MetaClient(mode="live", run_id="conc", ledger_path=ledger_path,
+        assert go.wait(timeout=10)
+        client = MetaClient(mode="live", run_id="conc",
+                            ledger_path=ledger_path,
                             fixture_dir=fixture_dir, transport=transport)
         return client.responses_create("muse-spark-1.3", "hi",
                                        max_output_tokens=400000)
 
-    import concurrent.futures
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
         first = pool.submit(big_call)
-        assert entered.wait(timeout=10)
         second = pool.submit(big_call)
-        # Give the second call time to attempt its check+reserve.
-        import time as _time
-        _time.sleep(0.3)
-        release.set()
-        first_result = first.result(timeout=10)
-        assert first_result["id"] == "resp-fake"
-        with pytest.raises(BudgetExceeded):
-            second.result(timeout=10)
+        go.set()
+        try:
+            assert entered.wait(timeout=10)
+            # The loser needs ~0.6s (winner's locked read + its own).
+            real_time.sleep(0.9)
+        finally:
+            release.set()
+        outcomes = []
+        for future in (first, second):
+            try:
+                body = future.result(timeout=30)
+                outcomes.append(("ok", body["id"]))
+            except BudgetExceeded:
+                outcomes.append(("refused", ""))
+    assert sorted(o[0] for o in outcomes) == ["ok", "refused"]
     run_total, _ = MetaClient(
         mode="replay", run_id="conc", ledger_path=ledger_path,
         fixture_dir=fixture_dir).ledger_totals()
@@ -926,3 +969,472 @@ def test_default_mode_is_replay_without_key(tmp_path, monkeypatch):
                         ledger_path=tmp_path / "ledger.jsonl",
                         fixture_dir=tmp_path / "fixtures")
     assert client.mode == "replay"
+
+
+# -- M0-fix2: D1 no automatic file deletion -------------------------------
+
+
+def test_no_auto_delete_after_success(tmp_path, monkeypatch):
+    # D1: a successful call never deletes payload files by itself.
+    transport = FakeTransport()
+    client = make_client(tmp_path, "live", transport, run_id="nodelete",
+                         monkeypatch=monkeypatch)
+    payload = [{"role": "user", "content": [
+        {"type": "input_text", "text": "watch"},
+        {"type": "input_file", "file_id": "file-fake123"}]}]
+    body = client.responses_create("muse-spark-1.3", payload,
+                                   max_output_tokens=10)
+    assert body["id"] == "resp-fake"
+    assert not [c for c in transport.calls if c[0] == "files.delete"]
+    client.cleanup_files(["file-fake123"])
+    assert ("files.delete", {"file_id": "file-fake123"}) in transport.calls
+
+
+def test_incomplete_retry_same_file_id(tmp_path, monkeypatch):
+    # D1: an incomplete response must not delete files: the retry reuses
+    # the same file_id. The fake transport 404s any id seen deleted.
+    transport = FakeTransport()
+    deleted: set[str] = set()
+    base_delete = transport.files.delete
+
+    def tracking_delete(file_id):
+        out = base_delete(file_id)
+        deleted.add(file_id)
+        return out
+
+    transport.files.delete = tracking_delete  # type: ignore[method-assign]
+    base_create = transport.responses.create
+    calls = {"n": 0}
+    incomplete = {
+        "id": "r-inc", "object": "response", "status": "incomplete",
+        "incomplete_details": {"reason": "max_output_tokens"},
+        "output_text": "",
+        "usage": {"input_tokens": 851, "output_tokens": 2000,
+                  "total_tokens": 2851,
+                  "input_tokens_details": {"cached_tokens": 739},
+                  "output_tokens_details": {"reasoning_tokens": 1998}}}
+
+    def gated_create(**kwargs):
+        blob = json.dumps(kwargs.get("input", ""), default=str)
+        for fid in deleted:
+            if fid in blob:
+                raise FakeStatusError(404, "file gone")
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return dict(incomplete)
+        return base_create(**kwargs)
+
+    transport.responses.create = gated_create  # type: ignore[method-assign]
+    client = make_client(tmp_path, "live", transport, run_id="retry-fid",
+                         monkeypatch=monkeypatch)
+    payload = [{"role": "user", "content": [
+        {"type": "input_text", "text": "watch"},
+        {"type": "input_file", "file_id": "file-keep123"}]}]
+    with pytest.raises(IncompleteResponse):
+        client.responses_create("muse-spark-1.3", payload,
+                                max_output_tokens=10)
+    body = client.responses_create("muse-spark-1.3", payload,
+                                   max_output_tokens=4000)
+    assert body["id"] == "resp-fake"
+    assert not [c for c in transport.calls if c[0] == "files.delete"]
+    client.cleanup_files(["file-keep123"])
+    assert ("files.delete", {"file_id": "file-keep123"}) in transport.calls
+    # After explicit cleanup the id is really gone.
+    with pytest.raises(FakeStatusError):
+        client.responses_create("muse-spark-1.3", payload,
+                                max_output_tokens=4000)
+
+
+def test_failed_call_does_not_auto_delete(tmp_path, monkeypatch):
+    # D1 + M0-fix1 gap: a failed call leaves files alone (a retry may
+    # reuse the id); explicit cleanup still works afterwards.
+    transport = FakeTransport(failures=[(500, "boom")] * 5)
+    client = make_client(tmp_path, "live", transport, run_id="failkeep",
+                         monkeypatch=monkeypatch)
+    payload = [{"role": "user", "content": [
+        {"type": "input_text", "text": "watch"},
+        {"type": "input_file", "file_id": "file-keep456"}]}]
+    with pytest.raises(FakeStatusError):
+        client.responses_create("muse-spark-1.3", payload,
+                                max_output_tokens=10)
+    assert not [c for c in transport.calls if c[0] == "files.delete"]
+    failed = finals(read_ledger(tmp_path))
+    assert len(failed) == 1 and failed[0]["status"] == "failed"
+    client.cleanup_files(["file-keep456"])
+    assert ("files.delete", {"file_id": "file-keep456"}) in transport.calls
+
+
+def test_cleanup_files_replay_noop(tmp_path, monkeypatch):
+    client = make_client(tmp_path, "replay", None, run_id="rp",
+                         monkeypatch=monkeypatch)
+    client.cleanup_files(["file-abc"])  # no transport, no error
+    client.cleanup_files(None)
+    client.cleanup_files([])
+
+
+# -- M0-fix2: D2 reservation always finalized ----------------------------
+
+
+def test_no_reservation_when_key_missing(tmp_path, monkeypatch):
+    # D2: key check and transport creation run before the reservation,
+    # so their failures leave no dangling reserved line.
+    monkeypatch.delenv("MODEL_API_KEY", raising=False)
+    monkeypatch.delenv("META_RUN_CAP_USD", raising=False)
+    monkeypatch.delenv("META_TOTAL_CAP_USD", raising=False)
+    monkeypatch.delenv("META_LEDGER_PATH", raising=False)
+    client = MetaClient(mode="live", run_id="nokey2",
+                        ledger_path=tmp_path / "ledger.jsonl",
+                        fixture_dir=tmp_path / "fixtures", transport=None)
+    with pytest.raises(MissingKeyError):
+        client.responses_create("muse-spark-1.3", "hi", max_output_tokens=10)
+    assert not (tmp_path / "ledger.jsonl").exists()
+
+
+def test_parse_failure_records_failed(tmp_path, monkeypatch):
+    # D2: a response-parse failure after the send finalizes the
+    # reservation with a failed line, then re-raises.
+    transport = FakeTransport(next_response={
+        "id": "r-garbage", "object": "response", "status": "completed",
+        "output_text": "hi", "usage": {"input_tokens": "garbage"}})
+    client = make_client(tmp_path, "live", transport, run_id="parsefail",
+                         monkeypatch=monkeypatch)
+    with pytest.raises(ValueError):
+        client.responses_create("muse-spark-1.3", "hello",
+                                max_output_tokens=100)
+    entries = read_ledger(tmp_path)
+    assert len(entries) == 2
+    failed = [e for e in entries if e["status"] == "failed"]
+    assert len(failed) == 1
+    expected = pricing.estimate_spark_cost_usd(
+        estimate_input_tokens("hello"), 100)
+    assert failed[0]["cost_usd"] == pytest.approx(expected)
+    assert failed[0]["reservation_id"] == entries[0]["reservation_id"]
+
+
+# -- M0-fix2: D3 public ledger summary -----------------------------------
+
+
+def test_ledger_summary_offsets_and_prefix(tmp_path, monkeypatch):
+    monkeypatch.delenv("META_LEDGER_PATH", raising=False)
+    lines = [
+        {"run_id": "M0-P1", "status": "reserved",
+         "reservation_id": "rid-1", "cost_usd": 0.01},
+        {"run_id": "M0-P1", "status": "completed",
+         "reservation_id": "rid-1", "cost_usd": 0.004},
+        {"run_id": "M0-P1", "status": "reserved",
+         "reservation_id": "rid-open", "cost_usd": 0.02},
+        {"run_id": "M0-P2", "cost_usd": 0.05},  # old line, no status
+        {"run_id": "other", "status": "failed",
+         "reservation_id": "rid-2", "cost_usd": 0.003},
+        {"run_id": "other", "status": "reserved",
+         "reservation_id": "rid-2", "cost_usd": 0.009},
+    ]
+    path = tmp_path / "ledger.jsonl"
+    path.write_text("\n".join(json.dumps(e) for e in lines) + "\n",
+                    encoding="utf-8")
+    summary = ledger_summary(ledger_path=path)
+    # 0.004 + open 0.02 + old 0.05 + failed 0.003; offset lines excluded.
+    assert summary["total_usd"] == pytest.approx(0.077)
+    assert summary["by_run_id"]["M0-P1"] == pytest.approx(0.024)
+    assert summary["by_run_id"]["M0-P2"] == pytest.approx(0.05)
+    assert summary["by_run_id"]["other"] == pytest.approx(0.003)
+    assert summary["by_status"]["reserved"] == {
+        "count": 3, "cost_usd": pytest.approx(0.02)}
+    assert summary["by_status"]["completed"] == {
+        "count": 2, "cost_usd": pytest.approx(0.054)}
+    assert summary["by_status"]["failed"] == {
+        "count": 1, "cost_usd": pytest.approx(0.003)}
+    prefixed = ledger_summary("M0-P", ledger_path=path)
+    assert prefixed["total_usd"] == pytest.approx(0.074)
+    assert sorted(prefixed["by_run_id"]) == ["M0-P1", "M0-P2"]
+    assert ledger_summary("other", ledger_path=path)["total_usd"] == \
+        pytest.approx(0.003)
+
+
+def test_estimate_cost_from_body():
+    spark_body = {"usage": {"input_tokens": 120, "output_tokens": 40,
+                           "input_tokens_details": {"cached_tokens": 20},
+                           "output_tokens_details": {"reasoning_tokens": 5}}}
+    assert estimate_cost_from_body(
+        "muse-spark-1.3", "responses", spark_body) == pytest.approx(
+            pricing.spark_cost_usd(120, 40, 20, 5))
+    assert estimate_cost_from_body(
+        "sam-3.1", "responses",
+        {"usage": {"video_frames_processed": 60}}) == pytest.approx(
+            pricing.sam_video_cost_usd(60))
+    assert estimate_cost_from_body(
+        "sam-3.1", "responses",
+        {"usage": {}, "output_text": "box"}) == pytest.approx(
+            pricing.sam_image_cost_usd(1))
+    assert estimate_cost_from_body(
+        "muse-image-1.0", "images.generate",
+        {"data": [{"b64_json": "a"}, {"b64_json": "b"}]}) == pytest.approx(
+            0.02)
+    assert estimate_cost_from_body("", "models.list", {"data": []}) == 0.0
+    assert estimate_cost_from_body("", "files.delete", {}) == 0.0
+    assert estimate_cost_from_body(
+        "muse-spark-1.3", "responses", {"usage": {}}) == 0.0
+    assert estimate_cost_from_body("muse-spark-1.3", "responses", None) == 0.0
+    assert estimate_cost_from_body("muse-spark-1.3", "responses", 42) == 0.0
+
+
+# -- M0-fix2: D4 single ledger path --------------------------------------
+
+
+def test_meta_ledger_path_env(tmp_path, monkeypatch):
+    from app.meta.client import _ledger_lock_path
+    monkeypatch.delenv("MODEL_API_KEY", raising=False)
+    monkeypatch.delenv("META_RUN_CAP_USD", raising=False)
+    monkeypatch.delenv("META_TOTAL_CAP_USD", raising=False)
+    shared = tmp_path / "shared" / "ledger.jsonl"
+    monkeypatch.setenv("META_LEDGER_PATH", str(shared))
+    assert resolve_ledger_path() == shared
+    client = MetaClient(mode="live", run_id="env-ledger",
+                        fixture_dir=tmp_path / "fixtures",
+                        transport=FakeTransport())
+    assert client.ledger_path == shared
+    assert _ledger_lock_path(shared) == shared.parent / "ledger.jsonl.lock"
+    client.responses_create("muse-spark-1.3", "hi", max_output_tokens=10)
+    assert shared.exists()
+    assert ledger_summary()["total_usd"] > 0
+    # An explicit path wins over the environment.
+    other = tmp_path / "other.jsonl"
+    client2 = MetaClient(mode="live", run_id="env-ledger2",
+                         ledger_path=other,
+                         fixture_dir=tmp_path / "fixtures",
+                         transport=FakeTransport())
+    assert client2.ledger_path == other
+
+
+# -- M0-fix2: D5 Windows lock --------------------------------------------
+
+
+def test_stale_lock_cleaned(tmp_path, monkeypatch):
+    import os
+    import time as real_time
+    client = make_client(tmp_path, "live", FakeTransport(), run_id="stale",
+                         monkeypatch=monkeypatch)
+    lock_path = tmp_path / "ledger.jsonl.lock"
+    lock_path.write_text("99999999", encoding="utf-8")
+    old = real_time.time() - 6.0
+    os.utime(lock_path, (old, old))
+    body = client.responses_create("muse-spark-1.3", "hi",
+                                   max_output_tokens=10)
+    assert body["id"] == "resp-fake"
+    assert list(tmp_path.glob("*.lock*")) == []
+
+
+def test_lock_timeouts_stale_shorter_than_wait():
+    import app.meta.client as client_mod
+    assert client_mod._LOCK_STALE_S == 5.0
+    assert client_mod._LOCK_TIMEOUT_S == 15.0
+    assert client_mod._LOCK_STALE_S < client_mod._LOCK_TIMEOUT_S
+
+
+def test_budget_error_catches_both():
+    assert issubclass(BudgetExceeded, BudgetError)
+    assert issubclass(BudgetLedgerError, BudgetError)
+    for exc in (BudgetExceeded("x"), BudgetLedgerError("y")):
+        with pytest.raises(BudgetError):
+            raise exc
+
+
+# -- M0-fix2: D7 connection reuse ----------------------------------------
+
+
+def test_sdk_client_reused_and_closed(tmp_path, monkeypatch):
+    import sys
+    created: list = []
+    closed: list = []
+    fake = FakeTransport()
+
+    class FakeOpenAI:
+        def __init__(self, **kwargs):
+            created.append(kwargs)
+            self.models = fake.models
+            self.responses = fake.responses
+            self.files = fake.files
+            self.images = fake.images
+
+        def close(self):
+            closed.append(True)
+
+    monkeypatch.setitem(sys.modules, "openai",
+                        type("M", (), {"OpenAI": FakeOpenAI})())
+    monkeypatch.setenv("MODEL_API_KEY", "LLM_" + "Q" * 25)
+    monkeypatch.delenv("META_RUN_CAP_USD", raising=False)
+    monkeypatch.delenv("META_TOTAL_CAP_USD", raising=False)
+    monkeypatch.delenv("META_LEDGER_PATH", raising=False)
+    client = MetaClient(mode="live", run_id="reuse",
+                        ledger_path=tmp_path / "ledger.jsonl",
+                        fixture_dir=tmp_path / "fixtures", transport=None)
+    try:
+        client.responses_create("muse-spark-1.3", "hi", max_output_tokens=10)
+        client.models_list()
+        assert len(created) == 1
+        assert created[0].get("max_retries") == 0
+        assert client._live_transport() is client._live_transport()
+        client.close()
+        assert closed == [True]
+        client.close()  # second close is a no-op
+        assert closed == [True]
+        client.models_list()  # works again (re-created on demand)
+        assert len(created) == 2
+    finally:
+        client.close()
+
+
+# -- M0-fix2: D9 extra allowlist -----------------------------------------
+
+
+@pytest.mark.parametrize("key", ["extra_body", "instructions", "temperature",
+                                 "top_p", "model", "stream"])
+def test_extra_allowlist_rejects_non_metadata(tmp_path, monkeypatch, key):
+    client = make_client(tmp_path, "live", FakeTransport(), run_id="ex9",
+                         monkeypatch=monkeypatch)
+    with pytest.raises(ValueError):
+        client.responses_create("muse-spark-1.3", "hi", max_output_tokens=10,
+                                extra={key: "evil"})
+    assert len(client.transport.calls) == 0
+    assert not (tmp_path / "ledger.jsonl").exists()
+
+
+def test_fixtures_extra_only_metadata():
+    # D9: every recorded responses call used only "metadata" in extra, so
+    # the allowlist keeps all existing fixtures replayable (hashes equal).
+    allowed = {"store", "max_output_tokens", "text_format", "reasoning",
+               "stream", "metadata"}
+    base = ROOT / "backend" / "tests" / "fixtures" / "meta"
+    responses_fixtures = 0
+    with_metadata = 0
+    for path in sorted(base.glob("*.json")):
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if data.get("request", {}).get("endpoint") != "responses":
+            continue
+        responses_fixtures += 1
+        params = data["request"].get("params", {})
+        assert set(params) <= allowed, f"{path.name}: {sorted(params)}"
+        if "metadata" in params:
+            with_metadata += 1
+    assert responses_fixtures > 0
+    assert with_metadata > 0
+
+
+# -- M0-fix2: D10 cap parsing --------------------------------------------
+
+
+@pytest.mark.parametrize("bad", ["20usd", "abc", "-1", "-0.5", "inf", "+inf",
+                                 "-inf", "Infinity", "nan", "1e999"])
+def test_cap_invalid_values_raise(monkeypatch, bad):
+    monkeypatch.setenv("META_RUN_CAP_USD", bad)
+    with pytest.raises(ValueError):
+        pricing.run_cap_usd()
+    monkeypatch.delenv("META_RUN_CAP_USD", raising=False)
+    monkeypatch.setenv("META_TOTAL_CAP_USD", bad)
+    with pytest.raises(ValueError):
+        pricing.total_cap_usd()
+
+
+def test_cap_zero_refuses_live_calls(tmp_path, monkeypatch):
+    monkeypatch.setenv("META_RUN_CAP_USD", "0")
+    assert pricing.run_cap_usd() == 0.0
+    client = make_client(tmp_path, "live", FakeTransport(), run_id="zero",
+                         monkeypatch=monkeypatch)
+    monkeypatch.setenv("META_RUN_CAP_USD", "0")  # make_client cleared it
+    with pytest.raises(BudgetExceeded):
+        client.responses_create("muse-spark-1.3", "hi", max_output_tokens=10)
+    assert len(client.transport.calls) == 0
+
+
+# -- M0-fix2: D11 ledger and lock details --------------------------------
+
+
+def test_files_delete_works_over_cap(tmp_path, monkeypatch):
+    # D11: cleanup must work after the caps are exceeded (no budget check).
+    ledger = tmp_path / "ledger.jsonl"
+    ledger.write_text(json.dumps({"run_id": "over", "cost_usd": 150.0})
+                      + "\n", encoding="utf-8")
+    client = make_client(tmp_path, "live", FakeTransport(), run_id="over",
+                         monkeypatch=monkeypatch)
+    # Sanity: a billable call is refused (both caps exceeded).
+    with pytest.raises(BudgetExceeded):
+        client.responses_create("muse-spark-1.3", "hi", max_output_tokens=10)
+    deleted = client.files_delete("file-fake123")
+    assert deleted["deleted"] is True
+
+
+def test_future_mtime_lock_is_stale(tmp_path, monkeypatch):
+    import os
+    import time as real_time
+    client = make_client(tmp_path, "live", FakeTransport(), run_id="future",
+                         monkeypatch=monkeypatch)
+    lock_path = tmp_path / "ledger.jsonl.lock"
+    lock_path.write_text("99999999", encoding="utf-8")
+    future = real_time.time() + 3600.0
+    os.utime(lock_path, (future, future))
+    body = client.responses_create("muse-spark-1.3", "hi",
+                                   max_output_tokens=10)
+    assert body["id"] == "resp-fake"
+    assert list(tmp_path.glob("*.lock*")) == []
+
+
+def test_release_lock_retries_permission_error(tmp_path, monkeypatch):
+    import app.meta.client as client_mod
+    attempts: list = []
+
+    def always_busy(self):
+        attempts.append(1)
+        raise PermissionError("delete pending")
+
+    monkeypatch.setattr(Path, "unlink", always_busy)
+    client_mod._release_file_lock(tmp_path / "x.lock")  # must not raise
+    assert len(attempts) == client_mod._LOCK_RELEASE_ATTEMPTS
+    # And a missing lock is a silent no-op.
+
+    def missing(self):
+        raise FileNotFoundError(str(self))
+
+    monkeypatch.setattr(Path, "unlink", missing)
+    client_mod._release_file_lock(tmp_path / "x.lock")
+
+
+# -- M0-fix2: gaps the M0-fix1 breaking test missed ----------------------
+
+
+def test_ledger_read_oserror_refuses(tmp_path, monkeypatch):
+    # A ledger that cannot be read (here: a directory) refuses the call
+    # instead of treating spend as zero.
+    client = make_client(tmp_path, "live", FakeTransport(), run_id="d",
+                         monkeypatch=monkeypatch)
+    client.ledger_path = tmp_path  # reading a directory raises OSError
+    with pytest.raises(BudgetLedgerError):
+        client.responses_create("muse-spark-1.3", "hi", max_output_tokens=10)
+    assert len(client.transport.calls) == 0
+
+
+def test_estimate_korean_only_string_counts_each_char():
+    # chars/4 underestimation passed with only 6 Korean chars in the old
+    # probe string; a pure-Korean string needs >= 1 token per char.
+    text = "안녕하세요반갑습니다"
+    assert estimate_input_tokens(text) >= len(text)
+    assert estimate_input_tokens("가") >= 1
+
+
+def test_run_cap_env_reflected(tmp_path, monkeypatch):
+    # A tiny run cap refuses; a raised run cap allows spend the $2
+    # default would refuse (old gap: the env var was ignored).
+    client = make_client(tmp_path, "live", FakeTransport(), run_id="rc",
+                         monkeypatch=monkeypatch)
+    monkeypatch.setenv("META_RUN_CAP_USD", "0.000001")
+    with pytest.raises(BudgetExceeded):
+        client.responses_create("muse-spark-1.3", "hi", max_output_tokens=10)
+    assert len(client.transport.calls) == 0
+    ledger = tmp_path / "ledger.jsonl"
+    ledger.write_text(json.dumps({"run_id": "rc2", "cost_usd": 3.0}) + "\n",
+                      encoding="utf-8")
+    client2 = make_client(tmp_path, "live", FakeTransport(), run_id="rc2",
+                          monkeypatch=monkeypatch)
+    monkeypatch.setenv("META_RUN_CAP_USD", "5")  # make_client cleared it
+    body = client2.responses_create("muse-spark-1.3", "hi",
+                                    max_output_tokens=10)
+    assert body["id"] == "resp-fake"
