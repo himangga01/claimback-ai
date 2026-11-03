@@ -1,6 +1,6 @@
 # M2b 사건 흐름 화면(첫 화면)과 E2E (작업 지시서)
 
-- 작성: 2026-11-03 12:35 KST, Claude / 2판 13:00 KST(교차 리뷰와 M3 리뷰 반영: 첫 화면 교체, 판독 박스, 진행 표시, 수정 장면, 가짜 서버 표시, 명칭 검사)
+- 작성: 2026-11-03 12:35 KST, Claude / 2판 12:55 KST(교차 리뷰와 M3 리뷰 반영: 첫 화면 교체, 판독 박스, 진행 표시, 수정 장면, 가짜 서버 표시, 명칭 검사)
 - 수행: Muse Code (`muse-spark-1.3`), git 작업 트리 `C:\2026_project\claimback-wt\m2b-ui`(브랜치 `m2b-ui`, M3가 병합된 `main`에서 시작). 백엔드(M2a)는 나중에 시작하므로 약속 문서대로 응답하는 **가짜 서버**로 개발·시험합니다.
 - 먼저 읽을 것: `AGENTS.md`, 이 지시서, `specs/case-api-contract.md`(v2), `specs/case-api-examples/*.json`, `specs/multi_agent_architecture.md`, 계획서 5장(3분 데모 흐름)·6장(고지 문구), `reports/M3-review.md`(기존 대시보드 문제)
 
