@@ -161,6 +161,19 @@ INT-2(`reports/INT-2.md` 6절 제안)가 구현한 내용을 약속으로 고정
 - `PUT /drafts`: 고친 문장은 G1a·G3·NAMING·DRAFT를 다시 거치고, `approved` 없이 고치면 승인이 풀립니다. `rendered_text`는 고칠 때마다 다시 만듭니다.
 - 단계 상태: 지나간 사용자 단계(`checkpoint_1`, `draft_approval`)는 `done`. 사건 상태는 `DRAFTING`·`VERIFYING`을 실제로 거칩니다. 단계 비용은 응답 usage로 계산하고 HOLD·되돌리기 뒤에도 남습니다.
 
+## 6c. M4·M5·M6 반영 (16:33 KST, v2.2)
+
+M4a·M4b·M5·M6과 그 수정 작업이 구현한 내용을 고정합니다. INT-3이 이 절에 맞춥니다.
+
+- 판독(`Readings.items[]`): 기본 모델 `muse-spark-1.2`, 프롬프트 `reader.v2`. 세로로 긴 이미지는 겹치는 조각으로 읽어 원본 픽셀 상자로 합침. 상자가 이미지 밖이면 자르지 않고 `box_warning: "out_of_range"`. 영상 증거는 이번 버전에서 `skipped`(2장 그대로, 16:46 결정: 핵심 프레임 판독은 중복·시각 오차·ffmpeg 의존 때문에 사건 흐름에 넣지 않음, `reports/M4b-review.md`).
+- 감식(`GET /segments`): `status`에 `hold`(호출·해석 오류, "못 찾음"과 구분)와 `error` 문구. 서명 객체는 SAM 칸 상자 `box`(`source: "box"`, SAM `score`)와 잉크 상자 `ink_box`(`ink_source: "pixel_rule"`)를 따로 둠. `mask_url`은 `image/png`.
+- 가림(`GET /redactions`): `previews[]`에 `status: "redacted"|"not_redacted"`, `needs_review`(가림 상자 바깥 띠에 글자가 남았을 수 있음 등), `reason`. `not_redacted`면 `url: null`이고 가린 사본 파일이 없어야 함. 가림 단계 전에는 `leak_check.status`가 `pending`. `plan[]`의 `needs_review`·`reason`.
+- `PUT /facts`의 `redaction_confirmed`: `true|false`만(그 밖은 400). `true`면 `needs_review` 사본도 서류에 씀. 데모 고정 입력은 `needs_review`가 있을 때 화면에서 사용자가 확인하는 장면으로 보여 주고 `true`를 보냄.
+- `hold_reasons[].code` 추가: `privacy_leak`(가린 영역이 검정이 아님·원본 해시 변경, `POST /run`으로 가림부터 재실행), `g1b_failed`(값 불일치·명칭·누출, `POST /run`으로 편철부터 재실행), `config_missing_key`.
+- `Package.files`: `content_proof.pdf`, `exhibits.pdf`(표지 1쪽 "법원에 낼 때는 이 쪽을 빼세요" + 증거별 쪽, 긴 이미지는 "갑 제N호증 (i/n)"로 나눔, 가린 사본만, 사본이 없거나 확인이 필요하면 그 쪽에 안내 한 줄), `evidence_list.pdf`(칸 "호증 번호, 증거 이름, 작성일, 내용", 증거 이름은 역할로). `Package.gate_results`의 G1b는 서류별 대조. 이미지를 뺀 것은 `fail`이 아니라 `notes`.
+- 서류 문구: 내용증명은 "본인"·"귀하", 전자소송 청구원인은 "채권자"·"채무자"로 슬롯에서 렌더링(인용 원문은 그대로), 인용 표기는 "(갑 제N호증)."(내용증명에는 없음), 충당 문구는 계산값(기간·이율 포함).
+- 화면: 게이트 한글 이름에 `DRAFT` "문안 규칙 검사", `G1b` "최종 서류 검사", 통과 줄 "✓ 통과", 건너뛴 G1b 숨김. 보드 머리 호출 수는 판독·감식 `substeps` 중 `done` + 나머지 모델 단계 `attempts`. 금액 입력은 "5,000,000원"처럼 쉼표·"원"만 붙은 정수만 변환.
+
 ## 7. 재생 모드와 가짜 서버
 
 - `META_MODE=replay`(기본)에서 샘플 사건은 기록된 fixture만으로 `CHECKPOINT_2`까지 갑니다. 화면 수정 장면(문장에 "500만 원"을 넣으면 G1a가 막음)은 규칙만 쓰므로 재생에서도 됩니다.
