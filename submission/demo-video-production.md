@@ -11,7 +11,7 @@
 
 | 파일 | 내용 |
 |---|---|
-| `out\claimback-demo.mp4` | 최종본(3차 렌더, 03:05 KST). 1920×1080, 30 fps, H.264 + AAC, 177.88초, 53 MB |
+| `out\claimback-demo.mp4` | 최종본(3차 렌더, 02:58 KST 무렵). 1920×1080, 30 fps, H.264 + AAC, 177.88초, 53 MB |
 | `out\claimback-demo.srt` | 영어 자막(영상에도 박혀 있음) |
 | `out\claimback-demo_preview720.mp4` | 휴대폰용 720p 사본(약 7.5 MB) |
 | `out\claimback-demo_v1_before_review.mp4`, `out\claimback-demo_v2.mp4` | 1차 렌더(리뷰 전), 2차 렌더 |
