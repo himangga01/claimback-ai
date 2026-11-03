@@ -38,15 +38,15 @@ _ISO_DATE_RE = re.compile(r"^(\d{4})-(\d{1,2})-(\d{1,2})$")
 PRE_REDACTION_MARK = "가림 처리 전 사본"
 VIDEO_PLACEHOLDER = (
     "영상 증거, 파일 별도 제출. 이 영상은 판독·가림을 하지 않은 원본이므로 "
-    "제출 전에 계좌·주민번호·얼굴이 보이는지 직접 확인하세요."
+    "제출 전에 계좌·주민번호·연락처·얼굴이 보이는지 직접 확인하세요."
 )
 SAMPLE_FOOTER = "SAMPLE / 데모용 · 합성 예시 자료"
 
 
 def is_sample_case(confirmed: Optional[Mapping[str, Any]]) -> bool:
-    """True for the synthetic sample set (party names carry "SAMPLE")."""
+    """True for the synthetic sample set (both party names end in "(SAMPLE)")."""
     fields = (confirmed or {}).get("fields", {}) or {}
-    return any("SAMPLE" in str(fields.get(key, "") or "")
+    return all(str(fields.get(key, "") or "").strip().endswith("(SAMPLE)")
                for key in ("creditor_name", "debtor_name"))
 
 

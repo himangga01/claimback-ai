@@ -33,8 +33,11 @@ def test_sample_bundle_marks_every_page(replay_env, tmp_path):
 def test_non_sample_case_has_no_sample_footer():
     assert not exhibit_bundle_mod.is_sample_case(
         {"fields": {"creditor_name": "김하나", "debtor_name": "박민준"}})
+    # a real company name containing the word is not the sample set
+    assert not exhibit_bundle_mod.is_sample_case(
+        {"fields": {"creditor_name": "SAMPLE무역", "debtor_name": "박민준"}})
     assert exhibit_bundle_mod.is_sample_case(
-        {"fields": {"creditor_name": "서가온(SAMPLE)", "debtor_name": "x"}})
+        {"fields": {"creditor_name": "서가온(SAMPLE)", "debtor_name": "탁나루(SAMPLE)"}})
 
 
 def test_video_placeholder_warns_about_unredacted_original():
@@ -46,3 +49,5 @@ def test_citation_is_a_separate_token():
         "이체 확인증에는 {{loan_date}}에 {{principal}}을 보낸 기록이 있습니다[[EX:4]]",
         {"loan_date": "2026. 3. 10.", "principal": "5,000,000원"}, {})
     assert text.endswith("있습니다 [갑 제4호증].")
+    user = deps.render_sentence("남은 돈을 받지 못했습니다[[USER]]", {}, {})
+    assert user.endswith("못했습니다 (사용자 진술).")
