@@ -1,0 +1,296 @@
+[
+  {
+    "ex_id": "EX1",
+    "model": "sam-3.1",
+    "objects": [
+      {
+        "target": "chat_bubble",
+        "source": "noun",
+        "box": {
+          "x1": 253,
+          "y1": 456,
+          "x2": 621,
+          "y2": 503,
+          "system": "pixel",
+          "ref_w": 640,
+          "ref_h": 960
+        },
+        "score": 1.0,
+        "mask_url": "/api/cases/case_3d6af1a15e6d/files/mask_EX1_chat_bubble_noun0.png"
+      },
+      {
+        "target": "chat_bubble",
+        "source": "noun",
+        "box": {
+          "x1": 278,
+          "y1": 239,
+          "x2": 621,
+          "y2": 285,
+          "system": "pixel",
+          "ref_w": 640,
+          "ref_h": 960
+        },
+        "score": 1.0,
+        "mask_url": "/api/cases/case_3d6af1a15e6d/files/mask_EX1_chat_bubble_noun1.png"
+      },
+      {
+        "target": "chat_bubble",
+        "source": "noun",
+        "box": {
+          "x1": 20,
+          "y1": 540,
+          "x2": 200,
+          "y2": 586,
+          "system": "pixel",
+          "ref_w": 640,
+          "ref_h": 960
+        },
+        "score": 1.0,
+        "mask_url": "/api/cases/case_3d6af1a15e6d/files/mask_EX1_chat_bubble_noun2.png"
+      },
+      {
+        "target": "chat_bubble",
+        "source": "noun",
+        "box": {
+          "x1": 71,
+          "y1": 150,
+          "x2": 460,
+          "y2": 224,
+          "system": "pixel",
+          "ref_w": 640,
+          "ref_h": 960
+        },
+        "score": 1.0,
+        "mask_url": "/api/cases/case_3d6af1a15e6d/files/mask_EX1_chat_bubble_noun3.png"
+      },
+      {
+        "target": "chat_bubble",
+        "source": "noun",
+        "box": {
+          "x1": 21,
+          "y1": 321,
+          "x2": 353,
+          "y2": 396,
+          "system": "pixel",
+          "ref_w": 640,
+          "ref_h": 960
+        },
+        "score": 1.0,
+        "mask_url": "/api/cases/case_3d6af1a15e6d/files/mask_EX1_chat_bubble_noun4.png"
+      },
+      {
+        "target": "face",
+        "source": "noun",
+        "box": {
+          "x1": 20,
+          "y1": 166,
+          "x2": 61,
+          "y2": 207,
+          "system": "pixel",
+          "ref_w": 640,
+          "ref_h": 960
+        },
+        "score": 1.0,
+        "mask_url": "/api/cases/case_3d6af1a15e6d/files/mask_EX1_face_noun5.png"
+      }
+    ],
+    "status": "ok"
+  },
+  {
+    "ex_id": "EX2",
+    "model": "sam-3.1",
+    "objects": [
+      {
+        "target": "chat_bubble",
+        "source": "noun",
+        "box": {
+          "x1": 20,
+          "y1": 2311,
+          "x2": 414,
+          "y2": 2363,
+          "system": "pixel",
+          "ref_w": 640,
+          "ref_h": 2400
+        },
+        "score": 1.0,
+        "mask_url": "/api/cases/case_3d6af1a15e6d/files/mask_EX2_chat_bubble_noun0.png"
+      },
+      {
+        "target": "chat_bubble",
+        "source": "noun",
+        "box": {
+          "x1": 183,
+          "y1": 2031,
+          "x2": 621,
+          "y2": 2107,
+          "system": "pixel",
+          "ref_w": 640,
+          "ref_h": 2400
+        },
+        "score": 1.0,
+        "mask_url": "/api/cases/case_3d6af1a15e6d/files/mask_EX2_chat_bubble_noun1.png"
+      },
+      {
+        "target": "chat_bubble",
+        "source": "noun",
+        "box": {
+          "x1": 269,
+          "y1": 300,
+          "x2": 621,
+          "y2": 377,
+          "system": "pixel",
+          "ref_w": 640,
+          "ref_h": 2400
+        },
+        "score": 1.0,
+        "mask_url": "/api/cases/case_3d6af1a15e6d/files/mask_EX2_chat_bubble_noun2.png"
+      },
+      {
+        "target": "chat_bubble",
+        "source": "noun",
+        "box": {
+          "x1": 250,
+          "y1": 1035,
+          "x2": 621,
+          "y2": 1114,
+          "system": "pixel",
+          "ref_w": 640,
+          "ref_h": 2400
+        },
+        "score": 1.0,
+        "mask_url": "/api/cases/case_3d6af1a15e6d/files/mask_EX2_chat_bubble_noun3.png"
+      },
+      {
+        "target": "chat_bubble",
+        "source": "noun",
+        "box": {
+          "x1": 20,
+          "y1": 1795,
+          "x2": 290,
+          "y2": 1848,
+          "system": "pixel",
+          "ref_w": 640,
+          "ref_h": 2400
+        },
+        "score": 1.0,
+        "mask_url": "/api/cases/case_3d6af1a15e6d/files/mask_EX2_chat_bubble_noun4.png"
+      },
+      {
+        "target": "chat_bubble",
+        "source": "noun",
+        "box": {
+          "x1": 70,
+          "y1": 583,
+          "x2": 422,
+          "y2": 634,
+          "system": "pixel",
+          "ref_w": 640,
+          "ref_h": 2400
+        },
+        "score": 1.0,
+        "mask_url": "/api/cases/case_3d6af1a15e6d/files/mask_EX2_chat_bubble_noun5.png"
+      },
+      {
+        "target": "chat_bubble",
+        "source": "noun",
+        "box": {
+          "x1": 20,
+          "y1": 1320,
+          "x2": 461,
+          "y2": 1371,
+          "system": "pixel",
+          "ref_w": 640,
+          "ref_h": 2400
+        },
+        "score": 1.0,
+        "mask_url": "/api/cases/case_3d6af1a15e6d/files/mask_EX2_chat_bubble_noun6.png"
+      },
+      {
+        "target": "face",
+        "source": "noun",
+        "box": {
+          "x1": 20,
+          "y1": 587,
+          "x2": 61,
+          "y2": 627,
+          "system": "pixel",
+          "ref_w": 640,
+          "ref_h": 2400
+        },
+        "score": 1.0,
+        "mask_url": "/api/cases/case_3d6af1a15e6d/files/mask_EX2_face_noun7.png"
+      }
+    ],
+    "status": "ok"
+  },
+  {
+    "ex_id": "EX3",
+    "model": "sam-3.1",
+    "objects": [],
+    "status": "skipped"
+  },
+  {
+    "ex_id": "EX4",
+    "model": "sam-3.1",
+    "objects": [],
+    "status": "not_found"
+  },
+  {
+    "ex_id": "EX5",
+    "model": "sam-3.1",
+    "objects": [],
+    "status": "not_found"
+  },
+  {
+    "ex_id": "EX6",
+    "model": "sam-3.1",
+    "objects": [
+      {
+        "target": "stamp",
+        "source": "noun",
+        "box": {
+          "x1": 991,
+          "y1": 1474,
+          "x2": 1170,
+          "y2": 1653,
+          "system": "pixel",
+          "ref_w": 1240,
+          "ref_h": 1754
+        },
+        "score": 1.0,
+        "mask_url": "/api/cases/case_3d6af1a15e6d/files/mask_EX6_stamp_noun0.png"
+      },
+      {
+        "target": "signature",
+        "source": "box",
+        "box": {
+          "x1": 518,
+          "y1": 1327,
+          "x2": 781,
+          "y2": 1377,
+          "system": "pixel",
+          "ref_w": 1240,
+          "ref_h": 1754
+        },
+        "score": 1.0,
+        "mask_url": "/api/cases/case_3d6af1a15e6d/files/mask_EX6_signature_box1.png"
+      },
+      {
+        "target": "signature",
+        "source": "box",
+        "box": {
+          "x1": 515,
+          "y1": 1535,
+          "x2": 754,
+          "y2": 1589,
+          "system": "pixel",
+          "ref_w": 1240,
+          "ref_h": 1754
+        },
+        "score": 1.0,
+        "mask_url": "/api/cases/case_3d6af1a15e6d/files/mask_EX6_signature_box2.png"
+      }
+    ],
+    "status": "ok"
+  }
+]

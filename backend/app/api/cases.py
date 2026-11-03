@@ -397,6 +397,30 @@ async def delete(case_id: str) -> Any:
     return {"deleted": True}
 
 
+@router.get("/{case_id}/segments")
+async def get_segments(case_id: str) -> Any:
+    try:
+        try:
+            coord.get_case(case_id)
+        except coord.CaseNotFound:
+            return err(404, "not_found", "사건을 찾을 수 없습니다.")
+        return coord.load_segments(case_id)
+    except Exception:
+        return _internal_error()
+
+
+@router.get("/{case_id}/redactions")
+async def get_redactions(case_id: str) -> Any:
+    try:
+        try:
+            coord.get_case(case_id)
+        except coord.CaseNotFound:
+            return err(404, "not_found", "사건을 찾을 수 없습니다.")
+        return coord.load_redactions(case_id)
+    except Exception:
+        return _internal_error()
+
+
 @router.api_route("/{rest:path}", methods=["GET", "POST", "PUT", "DELETE",
                                            "PATCH", "OPTIONS"])
 async def cases_fallback(rest: str) -> Any:
