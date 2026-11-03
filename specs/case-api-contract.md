@@ -140,7 +140,7 @@ M4a(시각 감식·가림)와 M5(편철)가 더하는 응답입니다. 기존 �
 | 메서드 | 경로 | 응답 |
 |---|---|---|
 | GET | `/api/cases/{id}/segments` | `[ { ex_id, model: "sam-3.1", objects: [ { target: "signature"\|"stamp"\|"chat_bubble"\|"face", source: "noun"\|"box", box: Box(pixel), score, mask_url } ], status: ok\|not_found\|skipped } ]` |
-| GET | `/api/cases/{id}/redactions` | `{ plan: [ { ex_id, item_id, kind: "account_number"\|"id_number"\|"phone"\|"face", mask_box: Box, keep_box: Box\|null, reason } ], previews: [ { ex_id, url } ], leak_check: { status: pass\|fail, findings: [] } }` |
+| GET | `/api/cases/{id}/redactions` | `{ plan: [ { ex_id, item_id, kind: "account_number"\|"id_number"\|"phone"\|"face", mask_box: Box, keep_box: Box\|null, reason } ], previews: [ { ex_id, url } ], leak_check: { status: pass\|review\|fail\|pending, findings: [] } }` (`review`·`pending`은 6c·6d) |
 | PUT | `/api/cases/{id}/facts` | 기존 본문에 선택 키 `redaction_confirmed: true`(없으면 `false`로 보고 서류에 원본 대신 가린 사본만 쓰도록 유지) |
 
 - 단계 표의 `vision`·`privacy`는 M4a 이후 `skipped`가 아니라 실제 단계가 됩니다. `vision` 담당 묶음은 Forensic Visual, 모델 `sam-3.1`.
@@ -179,13 +179,14 @@ M4a·M4b·M5·M6과 그 수정 작업이 구현한 내용을 고정합니다. IN
 6c의 `redaction_confirmed`에는 화면이 보내는 경로가 없어, 확인 필요 사본이 사용자 모르게 묶음에서 빠졌습니다. 아래를 더합니다. 기존 키와 `true|false`의 뜻은 그대로입니다.
 
 - `PUT /facts`의 `redaction_confirmed`: `true|false|null`에 더해 **증거 번호 목록**(`["EX4"]`)을 받습니다. 목록은 증거별 확인입니다. 목록에 든 증거의 `needs_review` 가린 사본만 `exhibits.pdf`에 들어가고, 목록에 없는 확인 필요 사본은 지금처럼 빠집니다(그 쪽에는 안내 한 줄, G1b `notes`). 모르는 증거 번호나 문자열이 아닌 항목은 400 `bad_request`. 중복은 하나로 줄이고 증거 번호 순으로 저장하며, 빈 목록은 `false`로 저장합니다. `true`(확인 필요 사본 전부)는 데모 고정 입력(`build_demo_confirmed_facts`)용으로 남깁니다. 화면은 `true`를 보내지 않습니다.
-- `status: "not_redacted"`(사본 없음)는 목록에 있어도 들어가지 않습니다(넣을 사본이 없음).
-- 화면: 선택한 증거의 미리보기가 확인 필요이면 사실 확인 장의 "가린 사본" 범례 바로 아래에 미리보기 `reason`(항목별 한 줄)과 "이미지는 확인 전까지 갑호증 묶음에 들어가지 않음" 안내, "가림 확인"·"묶음에서 빼기" 단추를 보여 주고, 증거 목록에도 "가림 확인 필요"를 붙입니다. 사용자가 그 증거에서 "가림 확인"을 눌러야만 그 번호가 목록에 들어갑니다(자동 확인 없음, 한꺼번에 확인하는 단추 없음). 확인한 증거가 없으면 키를 보내지 않으므로, 확인 필요가 없는 한국어 재생 샘플의 본문은 바뀌지 않습니다. 사실값을 보낸 뒤에는 단추가 잠깁니다. 사본이 없는 증거는 단추 없이 사유만 보여 줍니다.
+- `status: "not_redacted"`(사본 없음)는 목록에 있든 `true`이든 들어가지 않습니다. 지우지 못한 예전 `redacted_{ex}.png`가 남아 있어도 편철은 미리보기 상태로 판정합니다.
+- 화면: 선택한 증거의 미리보기가 확인 필요이면 사실 확인 장의 "가린 사본" 범례 바로 아래에 미리보기 `reason`(사유마다 한 줄), "고르기 전까지 이미지는 갑호증 묶음에 들어가지 않음" 안내, `plan[]`의 확인 필요 `mask_box` 빨간 테두리, 사본 크게 보기 링크, "묶음에 넣기"·"묶음에서 빼기" 단추를 보여 주고, 증거 목록에도 "가림 확인 필요"를 붙입니다. 사용자가 그 증거에서 "묶음에 넣기"를 눌러야만 그 번호가 목록에 들어갑니다(자동 확인 없음, 한꺼번에 넣는 단추 없음). 아직 고르지 않은 증거가 있으면 "확인하고 계속" 위에 "확인 필요 증거 N개(…)가 아직 남아 있어 묶음에서 빠집니다." 한 줄. 이미지가 빠지는 경우(뺌, 사본 없음, 고르지 않고 보냄)에는 "서류에는 이 증거가 계속 인용됩니다. 직접 가린 사본을 만들어 제출 전에 더하세요."를 붙입니다. 넣은 증거가 없으면 키를 보내지 않으므로, 확인 필요가 없는 한국어 재생 샘플의 본문은 바뀌지 않습니다. 단추는 `CHECKPOINT_1`에서만 쓸 수 있고, 사실값을 보낸 뒤에는 이후 `HOLD`에서도 잠깁니다(`PUT /drafts`로 고치는 길에서는 바뀐 선택이 전달되지 않으므로). 사본이 없는 증거는 단추 없이 사유만 보여 줍니다.
+- 서류 패키지 장: `Package.gate_results`의 `notes`(이미지를 넣지 않은 증거)를 "갑호증 묶음에서 이미지를 뺀 증거" 목록과 같은 다음 할 일로 보여 줍니다. G1b가 `pass`여도 숨기지 않습니다.
 - `leak_check.status`: `pass|review|fail|pending`. `review`는 하드 실패는 없지만 경고(판독한 번호와 같은 모양의 줄이 가려지지 않음, 가려졌는지 확인할 수 없음, 남긴 영역이 원본과 다름, 원본 가림 영역이 비어 있음)가 있다는 뜻입니다. HOLD(`privacy_leak`)는 지금처럼 `fail`만입니다.
-- `privacy` 단계 `note`: 확인 필요 사본도 사본 없는 증거도 없을 때만 "가림 N개, 누출 검사 통과"입니다. 아니면 "가림 N개" 뒤에 "확인 필요 증거 M개"(`needs_review` 가린 사본 수), "가린 사본 없는 증거 K개"(`not_redacted` 수)를 ", "로 잇습니다. 화면 영어 표기는 "N redactions, M exhibits to check, K exhibits without a redacted copy".
+- `privacy` 단계 `note`: 확인 필요 사본도 사본 없는 증거도 없을 때만 "가림 N개, 누출 검사 통과"입니다. 아니면 "가림 N개" 뒤에 "확인 필요 증거 M개"(`needs_review` 가린 사본 수), "가린 사본 없는 증거 K개"(`not_redacted` 수)를 ", "로 잇습니다. 화면 영어 표기는 "N masks · M exhibits need your check · K exhibits without a redacted copy".
 
 ## 7. 재생 모드와 가짜 서버
 
 - `META_MODE=replay`(기본)에서 샘플 사건은 기록된 fixture만으로 `CHECKPOINT_2`까지 갑니다. 화면 수정 장면(문장에 "500만 원"을 넣으면 G1a가 막음)은 규칙만 쓰므로 재생에서도 됩니다.
 - M2b 가짜 서버는 `specs/case-api-examples/`의 JSON만 돌려주고 `stub: true`를 붙입니다. 화면은 `stub`이면 빨간 "STUB DATA" 띠를 보여 줍니다. 데모 녹화는 가짜 서버로 하지 않습니다.
-- 가짜 서버 전용 `PUT /__stub/scenario` `{ "redactions": "none"|"flagged" }`(6d E2E용): 그 뒤에 만든 사건에 적용. `none`(기본)은 지금처럼 `GET /redactions` 404·`privacy` 건너뜀, `flagged`는 EX4·EX5가 확인 필요인 가림 응답과 그 `privacy` 단계 문구를 돌려줍니다. 실제 백엔드에는 없습니다.
+- 가짜 서버 전용 `PUT /__stub/scenario` `{ "redactions": "none"|"flagged" }`(6d E2E용): 그 뒤에 만든 사건에 적용. `none`(기본)은 지금처럼 `GET /redactions` 404·`privacy` 건너뜀, `flagged`는 EX4·EX5가 확인 필요인 가림 응답과 그 `privacy` 단계 문구, 넣지 않은 증거를 `notes`로 단 G1b를 돌려줍니다. 실제 백엔드에는 없습니다.

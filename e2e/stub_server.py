@@ -669,6 +669,21 @@ def get_package(case_id: str) -> Any:
         pkg = copy.deepcopy(PACKAGE_EXAMPLE)
         for f in pkg["files"]:
             f["url"] = f"/api/cases/{case_id}/files/{f['name']}"
+        if case["redaction_scenario"] == "flagged":
+            # Like packager.build_package: flagged copies the user did not
+            # include are G1b notes (image left out), not failures.
+            confirmed = (case["confirmed"] or {}).get("redaction_confirmed")
+            notes = []
+            for ex_id in sorted(FLAGGED_REASONS):
+                if confirmed is True or (isinstance(confirmed, list)
+                                         and ex_id in confirmed):
+                    continue
+                notes.append(
+                    f"exhibits.pdf: 갑 제{ex_id[2:]}호증({ex_id})의 가림 확인이 "
+                    f"필요해 이미지를 넣지 않았습니다.")
+            pkg["gate_results"] = [
+                {"gate": "G1b", "status": "pass", "findings": [], "notes": notes}
+            ]
         return pkg
 
 

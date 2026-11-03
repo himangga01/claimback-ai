@@ -247,10 +247,14 @@ def get_redaction_status(
         except OSError:
             continue
         preview = previews.get(ex_id, {})
-        if (
-            preview.get("needs_review") is True
-            or preview.get("status") == "not_redacted"
-        ) and not is_redaction_confirmed(state, ex_id):
+        # Contract 6d: a not_redacted preview never enters, confirmed or
+        # not. A stale redacted_{ex}.png can survive a failed delete
+        # (privacy_guard ignores OSError), so the file alone proves nothing.
+        if preview.get("status") == "not_redacted":
+            needs_review.add(ex_id)
+            continue
+        if (preview.get("needs_review") is True
+                and not is_redaction_confirmed(state, ex_id)):
             needs_review.add(ex_id)
             continue
         red_hash = _pixel_hash(candidate)

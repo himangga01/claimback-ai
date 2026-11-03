@@ -651,9 +651,13 @@ def _fill_demo_facts(page, base_url, case_id) -> dict:
 
 def test_redaction_confirm_flow(page, base_url, case_cleanup):
     """redaction-confirm: flagged copies show a notice with the backend's
-    reason and are marked in the evidence list; Confirm redaction clears
-    the flag for that one exhibit, Leave it out keeps the other out, and
-    PUT /facts lists exactly the confirmed exhibit. Stub scenario only."""
+    reasons (one bullet each) and outlined masks, and are marked in the
+    evidence list; "묶음에 넣기" clears the flag for that one exhibit,
+    "묶음에서 빼기" keeps the other out with the next step, a line above
+    the confirm button counts undecided ones, PUT /facts lists exactly the
+    included exhibit, the choice stays locked after sending (also in a
+    HOLD), and the package sheet names the exhibit whose image was left
+    out. Stub scenario only."""
     if os.environ.get("E2E_BASE_URL"):
         pytest.skip("stub scenario only")
     res = page.request.put(f"{base_url}/__stub/scenario",
@@ -678,6 +682,9 @@ def test_redaction_confirm_flow(page, base_url, case_cleanup):
             expect(btn).to_have_attribute("data-redaction", "review")
             expect(btn).to_contain_text("가림 확인 필요")
         assert page.get_by_test_id("evidence-EX1").get_attribute("data-redaction") is None
+        pending = page.get_by_test_id("redaction-pending")
+        expect(pending).to_have_text(
+            "확인 필요 증거 2개(갑 제4호증, 갑 제5호증)가 아직 남아 있어 묶음에서 빠집니다.")
 
         # EX4: notice next to the "Redacted copy" legend with the reason.
         page.get_by_test_id("evidence-EX4").click()
@@ -689,44 +696,62 @@ def test_redaction_confirm_flow(page, base_url, case_cleanup):
         expect(notice.get_by_test_id("redaction-notice-title")).to_have_text("가림 확인 필요")
         expect(notice.get_by_test_id("redaction-reasons")).to_contain_text(
             "계좌번호: 가림 상자가 판독 위치에서 한 줄 이상 옮겨져 확인 필요")
-        expect(notice.get_by_test_id("redaction-notice-body")).to_contain_text(
-            "갑호증 묶음(exhibits.pdf)에 들어가지 않습니다")
+        body = notice.get_by_test_id("redaction-notice-body")
+        expect(body).to_contain_text("갑호증 묶음(exhibits.pdf)에 들어가지 않습니다")
+        expect(body).to_contain_text("계좌·주민번호·전화번호가 모두 가려졌는지 보고 고르세요")
+        expect(page.get_by_test_id("redaction-confirm")).to_have_text("묶음에 넣기")
+        expect(page.get_by_test_id("redaction-leave-out")).to_have_text("묶음에서 빼기")
         expect(page.get_by_test_id("redaction-img")).to_be_visible()
+        # The two flagged masks are outlined; the copy opens full size.
+        expect(page.get_by_test_id("redaction-flag-box-EX4")).to_have_count(2)
+        expect(page.get_by_test_id("redaction-open")).to_have_attribute(
+            "href", re.compile(r"/evidence/EX4/preview$"))
         steps.shot("redaction-flagged")
 
-        # Confirm EX4 explicitly: its flag clears, EX5 stays flagged.
+        # Include EX4 explicitly: its flag clears, EX5 stays flagged.
         page.get_by_test_id("redaction-confirm").click()
         expect(notice).to_have_attribute("data-state", "confirmed")
-        expect(notice.get_by_test_id("redaction-notice-title")).to_have_text("가림 확인함")
+        expect(notice.get_by_test_id("redaction-notice-title")).to_have_text("묶음에 넣음")
         expect(page.get_by_test_id("redaction-confirm")).to_have_attribute("aria-pressed", "true")
         expect(page.get_by_test_id("evidence-EX4")).to_have_attribute("data-redaction", "confirmed")
         expect(page.get_by_test_id("evidence-EX4")).not_to_contain_text("가림 확인 필요")
         expect(page.get_by_test_id("evidence-EX5")).to_have_attribute("data-redaction", "review")
+        expect(pending).to_have_text(
+            "확인 필요 증거 1개(갑 제5호증)가 아직 남아 있어 묶음에서 빠집니다.")
 
-        # EX5: leave it out (the default outcome, now an explicit choice).
+        # EX5: one bullet per reason, then leave it out with the next step.
         page.get_by_test_id("evidence-EX5").click()
         expect(notice).to_have_attribute("data-state", "review")
-        expect(notice.get_by_test_id("redaction-reasons")).to_contain_text(
-            "판독한 번호와 같은 모양의 줄이 가려지지 않았을 수 있음")
+        reasons = notice.get_by_test_id("redaction-reasons").locator("li")
+        expect(reasons).to_have_text([
+            "계좌번호: 가린 줄이 판독한 번호와 맞는지 확인할 수 없어 확인 필요",
+            "계좌번호: 판독한 번호와 같은 모양의 줄이 가려지지 않았을 수 있음",
+        ])
+        expect(notice.get_by_test_id("redaction-next-step")).to_have_count(0)
         page.get_by_test_id("redaction-leave-out").click()
         expect(notice).to_have_attribute("data-state", "excluded")
         expect(page.get_by_test_id("evidence-EX5")).to_have_attribute("data-redaction", "excluded")
+        expect(notice.get_by_test_id("redaction-next-step")).to_have_text(
+            "서류에는 이 증거가 계속 인용됩니다. 직접 가린 사본을 만들어 제출 전에 더하세요.")
+        expect(pending).to_be_hidden()
         steps.shot("redaction-chosen")
 
         # English screen: same notice, translated reasons and board note.
         page.locator("[data-lang='en']").click()
         expect(page.get_by_test_id("step-note-privacy")).to_have_text(
-            "7 redactions, 2 exhibits to check")
+            "7 masks · 2 exhibits need your check")
         expect(notice.get_by_test_id("redaction-notice-title")).to_have_text("Left out of the bundle")
         expect(notice.get_by_test_id("redaction-reasons")).to_contain_text(
             "Account number: Could not confirm that the masked line holds the number that was read")
+        expect(notice.get_by_test_id("redaction-next-step")).to_have_text(
+            "The documents still cite this exhibit. Mask it yourself and add it before filing.")
         page.get_by_test_id("evidence-EX4").click()
-        expect(notice.get_by_test_id("redaction-notice-title")).to_have_text("Redaction confirmed")
-        expect(page.get_by_test_id("redaction-confirm")).to_have_text("Confirm redaction")
+        expect(notice.get_by_test_id("redaction-notice-title")).to_have_text("Included in the bundle")
+        expect(page.get_by_test_id("redaction-confirm")).to_have_text("Include it")
         expect(page.get_by_test_id("redaction-leave-out")).to_have_text("Leave it out")
-        expect(page.get_by_test_id("evidence-EX4")).to_contain_text("Redaction confirmed")
+        expect(page.get_by_test_id("evidence-EX4")).to_contain_text("Included")
         page.locator("[data-lang='ko']").click()
-        expect(notice.get_by_test_id("redaction-notice-title")).to_have_text("가림 확인함")
+        expect(notice.get_by_test_id("redaction-notice-title")).to_have_text("묶음에 넣음")
 
         # The flagged notice fits a phone screen without sideways scroll.
         page.set_viewport_size({"width": 375, "height": 812})
@@ -755,7 +780,41 @@ def test_redaction_confirm_flow(page, base_url, case_cleanup):
         expect(page.get_by_test_id("redaction-leave-out")).to_be_disabled()
         expect(notice.get_by_test_id("redaction-notice-body")).to_contain_text(
             "이 가린 사본이 갑호증 묶음에 들어갑니다")
+        expect(pending).to_be_hidden()
+        # It stays locked in a later HOLD: a fix through PUT /drafts would
+        # never send a changed choice (simulated; the stub has no HOLD).
+        page.evaluate("() => { S.caseView.state = 'HOLD'; refreshRedactionUi(); }")
+        expect(page.get_by_test_id("redaction-confirm")).to_be_disabled()
+        expect(page.get_by_test_id("redaction-leave-out")).to_be_disabled()
+        page.evaluate("() => { S.caseView.state = 'DRAFT_APPROVAL'; refreshRedactionUi(); }")
         steps.shot("redaction-sent")
+
+        # Package sheet: the left-out image is named, not only "✓ 통과".
+        boxes = page.locator("input[data-testid^='approve-']")
+        for i in range(boxes.count()):
+            box = boxes.nth(i)
+            if not box.is_checked():
+                with page.expect_response(
+                    lambda r: r.request.method == "PUT" and "/drafts" in r.url
+                ):
+                    box.check()
+            expect(box).to_be_checked(timeout=15000)
+        page.get_by_test_id("approve-continue").click()
+        expect(page.get_by_test_id("case-state")).to_have_attribute(
+            "data-state", "CHECKPOINT_2", timeout=30000
+        )
+        left_out = page.get_by_test_id("pkg-left-out")
+        expect(left_out).to_be_visible()
+        expect(left_out).to_contain_text("갑호증 묶음에서 이미지를 뺀 증거")
+        expect(page.get_by_test_id("pkg-left-out-EX5")).to_contain_text(
+            "갑 제5호증(EX5)의 가림 확인이 필요해 이미지를 넣지 않았습니다")
+        expect(page.get_by_test_id("pkg-left-out-EX4")).to_have_count(0)
+        expect(left_out).to_contain_text("서류에는 이 증거가 계속 인용됩니다")
+        page.locator("[data-lang='en']").click()
+        expect(page.get_by_test_id("pkg-left-out-EX5")).to_have_text(
+            "exhibits.pdf: Exhibit 5, image left out (redaction not confirmed).")
+        page.locator("[data-lang='ko']").click()
+        steps.shot("redaction-package")
         page.get_by_test_id("delete-case").click()
         expect(page.get_by_test_id("board-section")).to_be_hidden(timeout=15000)
     finally:

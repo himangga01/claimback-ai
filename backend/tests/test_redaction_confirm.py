@@ -18,6 +18,7 @@ from pypdf import PdfReader
 from app.agents import case_state as case_state_mod
 from app.agents import coordinator as coord
 from app.agents import demo_inputs
+from app.agents import packager as packager_mod
 from app.agents import privacy_guard as privacy_mod
 from app.main import app
 from app.services import exhibit_bundle as exhibit_bundle_mod
@@ -217,6 +218,32 @@ def test_confirmed_exhibit_enters_the_bundle_and_g1b_passes(client):
     ex5_text, ex5_images = pages["EX5"][0]
     assert ex5_images == 0
     assert exhibit_bundle_mod.NEEDS_REVIEW_LINE in ex5_text
+
+
+@pytest.mark.parametrize("confirmed", [["EX4"], True])
+def test_not_redacted_stays_out_even_with_a_stale_copy(client, confirmed):
+    """Review follow-up: a not_redacted preview never enters, even when
+    confirmed and an old redacted_EX4.png is still on disk (privacy_guard
+    ignores a failed delete)."""
+    case_id = _to_checkpoint_1(client)
+    path = Path(case_state_mod.files_dir(case_id)) / "redactions.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    for preview in data["previews"]:
+        if preview["ex_id"] == "EX4":
+            preview.update(status="not_redacted", url=None, needs_review=True,
+                           reason="판독이 보류되어 가림 대상을 알 수 없음")
+    path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    stale = Path(case_state_mod.files_dir(case_id)) / "redacted_EX4.png"
+    assert stale.exists()
+    package = _to_package(client, case_id, _facts(client, case_id, confirmed))
+    valid, needs, _ = packager_mod.get_redaction_status(coord.get_case(case_id))
+    assert "EX4" not in valid and "EX4" in needs
+    text, images = _exhibit_pages(case_id)["EX4"][0]
+    assert images == 0
+    assert exhibit_bundle_mod.NEEDS_REVIEW_LINE in text
+    g1b = _g1b(package)
+    assert g1b["status"] == "pass", g1b["findings"]
+    assert "(EX4)" in " ".join(g1b["notes"])
 
 
 def test_case_wide_true_still_confirms_every_flagged_copy(client):

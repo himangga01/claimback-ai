@@ -276,6 +276,10 @@ code { font: 12px/1.5 Consolas, "Malgun Gothic", monospace; }
 .file-paper .redaction-actions button[aria-pressed="true"] { border-color: var(--blue); background: var(--blue-soft); color: var(--blue-ink); font-weight: 700; }
 .file-paper .evidence-list button[data-redaction="review"], .file-paper .evidence-list button[data-redaction="missing"] { box-shadow: inset 3px 0 var(--stamp); }
 .step-note.is-review { color: var(--stamp); font-weight: 600; }
+.redaction-flag-box { position: absolute; border: 3px solid #e55749; box-shadow: 0 0 0 2px #fff; border-radius: 2px; }
+.redaction-open { color: var(--blue-ink); text-decoration: underline; text-underline-offset: 2px; }
+.redaction-pending { margin: 18px 0 0; padding: 8px 12px; border-left: 3px solid var(--stamp); background: var(--stamp-soft); color: var(--stamp); font-size: 12px; font-weight: 700; }
+.pkg-left-out { margin-top: 12px; }
 
 .fields-table, .calc-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .fields-table th, .calc-table th { padding: 8px 10px; border-bottom: 1px solid #b9bcb2; text-align: left; font-size: 11px; font-weight: 500; color: var(--muted); }
