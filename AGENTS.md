@@ -30,7 +30,9 @@ models (`muse-spark-1.3`, `sam-3.1`, `muse-image-1.0`). Not legal advice.
 | `docs/code-analysis.md` | Code review and implementation status of the repo (2026-11-03, commit 76d9cce), findings F1–F20 |
 | `specs/multi_agent_architecture.md` | The four user-facing agents (Forensic Visual, Fact-Timeline Chronology, Financial Auditor, Judicial Form Filler) mapped to the agent design |
 | `specs/case-api-contract.md`, `specs/case-api-examples/` | Case-flow API contract (v2) shared by the backend (M2a) and the UI/E2E (M2b); example responses served by the stub and checked by backend tests |
-| `reports/M<N>-review.md` | Claude reviews with subagent cross-review; `reports/M0-review.md` holds the M0 spike decisions (coordinates, video keyframes, reader model pending) |
+| `reports/M<N>-review.md` | Claude reviews with subagent cross-review; `reports/M0-review.md` holds the M0 spike decisions (coordinates, video keyframes, reader model pending); `reports/M4b-review.md` holds the reader model decision (muse-spark-1.2) and why video reading is deferred; `reports/INT-3-review.md` is the latest integration review |
+| `reports/M7-live-check.md` | End-to-end run of the sample case on the live Meta API (2026-11-03 18:25 KST) |
+| `submission/` | Demo script (`demo-script.md`), recording runbook (`runbook.md`), submission notes and form drafts (`submission-notes.md`) |
 
 Workflow:
 - Before any task, read the task brief, the spec sections it cites, and this file.

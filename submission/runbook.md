@@ -49,7 +49,8 @@ $env:META_LEDGER_PATH = "C:\2026_project\claimback-ai-meta\reports\cost_ledger.j
 ..\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-- 실호출 판독은 증거 6개에 수십 초가 걸립니다. 대기 장면은 편집에서 줄입니다.
+- 실호출 판독은 약 80초가 걸립니다(18:25 실호출 확인, `reports/M7-live-check.md`). 대기 장면은 편집에서 줄입니다.
+- 실호출에서는 판독이 이름을 증거마다 다르게 읽어 확인 화면에 이름 충돌 질문이 뜰 수 있습니다. 실호출 장면은 판독 보드까지만 찍고, 확인 화면부터는 재생 모드 녹화를 씁니다.
 - 녹화가 끝나면 **사건 삭제**를 누르고 서버를 끕니다(Ctrl+C). 키를 쓴 창은 닫습니다.
 
 ## 4. 녹화 뒤
