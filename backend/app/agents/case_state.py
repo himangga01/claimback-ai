@@ -80,6 +80,7 @@ class SubStep(BaseModel):
     ex_id: str = ""
     status: str = "waiting"
     latency_ms: int = 0
+    calls: int = 0  # model calls made for this evidence (tiles, SAM nouns + retry)
 
 
 class StepState(BaseModel):

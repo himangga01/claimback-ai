@@ -36,7 +36,26 @@ _ISO_DATE_RE = re.compile(r"^(\d{4})-(\d{1,2})-(\d{1,2})$")
 
 # Body copy markers (not legal notices).
 PRE_REDACTION_MARK = "가림 처리 전 사본"
-VIDEO_PLACEHOLDER = "영상 증거, 파일 별도 제출"
+VIDEO_PLACEHOLDER = (
+    "영상 증거, 파일 별도 제출. 이 영상은 판독·가림을 하지 않은 원본이므로 "
+    "제출 전에 계좌·주민번호·얼굴이 보이는지 직접 확인하세요."
+)
+SAMPLE_FOOTER = "SAMPLE / 데모용 · 합성 예시 자료"
+
+
+def is_sample_case(confirmed: Optional[Mapping[str, Any]]) -> bool:
+    """True for the synthetic sample set (party names carry "SAMPLE")."""
+    fields = (confirmed or {}).get("fields", {}) or {}
+    return any("SAMPLE" in str(fields.get(key, "") or "")
+               for key in ("creditor_name", "debtor_name"))
+
+
+def _sample_footer(canvas: Any, doc: Any) -> None:
+    canvas.saveState()
+    canvas.setFont(KO_FONT, 8)
+    canvas.setFillColor(colors.HexColor("#b00020"))
+    canvas.drawCentredString(A4[0] / 2.0, 22, SAMPLE_FOOTER)
+    canvas.restoreState()
 PDF_PLACEHOLDER = "PDF 증거, 파일 별도 제출"
 # K3: images/PDF previews without a redacted copy embed no picture.
 MISSING_REDACTED_LINE = "가림 사본이 없어 이 쪽에 이미지를 넣지 않았습니다. 원본 파일은 따로 제출하세요."
@@ -383,7 +402,12 @@ def build_exhibits_pdf(
                     elements.append(Paragraph(sub, meta_style))
                 elements.append(_scaled_image(part, usable_w, usable_h - 120))
             _ = position
-        doc.build(elements)
+        if is_sample_case(confirmed):
+            # Every page of a sample bundle says it is synthetic, not only
+            # the first slice's image band.
+            doc.build(elements, onFirstPage=_sample_footer, onLaterPages=_sample_footer)
+        else:
+            doc.build(elements)
     finally:
         import shutil as _shutil
 
