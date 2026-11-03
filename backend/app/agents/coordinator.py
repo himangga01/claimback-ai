@@ -198,10 +198,57 @@ def sha_short(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
 
 
+# Steps whose model calls the board counts from substeps[].calls
+# (frontend countModelCalls); the others count attempts.
+_SUBSTEP_CALL_STEPS = ("reading", "vision")
+
+
+def _step_spent(step: StepState) -> float:
+    """Exact spend of every run of a step (cost_usd on old cases)."""
+    if step.spent_usd is not None:
+        return float(step.spent_usd)
+    try:
+        return float(step.cost_usd or 0.0)
+    except ValueError:
+        return 0.0
+
+
+def _set_spend(step: StepState, cost: float) -> None:
+    """This run's spend on top of the kept spend of earlier runs (fix-cost)."""
+    step.spent_usd = round(float(step.kept_usd or 0.0) + float(cost or 0.0), 6)
+    step.cost_usd = fmt_cost(step.spent_usd)
+
+
+def _set_calls(step: StepState, calls: int) -> None:
+    step.attempts = int(step.kept_calls or 0) + int(calls or 0)
+
+
+def _substep_calls(step: StepState) -> Dict[str, int]:
+    """Model calls per evidence of a step's earlier run (board rule)."""
+    out: Dict[str, int] = {}
+    for sub in step.substeps:
+        calls = int(sub.calls or 0) or (1 if sub.status == "done" else 0)
+        out[sub.ex_id] = out.get(sub.ex_id, 0) + calls
+    return out
+
+
+def _fold_calls(substeps: List[SubStep], prior: Dict[str, int]) -> None:
+    """Add an earlier run's calls per evidence, so a rerun keeps them."""
+    for sub in substeps:
+        sub.calls = int(sub.calls or 0) + int(prior.get(sub.ex_id, 0) or 0)
+
+
 def _mark_running(step: StepState) -> None:
     step.status = "running"
     step.started_at = utc_now_iso()
     step.ended_at = None
+    # fix-cost: a rerun (HOLD resume, PUT /facts) keeps billed spend and
+    # calls; reading/vision keep their calls per evidence in substeps.
+    step.kept_usd = _step_spent(step)
+    step.spent_usd = step.kept_usd
+    step.kept_calls = (int(step.attempts or 0)
+                       if step.model and step.key not in _SUBSTEP_CALL_STEPS
+                       else 0)
 
 
 def _mark_done(
@@ -214,19 +261,22 @@ def _mark_done(
     step.status = "done"
     step.ended_at = utc_now_iso()
     step.latency_ms = int(latency_ms)
-    step.attempts = int(attempts)
-    step.cost_usd = fmt_cost(cost)
+    _set_calls(step, attempts)
+    _set_spend(step, cost)
     if note:
         step.note = note
 
 
 def _mark_hold(step: StepState, latency_ms: int = 0, note: str = "",
-               cost: Optional[float] = None) -> None:
+               cost: Optional[float] = None,
+               calls: Optional[int] = None) -> None:
     step.status = "hold"
     step.ended_at = utc_now_iso()
     step.latency_ms = int(latency_ms)
     if cost is not None:
-        step.cost_usd = fmt_cost(cost)
+        _set_spend(step, cost)
+    if calls is not None:
+        _set_calls(step, calls)
     if note:
         step.note = note
 
@@ -258,10 +308,12 @@ def _mark_hold_from_partial(step: StepState, exc: BaseException,
     part = _partial_spend(exc)
     cost = float(part.get("cost_usd", 0.0) or 0.0)
     latency = int(part.get("latency_ms", 0) or 0)
+    calls = int(part.get("attempts", 0) or 0)
     if extra:
         cost += float(extra.get("cost_usd", 0.0) or 0.0)
         latency += int(extra.get("latency_ms", 0) or 0)
-    _mark_hold(step, latency, cost=cost)
+        calls += int(extra.get("attempts", 0) or 0)
+    _mark_hold(step, latency, cost=cost, calls=calls)
 
 
 def _reset_from(state: CaseState, key: str) -> None:
@@ -278,8 +330,11 @@ def _reset_from(state: CaseState, key: str) -> None:
             entry.started_at = None
             entry.ended_at = None
             entry.latency_ms = 0
-            entry.attempts = 0
-            # cost_usd is kept so HOLD/rollback never loses billed spend.
+            # cost_usd (and a model step's attempts, its calls) is kept so
+            # HOLD/rollback never loses billed spend (fix-cost: the rerun
+            # adds to it, see _mark_running).
+            if not fresh[entry.key].model:
+                entry.attempts = 0
             entry.note = ""
             entry.substeps = []
             entry.model = fresh[entry.key].model
@@ -310,12 +365,9 @@ def _hold(
 
 
 def _recompute_run_cost(state: CaseState) -> float:
-    total = 0.0
-    for entry in state.steps:
-        try:
-            total += float(entry.cost_usd or 0.0)
-        except ValueError:
-            pass
+    # fix-cost: sum the exact step spend (not the 4-decimal display), so
+    # the shown total is the ledger sum for the run rounded once.
+    total = sum(_step_spent(entry) for entry in state.steps)
     state.run_cost_usd = round(total, 6)
     return state.run_cost_usd
 
@@ -724,7 +776,9 @@ def run_case(case_id: str) -> CaseState:
                 if running is not None:
                     _mark_hold(running,
                                int(part.get("latency_ms", 0) or 0),
-                               cost=float(part.get("cost_usd", 0.0) or 0.0))
+                               cost=float(part.get("cost_usd", 0.0) or 0.0),
+                               calls=(None if running.key in _SUBSTEP_CALL_STEPS
+                                      else int(part.get("attempts", 0) or 0)))
             return _hold(state, step, "internal_error",
                          f"처리 중 오류가 생겨 멈췄습니다: {type(exc).__name__}")
     finally:
@@ -763,6 +817,7 @@ def _run_intake_flow(state: CaseState) -> CaseState:
     state.state = "READING"
     reading_step = state.step("reading")
     _mark_running(reading_step)
+    prior_reading_calls = _substep_calls(reading_step)
     save_case(state)
     phase_started = time.perf_counter()
 
@@ -871,16 +926,20 @@ def _run_intake_flow(state: CaseState) -> CaseState:
             exc = result["error"]
             part = result.get("partial") or {}
             reading_cost += float(part.get("cost_usd", 0.0) or 0.0)
+            # fix-cost: calls spent before the failure stay on the board.
+            failed_calls = int(part.get("attempts", 0) or 0)
             if isinstance(exc, (deps.FixtureNotFound, deps.BudgetError,
                                 deps.MissingKeyError)):
                 _agent_failed_hold(state, "reading", exc)
                 hold_case = True
                 substeps.append(SubStep(ex_id=ex_id, status="hold",
-                                        latency_ms=result["latency_ms"]))
+                                        latency_ms=result["latency_ms"],
+                                        calls=failed_calls))
                 continue
             record.status = "hold"
             substeps.append(SubStep(ex_id=ex_id, status="hold",
-                                    latency_ms=result["latency_ms"]))
+                                    latency_ms=result["latency_ms"],
+                                    calls=failed_calls))
             if result.get("unexpected") or not isinstance(
                     exc, AgentSchemaError):
                 unexpected_failed = True
@@ -909,9 +968,10 @@ def _run_intake_flow(state: CaseState) -> CaseState:
                output.get("prompt_version"), file_hash, result["latency_ms"],
                int(output.get("tokens_in", 0) or 0),
                int(output.get("tokens_out", 0) or 0), cost)
+    _fold_calls(substeps, prior_reading_calls)
     reading_step.substeps = substeps
     state.readings = readings
-    reading_step.cost_usd = fmt_cost(reading_cost)
+    _set_spend(reading_step, reading_cost)
     reading_step.attempts = reading_attempts
     latency_ms = int((time.perf_counter() - phase_started) * 1000)
     if hold_case:
@@ -945,6 +1005,7 @@ def _run_intake_flow(state: CaseState) -> CaseState:
 
     vision_step = state.step("vision")
     _mark_running(vision_step)
+    prior_vision_calls = _substep_calls(vision_step)
     save_case(state)
     vision_started = time.perf_counter()
     vision_ordered = sorted(state.evidence, key=lambda r: deps.ex_num(r.ex_id))
@@ -1064,6 +1125,7 @@ def _run_intake_flow(state: CaseState) -> CaseState:
             json.dumps(_segments, ensure_ascii=False), encoding="utf-8")
     except OSError:
         pass
+    _fold_calls(_vision_substeps, prior_vision_calls)
     vision_step.substeps = _vision_substeps
     _vision_latency = int((time.perf_counter() - vision_started) * 1000)
     _vision_ok = sum(1 for s in _segments if s.get("status") == "ok")
@@ -1125,7 +1187,9 @@ def _run_intake_flow(state: CaseState) -> CaseState:
                     {"cost_usd": (first_org.get("cost_usd", 0) or 0)
                      + (retry_spend.get("cost_usd", 0) or 0),
                      "latency_ms": (first_org.get("latency_ms", 0) or 0)
-                     + (retry_spend.get("latency_ms", 0) or 0)})
+                     + (retry_spend.get("latency_ms", 0) or 0),
+                     "attempts": (first_org.get("attempts", 0) or 0)
+                     + (retry_spend.get("attempts", 0) or 0)})
                 return _hold(state, "organizing", "schema_failed",
                               f"사실 정리 출력 형식이 맞지 않습니다: {exc}")
             output = retry_out
@@ -1431,7 +1495,8 @@ def _run_calc_flow(state: CaseState) -> CaseState:
         _mark_hold(drafting_step,
                    draft_latency + int(part.get("latency_ms", 0) or 0),
                    cost=(draft_cost
-                         + float(part.get("cost_usd", 0.0) or 0.0)))
+                         + float(part.get("cost_usd", 0.0) or 0.0)),
+                   calls=draft_attempts + int(part.get("attempts", 0) or 0))
 
     try:
         for attempt in range(3):
@@ -1491,7 +1556,8 @@ def _run_calc_flow(state: CaseState) -> CaseState:
                         draft_attempts += int(retry_out.get("attempts", 1) or 1)
                         draft_latency += int(retry_out.get("latency_ms", 0) or 0)
                         draft_cost += float(retry_out.get("cost_usd", 0.0) or 0.0)
-                    _mark_hold(drafting_step, draft_latency, cost=draft_cost)
+                    _mark_hold(drafting_step, draft_latency, cost=draft_cost,
+                               calls=draft_attempts)
                     return _hold(state, "drafting", "schema_failed",
                                   f"문안 출력 형식이 맞지 않습니다: {exc}")
             state.state = "VERIFYING"
@@ -1527,11 +1593,13 @@ def _run_calc_flow(state: CaseState) -> CaseState:
                     feedback.append(dumped)
         else:
             failed_ms = int((time.perf_counter() - phase_started) * 1000)
-            _mark_hold(drafting_step, draft_latency, cost=draft_cost)
+            _mark_hold(drafting_step, draft_latency, cost=draft_cost,
+                       calls=draft_attempts)
             _mark_hold(verifying_step, failed_ms)
+            # fix-cost: the drafter spend sits on drafting only; passing
+            # it to the verifying hold counted it twice.
             return _hold(state, "verifying", "revision_exceeded",
-                         "문안 수정 2회를 넘겨도 지적이 남았습니다.",
-                         cost=draft_cost)
+                         "문안 수정 2회를 넘겨도 지적이 남았습니다.")
     finally:
         pass
     assert final_gates is not None and final_sentences is not None

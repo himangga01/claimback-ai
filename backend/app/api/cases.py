@@ -16,7 +16,13 @@ from fastapi.responses import FileResponse, JSONResponse
 
 from app.agents import deps
 from app.agents import intake as intake_mod
-from app.agents.case_state import CaseState, evidence_dir, files_dir, save_case
+from app.agents.case_state import (
+    STEP_INTERNAL_FIELDS,
+    CaseState,
+    evidence_dir,
+    files_dir,
+    save_case,
+)
 from app.agents import coordinator as coord
 
 router = APIRouter(prefix="/api/cases")
@@ -75,7 +81,8 @@ def case_view(state: CaseState) -> Dict[str, Any]:
         "stub": False,
         "hold_reasons": [reason.model_dump(mode="json")
                          for reason in state.hold_reasons],
-        "steps": [step.model_dump(mode="json") for step in state.steps],
+        "steps": [step.model_dump(mode="json", exclude=STEP_INTERNAL_FIELDS)
+                  for step in state.steps],
         "evidence": [
             {
                 "ex_id": record.ex_id, "label": record.label,

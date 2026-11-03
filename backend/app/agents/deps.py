@@ -43,7 +43,10 @@ from app.services.verification_gate import (
     calculate_kr,
 )
 # --- M1-fix1: document generation (fact_sentences supported, K10) -------------
-from app.services.pdf_compiler import KoreanLegalDocumentCompiler
+from app.services.pdf_compiler import (
+    KoreanLegalDocumentCompiler,
+    collapse_repeated_cites,
+)
 # --- M0-fix2: Meta client, budget errors, cost helpers ------------------------
 from app.meta.client import (
     BudgetError,
@@ -269,6 +272,8 @@ def render_sentence(
     # A citation is a separate token: "있습니다 [갑 제4호증]." (polish).
     rendered = re.sub(r"(?<=\S)\[갑 제", " [갑 제", rendered)
     rendered = re.sub(r"(?<=\S)\(사용자 진술\)", " (사용자 진술)", rendered)
+    # fix-cost bug 3: "[[EX:1]][[EX:1]]" renders one [갑 제1호증].
+    rendered = collapse_repeated_cites(rendered)
     match = re.search(r"\.\s*((?:\[갑 제\d+호증\]\s*)+)$", rendered)
     if match:
         cites = " ".join(re.findall(r"\[갑 제\d+호증\]", match.group(1)))
