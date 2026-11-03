@@ -109,7 +109,7 @@ def test_replay_full_flow_to_checkpoint_2(replay_env):
     assert len(snapshots["drafts"]["sentences"]) >= 3
     assert snapshots["drafts"]["calculation"]["remaining_principal"] == "4014383"
     assert snapshots["package"]["files"][0]["name"] == "content_proof.pdf"
-    assert "[갑 제" in snapshots["package"]["ecourt"]["claim_cause_payment_order"]
+    assert "(갑 제" in snapshots["package"]["ecourt"]["claim_cause_payment_order"]  # M5-fix1 K8
 
 
 def test_replay_identical_across_case_ids(replay_env):
