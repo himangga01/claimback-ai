@@ -325,8 +325,10 @@ def test_case_flow(page, base_url, case_cleanup):
     if not expect_stub:
         _d_summary = page.get_by_test_id("board-summary").inner_text()
         _dm = re.search(r"Meta 모델 호출 (\d+)회", _d_summary)
-        assert _dm and int(_dm.group(1)) == 8, (
-            f"real backend DRAFT_APPROVAL calls should be 8, board: {_d_summary!r}"
+        # Recorded sample flow (M2c-fix1): 5 reads + 1 organizer + 1 drafter, no revision.
+        # Update together with the fixtures whenever the sample case is re-recorded.
+        assert _dm and int(_dm.group(1)) == 7, (
+            f"real backend DRAFT_APPROVAL calls should be 7, board: {_d_summary!r}"
         )
     steps.shot("calculation")
 
