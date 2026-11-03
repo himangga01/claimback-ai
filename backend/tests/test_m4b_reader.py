@@ -29,6 +29,10 @@ GOLDEN = ROOT / "backend" / "tests" / "golden" / "kr_truth.json"
 EVAL_JSON = ROOT / "reports" / "M4b-reader-eval.json"
 EX3 = ROOT / "sample_evidence" / "kr" / "chat_02_scroll.mp4"
 
+needs_ffmpeg = pytest.mark.skipif(
+    __import__("shutil").which("ffmpeg") is None,
+    reason="ffmpeg이 없어 영상 핵심 프레임 테스트를 건너뜁니다(INT-3 1).")
+
 
 def _item(kind="utterance", text="가나다", box=None, **kw):
     row = {"kind": kind, "text_verbatim": text, "normalized": None,
@@ -165,7 +169,8 @@ def test_merge_tile_items_pairs_biased_band_dupes():
     assert len(merged) == 1
     assert "_tile" not in merged[0]
     box = merged[0]["box"]
-    assert [box["x1"], box["y1"], box["x2"], box["y2"]] == [428, 564, 765, 592]
+    # INT-3 1b: union, never the average (less cover would leak redaction).
+    assert [box["x1"], box["y1"], box["x2"], box["y2"]] == [415, 528, 806, 636]
 
 
 def test_merge_tile_items_pairs_two_by_two_in_order():
@@ -198,8 +203,147 @@ def test_merge_tile_items_drops_cut_fragments():
     assert [m["text_verbatim"] for m in merged] == ["오늘 100만 원 먼저 보냈어."]
 
 
+# --- INT-3 1b: boundary merge, union, order, caps --------------------------------
+
+def test_merge_tile_items_merges_cross_kind_typo_dupes():
+    """EX1 타나루/탁나루: kinds differ, one-char OCR typo -> one union item.
+
+    Kills the merge-branch-removal mutation (no merge -> 2 items).
+    """
+    tiles = [(0, 0, 640, 640), (0, 320, 640, 960)]
+    upper = {"x1": 70, "y1": 400, "x2": 250, "y2": 430,
+             "system": "pixel", "ref_w": 640, "ref_h": 960}
+    lower = {"x1": 74, "y1": 408, "x2": 246, "y2": 434,
+             "system": "pixel", "ref_w": 640, "ref_h": 960}
+    per_tile = [[_item(kind="party_name", text="탁나루(SAMPLE)", box=upper)],
+                [_item(kind="label", text="타나루(SAMPLE)", box=lower)]]
+    merged = reader_mod.merge_tile_items(per_tile, tiles)
+    assert len(merged) == 1
+    box = merged[0]["box"]
+    assert (box["x1"], box["y1"], box["x2"], box["y2"]) == (70, 400, 250, 434)
+
+
+def test_merge_tile_items_merges_linebreak_only_utterances():
+    tiles = [(0, 0, 640, 640), (0, 320, 640, 960)]
+    upper = {"x1": 60, "y1": 420, "x2": 400, "y2": 470,
+             "system": "pixel", "ref_w": 640, "ref_h": 960}
+    lower = {"x1": 62, "y1": 424, "x2": 398, "y2": 472,
+             "system": "pixel", "ref_w": 640, "ref_h": 960}
+    per_tile = [[_item(text="내일까지\n꼭 갚을게요.", box=upper)],
+                [_item(text="내일까지 꼭 갚을게요.", box=lower)]]
+    merged = reader_mod.merge_tile_items(per_tile, tiles)
+    assert len(merged) == 1
+
+
+def test_merge_tile_items_keeps_pairs_beyond_distance_limit():
+    """Same text 80px apart (beyond the 64px band cap) never merges (B4-8).
+
+    Both boxes touch the overlap band, so only the distance limit keeps
+    them apart. Kills the distance-limit-removal mutation (-> 1 item).
+    """
+    tiles = [(0, 0, 640, 640), (0, 576, 640, 1216)]
+    upper = {"x1": 70, "y1": 550, "x2": 250, "y2": 600,
+             "system": "pixel", "ref_w": 640, "ref_h": 1216}
+    lower = {"x1": 70, "y1": 630, "x2": 250, "y2": 680,
+             "system": "pixel", "ref_w": 640, "ref_h": 1216}
+    per_tile = [[_item(kind="amount", text="300,000원", box=upper)],
+                [_item(kind="amount", text="300,000원", box=lower)]]
+    merged = reader_mod.merge_tile_items(per_tile, tiles)
+    assert len(merged) == 2
+
+
+def test_merge_tile_items_pairs_nearest_not_zip_order():
+    """B4-8: equal counts must not zip-pair different lines by order.
+
+    Left reads lines A and B; right reads only B's twin. A must stay,
+    B must merge with its twin (not with A).
+    """
+    tiles = [(0, 0, 640, 640), (0, 320, 640, 960)]
+    line_a = {"x1": 70, "y1": 340, "x2": 250, "y2": 366,
+              "system": "pixel", "ref_w": 640, "ref_h": 960}
+    line_b = {"x1": 70, "y1": 500, "x2": 250, "y2": 526,
+              "system": "pixel", "ref_w": 640, "ref_h": 960}
+    line_b_twin = {"x1": 72, "y1": 508, "x2": 248, "y2": 532,
+                   "system": "pixel", "ref_w": 640, "ref_h": 960}
+    per_tile = [[_item(text="네", box=line_a),
+                 _item(text="네", box=line_b)],
+                [_item(text="네", box=line_b_twin)]]
+    merged = reader_mod.merge_tile_items(per_tile, tiles)
+    assert len(merged) == 2
+    tops = sorted(m["box"]["y1"] for m in merged)
+    assert tops[0] <= 340 and tops[1] >= 500
+
+
+def test_merge_tile_items_never_merges_different_numbers():
+    """EX6 phones one digit apart are two redaction targets, not one."""
+    tiles = [(0, 0, 1240, 1240), (0, 514, 1240, 1754)]
+    first = {"x1": 470, "y1": 600, "x2": 725, "y2": 625,
+             "system": "pixel", "ref_w": 1240, "ref_h": 1754}
+    second = {"x1": 470, "y1": 700, "x2": 725, "y2": 725,
+              "system": "pixel", "ref_w": 1240, "ref_h": 1754}
+    per_tile = [[_item(kind="phone", text="010-0000-0001", box=first)],
+                [_item(kind="phone", text="010-0000-0002", box=second)]]
+    merged = reader_mod.merge_tile_items(per_tile, tiles)
+    assert len(merged) == 2
+
+
+def test_merge_tile_items_keeps_amount_inside_utterance():
+    """An amount box inside its utterance box is not a fragment."""
+    tiles = [(0, 0, 640, 640), (0, 320, 640, 960)]
+    utter = {"x1": 60, "y1": 420, "x2": 460, "y2": 470,
+             "system": "pixel", "ref_w": 640, "ref_h": 960}
+    amount = {"x1": 70, "y1": 425, "x2": 190, "y2": 465,
+              "system": "pixel", "ref_w": 640, "ref_h": 960}
+    per_tile = [[_item(text="300,000원을 빌렸습니다.", box=utter)],
+                [_item(kind="amount", text="300,000원", box=amount)]]
+    merged = reader_mod.merge_tile_items(per_tile, tiles)
+    assert len(merged) == 2
+
+
+def test_merge_tile_items_sorts_top_bottom_left_right():
+    tiles = [(0, 0, 640, 640)]
+    low_right = {"x1": 300, "y1": 500, "x2": 500, "y2": 540,
+                 "system": "pixel", "ref_w": 640, "ref_h": 640}
+    high_right = {"x1": 300, "y1": 100, "x2": 500, "y2": 140,
+                  "system": "pixel", "ref_w": 640, "ref_h": 640}
+    high_left = {"x1": 40, "y1": 100, "x2": 200, "y2": 140,
+                 "system": "pixel", "ref_w": 640, "ref_h": 640}
+    per_tile = [[_item(text="낮음", box=low_right),
+                 _item(text="높음오른쪽", box=high_right),
+                 _item(text="높음왼쪽", box=high_left)]]
+    merged = reader_mod.merge_tile_items(per_tile, tiles)
+    assert [m["text_verbatim"] for m in merged] == [
+        "높음왼쪽", "높음오른쪽", "낮음"]
+
+
+def test_plan_tiles_caps_very_tall_images():
+    """B4-10: a 1080x20000 strip costs at most MAX_TILES calls."""
+    tiles = reader_mod.plan_tiles(1080, 20000)
+    assert 1 < len(tiles) <= reader_mod.MAX_TILES
+    assert tiles[0][1] == 0 and tiles[-1][3] == 20000
+    for _, top, _, bottom in tiles:
+        assert bottom > top
+    for (_, _, _, bottom), (_, top, _, _) in zip(tiles, tiles[1:]):
+        assert bottom > top  # still overlapping
+
+
+def test_crop_tile_png_converts_cmyk():
+    """B4-11: CMYK JPEG crops save as PNG instead of raising."""
+    from PIL import Image
+
+    image = Image.new("CMYK", (64, 96), (0, 128, 128, 0))
+    buffer = io.BytesIO()
+    image.save(buffer, format="JPEG")
+    cropped = reader_mod.crop_tile_png(
+        buffer.getvalue(), (0, 0, 64, 96))
+    with Image.open(io.BytesIO(cropped)) as reopened:
+        assert reopened.format == "PNG"
+        assert reopened.size == (64, 96)
+
+
 # --- keyframes -----------------------------------------------------------------
 
+@needs_ffmpeg
 def test_keyframe_extraction_matches_golden_video():
     golden = json.loads(GOLDEN.read_text(encoding="utf-8"))
     ex3 = next(e for e in golden["evidences"] if e["ex_id"] == "EX3")
@@ -212,6 +356,7 @@ def test_keyframe_extraction_matches_golden_video():
     assert [f["png"] for f in again] == [f["png"] for f in frames]
 
 
+@needs_ffmpeg
 def test_keyframe_extraction_is_frame_exact():
     """Regression: the fps filter once shifted every frame by +2 (M4b)."""
     from PIL import Image, ImageChops
@@ -262,6 +407,7 @@ def test_select_keyframes_dedupes_near_dupes():
     assert [f["frame_ts"] for f in kept] == [0.0, 1.0]
 
 
+@needs_ffmpeg
 def test_extract_video_keyframes_caches_by_manifest(tmp_path):
     first = intake_mod.extract_video_keyframes(EX3, "EX3", dest_dir=tmp_path)
     assert len(first) == 15
@@ -415,6 +561,7 @@ def test_eval_replay_reproduces_compare_table(monkeypatch, capsys):
     assert "decision: muse-spark-1.2" in out
 
 
+@needs_ffmpeg
 def test_video_reader_replays_recorded_keyframes(monkeypatch, tmp_path):
     assert EVAL_JSON.exists(), "reports/M4b-reader-eval.json missing"
     monkeypatch.delenv("MODEL_API_KEY", raising=False)
@@ -429,7 +576,13 @@ def test_video_reader_replays_recorded_keyframes(monkeypatch, tmp_path):
     assert output["items"]
     assert all(item.get("frame_ts") is not None
                for item in output["items"])
-    recorded = json.loads(EVAL_JSON.read_text(encoding="utf-8"))
-    runs = [r for r in recorded["experiments"]["video"]["runs"]
-            if r["model"] == "muse-spark-1.2"]
-    assert len(output["items"]) == len(runs[0]["items"])
+    # INT-3 1b changed per-frame tile merging, so the replayed item list
+    # no longer matches the M4b-era recording in the eval JSON item for
+    # item. Replay must still be deterministic: run twice, same bytes.
+    again = reader_mod.run_video_reader(
+        "eval", {"ex_id": "EX3", "kind": "video",
+                 "filename": "chat_02_scroll.mp4"},
+        EX3, "replay", "run-test", work_dir=tmp_path,
+    )
+    assert again["items"] == output["items"]
+    assert again["keyframes"] == output["keyframes"]

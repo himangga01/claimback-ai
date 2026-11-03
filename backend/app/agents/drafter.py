@@ -9,7 +9,9 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 
 from app.agents import deps
 from app.agents.base import AgentSchemaError
-from app.agents.spark import field_summary, load_prompt, run_spark_json
+from app.agents.spark import (
+    field_summary, load_prompt, merge_partial, run_spark_json,
+)
 
 PROMPT_VERSION = "drafter.v2"
 PROMPT_FILE = "drafter.v2.md"
@@ -117,6 +119,17 @@ def run_drafter(
     total_in = 0
     total_out = 0
     total_cost = 0.0
+    # INT-3 B6: failures carry the spend so far for the step cost.
+    def _spent(exc: Optional[BaseException] = None) -> Dict[str, Any]:
+        spent: Dict[str, Any] = {
+            "cost_usd": total_cost, "latency_ms": total_latency,
+            "attempts": total_attempts, "tokens_in": total_in,
+            "tokens_out": total_out,
+        }
+        if exc is not None:
+            merge_partial(spent, exc)
+        return spent
+
     try:
         parsed, info = run_spark_json(
             model=MODEL, payload=payload, text_format=DRAFTER_TEXT_FORMAT,
@@ -124,7 +137,9 @@ def run_drafter(
             run_id=run_id, max_output_tokens=MAX_OUTPUT_TOKENS,
         )
     except deps.IncompleteResponse as exc:
-        raise AgentSchemaError("문안 응답이 끊겼습니다(2회 시도).") from exc
+        err = AgentSchemaError("문안 응답이 끊겼습니다(2회 시도).")
+        err._spark_partial = _spent(exc)  # noqa: SLF001
+        raise err from exc
     total_latency += info["latency_ms"]
     total_attempts += info["attempts"]
     total_in += info["tokens_in"]
@@ -149,13 +164,19 @@ def run_drafter(
                 run_id=run_id, max_output_tokens=MAX_OUTPUT_TOKENS,
             )
         except deps.IncompleteResponse as exc:
-            raise AgentSchemaError("문안 응답이 끊겼습니다(2회 시도).") from exc
+            err = AgentSchemaError("문안 응답이 끊겼습니다(2회 시도).")
+            err._spark_partial = _spent(exc)  # noqa: SLF001
+            raise err from exc
         total_latency += info["latency_ms"]
         total_attempts += info["attempts"]
         total_in += info["tokens_in"]
         total_out += info["tokens_out"]
         total_cost += info["cost_usd"]
-        draft = _validate(parsed)
+        try:
+            draft = _validate(parsed)
+        except AgentSchemaError as exc:
+            exc._spark_partial = _spent()  # noqa: SLF001
+            raise
     return {
         "sentences": [entry.model_dump() for entry in draft.sentences],
         "model": MODEL,

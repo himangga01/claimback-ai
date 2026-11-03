@@ -17,7 +17,9 @@ from pydantic import BaseModel, ConfigDict, field_validator
 
 from app.agents import deps
 from app.agents.base import AgentSchemaError
-from app.agents.spark import field_summary, load_prompt, run_spark_json
+from app.agents.spark import (
+    field_summary, load_prompt, merge_partial, run_spark_json,
+)
 
 PROMPT_VERSION = "reader.v2"
 PROMPT_FILE = "reader.v2.md"
@@ -38,8 +40,17 @@ READER_DEFAULT_MODEL = "muse-spark-1.2"
 TILE_MAX_ASPECT = 1.0
 TILE_OVERLAP = 0.10
 
-# Merge: same (kind, text) boxes with IoU above this count as one item.
+# Merge (INT-3 1b): duplicates pair kind-agnostically when their texts are
+# similar (>= MERGE_TEXT_SIM, whitespace/line-break/punctuation ignored)
+# and their boxes overlap or sit within the center-distance limit. Pairs
+# beyond the limit never merge (B4-8). Merged boxes are the UNION (never
+# the average) so redaction never under-covers.
 MERGE_IOU = 0.3
+MERGE_TEXT_SIM = 0.8
+MERGE_CENTER_LIMIT = 250.0
+# Tiling (INT-3 1b, B4-10): never more tiles than this; bigger images get
+# bigger tiles instead of more calls.
+MAX_TILES = 8
 # Video merge: a box counts as fully visible this far (px) from frame edges.
 FULLY_VISIBLE_MARGIN = 4
 
@@ -316,7 +327,9 @@ def plan_tiles(
     Images with h/w <= max_aspect read whole (one tile). Taller images
     split into evenly spaced full-width strips, each with h/w <=
     max_aspect and at least the given fractional overlap between
-    neighbors (even spacing avoids a near-duplicate last tile).
+    neighbors (even spacing avoids a near-duplicate last tile). At most
+    MAX_TILES tiles are ever returned; taller images get bigger tiles
+    instead of more calls (bounded cost, B4-10).
     """
     import math
 
@@ -330,6 +343,11 @@ def plan_tiles(
     min_overlap = tile_h * overlap
     count = max(2, int(math.ceil((height - min_overlap)
                                  / (tile_h - min_overlap))))
+    while count > MAX_TILES and tile_h < height:
+        tile_h = min(height, int(math.ceil(tile_h * 1.5)))
+        min_overlap = tile_h * overlap
+        count = max(2, int(math.ceil((height - min_overlap)
+                                     / (tile_h - min_overlap))))
     if count <= 1:
         return [(0, 0, width, height)]
     tiles: List[Tuple[int, int, int, int]] = []
@@ -340,14 +358,22 @@ def plan_tiles(
 
 
 def crop_tile_png(image_bytes: bytes, tile: Tuple[int, int, int, int]) -> bytes:
-    """Crop one tile (PNG bytes, deterministic encoding)."""
+    """Crop one tile (PNG bytes, deterministic encoding).
+
+    CMYK sources (phone-camera JPEGs) are converted to RGB first: PNG
+    cannot store CMYK, so saving a CMYK crop raises (B4-11).
+    """
     import io
 
     from PIL import Image
 
     x0, y0, x1, y1 = (int(v) for v in tile)
     with Image.open(io.BytesIO(bytes(image_bytes))) as image:
+        if image.mode == "CMYK":
+            image = image.convert("RGB")
         cropped = image.crop((x0, y0, x1, y1))
+        if cropped.mode == "CMYK":
+            cropped = cropped.convert("RGB")
         buffer = io.BytesIO()
         cropped.save(buffer, format="PNG")
         return buffer.getvalue()
@@ -377,23 +403,135 @@ def pad_to_square_png(image_bytes: bytes) -> Tuple[bytes, int]:
         return (buffer.getvalue(), side)
 
 
+def _merge_norm_text(text: Any) -> str:
+    """Compare form: whitespace/line-breaks/punctuation removed (INT-3 1b)."""
+    import string
+    import unicodedata
+
+    drop = set(string.whitespace + string.punctuation
+               + "·…\"\"''「」『』、。〈〉《》—–‐・\u3000")
+    out: List[str] = []
+    for char in str(text or ""):
+        if char in drop:
+            continue
+        if unicodedata.category(char).startswith("P"):
+            continue
+        out.append(char)
+    return "".join(out)
+
+
+def _merge_digit_heavy(norm: str) -> bool:
+    """True for number-like strings (phones, accounts, id numbers)."""
+    return len(norm) >= 6 and (
+        sum(1 for ch in norm if ch.isdigit()) / len(norm)) >= 0.7
+
+
+def _merge_text_similar(left: Any, right: Any) -> float:
+    """Character similarity of two reading texts (0..1, INT-3 1b)."""
+    import difflib
+
+    norm_left = _merge_norm_text(left)
+    norm_right = _merge_norm_text(right)
+    if norm_left == norm_right:
+        return 1.0
+    if not norm_left or not norm_right:
+        return 0.0
+    return difflib.SequenceMatcher(None, norm_left, norm_right).ratio()
+
+
+def _merge_box_area(box: Dict[str, Any]) -> float:
+    return max(1.0, float(int(box["x2"]) - int(box["x1"]))
+               * float(int(box["y2"]) - int(box["y1"])))
+
+
+def _merge_pair_ok(
+    left_text: Any, right_text: Any,
+    left_box: Dict[str, Any], right_box: Dict[str, Any],
+) -> bool:
+    """True when two reads are the same item (INT-3 1b, kind-agnostic).
+
+    Same normalized text, similarity >= MERGE_TEXT_SIM (OCR typos,
+    line-break-only utterance variants), or a cut-fragment substring
+    at a similar box size. Different number strings NEVER merge: two
+    phone numbers one digit apart are two redaction targets, not one.
+    Small-in-large containment (an amount box inside its utterance
+    box) is a different item, not a fragment: the area-ratio guard
+    keeps it.
+    """
+    norm_left = _merge_norm_text(left_text)
+    norm_right = _merge_norm_text(right_text)
+    if norm_left and norm_left == norm_right:
+        return True
+    if not norm_left or not norm_right:
+        return False
+    if _merge_digit_heavy(norm_left) and _merge_digit_heavy(norm_right):
+        return False
+    if _merge_text_similar(left_text, right_text) >= MERGE_TEXT_SIM:
+        return True
+    if norm_left not in norm_right and norm_right not in norm_left:
+        return False
+    area_left = _merge_box_area(left_box)
+    area_right = _merge_box_area(right_box)
+    return min(area_left, area_right) / max(area_left, area_right) >= 0.3
+
+
+def _merge_box_shape(box: Dict[str, Any]) -> List[float]:
+    return [float(box["x1"]), float(box["y1"]),
+            float(box["x2"]), float(box["y2"])]
+
+
+def _merge_center_dist(first: Dict[str, Any], second: Dict[str, Any]) -> float:
+    ax = (float(first["x1"]) + float(first["x2"])) / 2.0
+    ay = (float(first["y1"]) + float(first["y2"])) / 2.0
+    bx = (float(second["x1"]) + float(second["x2"])) / 2.0
+    by = (float(second["y1"]) + float(second["y2"])) / 2.0
+    return ((ax - bx) ** 2 + (ay - by) ** 2) ** 0.5
+
+
+def _union_box_into(keeper: Dict[str, Any], absorbed: Dict[str, Any]) -> None:
+    """Union absorbed's box into keeper's (INT-3 1b, never the average).
+
+    Averaging a cut box with a whole box shrinks the box, which lets
+    redaction under-cover. The union always covers both reads. The
+    longer read is the more complete one, so its text/kind wins.
+    """
+    keep_box = keeper["box"]
+    drop_box = absorbed["box"]
+    keep_box["x1"] = min(int(keep_box["x1"]), int(drop_box["x1"]))
+    keep_box["y1"] = min(int(keep_box["y1"]), int(drop_box["y1"]))
+    keep_box["x2"] = max(int(keep_box["x2"]), int(drop_box["x2"]))
+    keep_box["y2"] = max(int(keep_box["y2"]), int(drop_box["y2"]))
+    confidences = [keeper.get("confidence"), absorbed.get("confidence")]
+    confidences = [c for c in confidences if isinstance(c, (int, float))]
+    if confidences:
+        keeper["confidence"] = max(confidences)
+    if absorbed.get("box_warning") is not None:
+        keeper["box_warning"] = absorbed["box_warning"]
+    keep_len = len(_merge_norm_text(keeper.get("text_verbatim")))
+    drop_len = len(_merge_norm_text(absorbed.get("text_verbatim")))
+    if drop_len > keep_len:
+        keeper["text_verbatim"] = str(absorbed.get("text_verbatim") or "")
+        keeper["kind"] = absorbed.get("kind", keeper.get("kind"))
+        if absorbed.get("normalized") is not None:
+            keeper["normalized"] = absorbed.get("normalized")
+
+
 def merge_tile_items(
     per_tile: List[List[Dict[str, Any]]],
     tiles: List[Tuple[int, int, int, int]],
 ) -> List[Dict[str, Any]]:
     """Merge tile readings; boundary duplicates become one item (M4b 3a).
 
-    Each tile read carries its own y bias, so the same item can come
-    back up to ~180px apart from adjacent tiles (too far for IoU).
-    Duplicates pair structurally instead: same (kind, text_verbatim)
-    boxes that both touch one overlap band pair up in y order across
-    the two tiles (leftovers stay). Paired boxes average: the two
-    reads are independent noisy estimates, and averaging beats either
-    single pick on held-out replay (reports/M4b.md). Same-tile model
-    dupes merge by IoU the same way, and cut fragments
-    (proper-substring text with an overlapping box) drop. Distant
-    repeats are kept. Items tagged ``_tile`` use it; untagged items
-    take their list index. The tag is stripped from the output.
+    INT-3 1b: pairs match kind-agnostically (an OCR typo or a cut line
+    changes the text but it is still the same item) on text similarity
+    >= MERGE_TEXT_SIM — or a cut-fragment substring at a similar box
+    size — plus box overlap or the center-distance limit. Pairs beyond
+    the limit never merge, and band pairing is nearest-first with each
+    item used at most once (B4-8: no more order-only zip pairing when
+    counts match). Merged boxes are the union of both reads. Output is
+    sorted top-to-bottom, left-to-right (the coordinator recodes
+    item_id in that order). Items tagged ``_tile`` use it; untagged
+    items take their list index. The tag is stripped from the output.
     """
     cuts = sorted({int(top) for _, top, _, _ in tiles[1:]} |
                   {int(bottom) for _, _, _, bottom in tiles[:-1]})
@@ -404,75 +542,57 @@ def merge_tile_items(
         cy = (int(box["y1"]) + int(box["y2"])) / 2.0
         return min(abs(cy - cut) for cut in cuts)
 
-    def shape(box: Dict[str, Any]) -> List[float]:
-        return [float(box["x1"]), float(box["y1"]),
-                float(box["x2"]), float(box["y2"])]
-
-    def center_y(box: Dict[str, Any]) -> float:
-        return (int(box["y1"]) + int(box["y2"])) / 2.0
-
     flat: List[Dict[str, Any]] = []
     for position, items in enumerate(per_tile):
         for item in items:
             item.setdefault("_tile", position)
             flat.append(item)
-    # Same-tile model dupes by overlap; keep max-margin per cluster.
-    groups: Dict[Tuple[str, str], List[int]] = {}
-    for index, item in enumerate(flat):
-        groups.setdefault((str(item.get("kind")), str(item.get("text_verbatim"))),
-                          []).append(index)
-    def average_into(keeper: int, absorbed: int) -> None:
-        """Average absorbed's box into keeper's (paired-read calibration)."""
-        keep_box = flat[keeper]["box"]
-        drop_box = flat[absorbed]["box"]
-        for key in ("x1", "y1", "x2", "y2"):
-            keep_box[key] = int(round(
-                (int(keep_box[key]) + int(drop_box[key])) / 2))
-        confidences = [flat[keeper].get("confidence"),
-                       flat[absorbed].get("confidence")]
-        confidences = [c for c in confidences
-                       if isinstance(c, (int, float))]
-        if confidences:
-            flat[keeper]["confidence"] = max(confidences)
-        if flat[absorbed].get("box_warning") is not None:
-            flat[keeper]["box_warning"] = flat[absorbed]["box_warning"]
+
+    def _near_enough(
+        first: Dict[str, Any], second: Dict[str, Any], limit: float
+    ) -> bool:
+        if _iou(_merge_box_shape(first["box"]),
+                _merge_box_shape(second["box"])) > 0.0:
+            return True
+        return _merge_center_dist(first["box"], second["box"]) <= limit
+
+    def _pick_keeper(first: int, second: int) -> Tuple[int, int]:
+        """(keeper, absorbed): longer read wins, ties go off-cut."""
+        first_len = len(_merge_norm_text(
+            flat[first].get("text_verbatim")))
+        second_len = len(_merge_norm_text(
+            flat[second].get("text_verbatim")))
+        if first_len != second_len:
+            return (first, second) if first_len > second_len else (second, first)
+        if margin(flat[first]["box"]) >= margin(flat[second]["box"]):
+            return (first, second)
+        return (second, first)
 
     drop: set = set()
-    for members in groups.values():
-        if len(members) < 2:
-            continue
-        clusters: List[List[int]] = []
-        for index in members:
-            placed = False
-            for cluster in clusters:
-                if any(flat[index].get("_tile") == flat[other].get("_tile")
-                       and _iou(shape(flat[index]["box"]),
-                                shape(flat[other]["box"])) > MERGE_IOU
-                       for other in cluster):
-                    cluster.append(index)
-                    placed = True
-                    break
-            if not placed:
-                clusters.append([index])
-        for cluster in clusters:
-            if len(cluster) < 2:
+    # Same-tile model dupes: similar text + real overlap (kind-agnostic).
+    by_tile: Dict[int, List[int]] = {}
+    for index, item in enumerate(flat):
+        by_tile.setdefault(int(item.get("_tile", 0)), []).append(index)
+    for members in by_tile.values():
+        for pos, index in enumerate(members):
+            if index in drop:
                 continue
-            keeper = max(cluster, key=lambda i: margin(flat[i]["box"]))
-            boxes = [flat[i]["box"] for i in cluster]
-            for key in ("x1", "y1", "x2", "y2"):
-                flat[keeper]["box"][key] = int(round(
-                    sum(int(box[key]) for box in boxes) / len(boxes)))
-            confidences = [flat[i].get("confidence") for i in cluster]
-            confidences = [c for c in confidences
-                           if isinstance(c, (int, float))]
-            if confidences:
-                flat[keeper]["confidence"] = max(confidences)
-            for index in cluster:
-                if flat[index].get("box_warning") is not None:
-                    flat[keeper]["box_warning"] = flat[index]["box_warning"]
-                if index != keeper:
-                    drop.add(index)
-    # Cross-tile band pairing in y order (leftovers stay).
+            for other in members[pos + 1:]:
+                if other in drop:
+                    continue
+                if not _merge_pair_ok(
+                        flat[index].get("text_verbatim"),
+                        flat[other].get("text_verbatim"),
+                        flat[index]["box"], flat[other]["box"]):
+                    continue
+                if _iou(_merge_box_shape(flat[index]["box"]),
+                        _merge_box_shape(flat[other]["box"])) <= MERGE_IOU:
+                    continue
+                keeper, absorbed = _pick_keeper(index, other)
+                _union_box_into(flat[keeper], flat[absorbed])
+                drop.add(absorbed)
+    # Cross-tile band pairing, nearest-first within the cap (leftovers
+    # stay). Both sides must touch the overlap band.
     bands: List[Tuple[int, int]] = []
     for left, right in zip(tiles, tiles[1:]):
         top = max(int(left[1]), int(right[1]))
@@ -483,63 +603,70 @@ def merge_tile_items(
     def touches(box: Dict[str, Any], band: Tuple[int, int]) -> bool:
         return int(box["y1"]) < band[1] and int(box["y2"]) > band[0]
 
-    for members in groups.values():
-        members = [i for i in members if i not in drop]
-        if len(members) < 2:
-            continue
-        for left_no, band in enumerate(bands):
-            sides: Dict[int, List[int]] = {left_no: [], left_no + 1: []}
-            for index in members:
-                if index in drop:
+    for left_no, band in enumerate(bands):
+        cap = min(float(band[1] - band[0]), MERGE_CENTER_LIMIT)
+        left = [i for i, item in enumerate(flat)
+                if i not in drop and int(item.get("_tile", -1)) == left_no
+                and touches(item["box"], band)]
+        right = [i for i, item in enumerate(flat)
+                 if i not in drop and int(item.get("_tile", -1)) == left_no + 1
+                 and touches(item["box"], band)]
+        candidates: List[Tuple[float, int, int]] = []
+        for index in left:
+            for other in right:
+                if not _merge_pair_ok(
+                        flat[index].get("text_verbatim"),
+                        flat[other].get("text_verbatim"),
+                        flat[index]["box"], flat[other]["box"]):
                     continue
-                tile = flat[index].get("_tile")
-                if tile in sides and touches(flat[index]["box"], band):
-                    sides[tile].append(index)
-            left = sorted(sides[left_no], key=lambda i: center_y(flat[i]["box"]))
-            right = sorted(sides[left_no + 1],
-                           key=lambda i: center_y(flat[i]["box"]))
-            cap = min(float(band[1] - band[0]), 250.0)
-            pairs: List[Tuple[int, int]] = []
-            if left and right and len(left) == len(right):
-                pairs = list(zip(left, right))
-            else:
-                remaining = list(right)
-                for index in left:
-                    if not remaining:
-                        break
-                    other = min(remaining, key=lambda j: abs(
-                        center_y(flat[index]["box"])
-                        - center_y(flat[j]["box"])))
-                    if abs(center_y(flat[index]["box"])
-                           - center_y(flat[other]["box"])) <= cap:
-                        pairs.append((index, other))
-                        remaining.remove(other)
-            for first, second in pairs:
-                keeper = (first if margin(flat[first]["box"])
-                          >= margin(flat[second]["box"]) else second)
-                average_into(keeper, second if keeper == first else first)
-                drop.add(second if keeper == first else first)
+                if not _near_enough(flat[index], flat[other], cap):
+                    continue
+                candidates.append((_merge_center_dist(flat[index]["box"],
+                                                      flat[other]["box"]),
+                                   index, other))
+        candidates.sort(key=lambda triple: triple[0])
+        used: set = set()
+        for _, index, other in candidates:
+            if index in used or other in used:
+                continue
+            if index in drop or other in drop:
+                continue
+            used.add(index)
+            used.add(other)
+            keeper, absorbed = _pick_keeper(index, other)
+            _union_box_into(flat[keeper], flat[absorbed])
+            drop.add(absorbed)
     kept = [item for index, item in enumerate(flat) if index not in drop]
-    # Cut-fragment drop: proper-substring text with an overlapping box.
-    by_kind: Dict[str, List[Dict[str, Any]]] = {}
-    for item in kept:
-        by_kind.setdefault(str(item.get("kind")), []).append(item)
+    # Cut-fragment drop (kind-agnostic): a proper-substring text with a
+    # similar-size overlapping box is the cut half of a whole read.
+    # Small-in-large containment (an amount box inside its utterance
+    # box) is NOT a fragment: the area-ratio guard keeps it.
     final: List[Dict[str, Any]] = []
     for item in kept:
-        text = str(item.get("text_verbatim") or "")
+        text = _merge_norm_text(item.get("text_verbatim"))
         fragmented = False
-        for other in by_kind[str(item.get("kind"))]:
+        for other in kept:
             if other is item:
                 continue
-            other_text = str(other.get("text_verbatim") or "")
-            if text and text != other_text and text in other_text:
-                if _iou(shape(item["box"]), shape(other["box"])) > 0.1:
-                    fragmented = True
-                    break
+            other_text = _merge_norm_text(other.get("text_verbatim"))
+            if not text or text == other_text or text not in other_text:
+                continue
+            if _merge_digit_heavy(text) and _merge_digit_heavy(other_text):
+                continue
+            area = _merge_box_area(item["box"])
+            other_area = _merge_box_area(other["box"])
+            if min(area, other_area) / max(area, other_area) < 0.3:
+                continue
+            if _iou(_merge_box_shape(item["box"]),
+                    _merge_box_shape(other["box"])) > 0.1:
+                fragmented = True
+                break
         if not fragmented:
             final.append(item)
     for item in final:
         item.pop("_tile", None)
+    final.sort(key=lambda item: (int(item["box"]["y1"]),
+                                 int(item["box"]["x1"])))
     return final
 
 
@@ -661,6 +788,13 @@ def _read_raster(
         total["tokens_out"] += info["tokens_out"]
         total["cost_usd"] += info["cost_usd"]
 
+    # INT-3 B6: every failure below carries this raster's spend on
+    # _spark_partial (the run_reader wrapper adds previous tiles).
+    def _cut(exc: BaseException) -> AgentSchemaError:
+        err = AgentSchemaError("판독 응답이 끊겼습니다(2회 시도).")
+        err._spark_partial = merge_partial(dict(total), exc)  # noqa: SLF001
+        return err
+
     try:
         parsed, info = run_spark_json(
             model=model, payload=payload, text_format=READING_TEXT_FORMAT,
@@ -668,7 +802,7 @@ def _read_raster(
             run_id=run_id, max_output_tokens=max_output_tokens,
         )
     except deps.IncompleteResponse as exc:
-        raise AgentSchemaError("판독 응답이 끊겼습니다(2회 시도).") from exc
+        raise _cut(exc) from exc
     _accumulate(info)
     try:
         return (_validate(parsed), total)
@@ -685,9 +819,46 @@ def _read_raster(
                 run_id=run_id, max_output_tokens=max_output_tokens,
             )
         except deps.IncompleteResponse as exc:
-            raise AgentSchemaError("판독 응답이 끊겼습니다(2회 시도).") from exc
+            raise _cut(exc) from exc
+        except (ValueError, AttributeError, TypeError) as exc:
+            if getattr(exc, "_spark_partial", None) is not None:
+                # Retry-call parse failure: keep the first call's spend.
+                first = {"cost_usd": info.get("cost_usd", 0.0),
+                         "latency_ms": info.get("latency_ms", 0),
+                         "attempts": info.get("attempts", 0),
+                         "tokens_in": info.get("tokens_in", 0),
+                         "tokens_out": info.get("tokens_out", 0)}
+                for key, value in first.items():
+                    exc._spark_partial[key] = (  # noqa: SLF001
+                        (exc._spark_partial.get(key, 0) or 0)
+                        + (value or 0))
+            raise
         _accumulate(info)
-        return (_validate(parsed), total)
+        try:
+            return (_validate(parsed), total)
+        except AgentSchemaError as exc:
+            exc._spark_partial = dict(total)  # noqa: SLF001
+            raise
+
+
+def _with_prior_spend(
+    total: Dict[str, Any], exc: BaseException
+) -> BaseException:
+    """Fold previous-tile spend into a failure's _spark_partial (B6)."""
+    part = getattr(exc, "_spark_partial", None)
+    if part is None:
+        part = {}
+        try:
+            exc._spark_partial = part  # noqa: SLF001
+        except (AttributeError, TypeError):
+            return exc
+    for key in ("cost_usd", "latency_ms", "attempts",
+                "tokens_in", "tokens_out"):
+        try:
+            part[key] = (part.get(key, 0) or 0) + (total.get(key, 0) or 0)
+        except (TypeError, AttributeError):
+            continue
+    return exc
 
 
 def run_reader(
@@ -768,12 +939,15 @@ def run_reader(
                 tile_bytes = pixels
             else:
                 tile_bytes = crop_tile_png(pixels, tile)
-            reading, info = _read_raster(
-                model=active_model, prompt=prompt, kind="image",
-                data=tile_bytes, filename="tile.png",
-                meta_mode=meta_mode, run_id=run_id,
-                reasoning_effort=effort,
-            )
+            try:
+                reading, info = _read_raster(
+                    model=active_model, prompt=prompt, kind="image",
+                    data=tile_bytes, filename="tile.png",
+                    meta_mode=meta_mode, run_id=run_id,
+                    reasoning_effort=effort,
+                )
+            except Exception as exc:
+                raise _with_prior_spend(total, exc)
             calls += 1
             for key in ("latency_ms", "attempts", "tokens_in", "tokens_out",
                         "cost_usd"):
@@ -874,12 +1048,15 @@ def run_video_reader(
         for tile in frame_tiles:
             tile_bytes = pixels if len(frame_tiles) == 1 and not pad else \
                 crop_tile_png(pixels, tile)
-            reading, info = _read_raster(
-                model=active_model, prompt=prompt, kind="image",
-                data=tile_bytes, filename="frame.png",
-                meta_mode=meta_mode, run_id=run_id,
-                reasoning_effort=effort,
-            )
+            try:
+                reading, info = _read_raster(
+                    model=active_model, prompt=prompt, kind="image",
+                    data=tile_bytes, filename="frame.png",
+                    meta_mode=meta_mode, run_id=run_id,
+                    reasoning_effort=effort,
+                )
+            except Exception as exc:
+                raise _with_prior_spend(total, exc)
             calls += 1
             for key in ("latency_ms", "attempts", "tokens_in", "tokens_out",
                         "cost_usd"):

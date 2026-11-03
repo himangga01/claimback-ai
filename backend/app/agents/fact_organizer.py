@@ -12,7 +12,9 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 
 from app.agents import deps
 from app.agents.base import AgentSchemaError
-from app.agents.spark import field_summary, load_prompt, run_spark_json
+from app.agents.spark import (
+    field_summary, load_prompt, merge_partial, run_spark_json,
+)
 
 PROMPT_VERSION = "fact_organizer.v2"
 PROMPT_FILE = "fact_organizer.v2.md"
@@ -35,7 +37,8 @@ FIELD_LABELS: Dict[str, str] = {
 }
 KNOWN_FIELDS = tuple(FIELD_LABELS)
 VALID_TAGS = ("loan_request", "amount_mention", "repay_promise", "reminder", "other")
-VALID_ROLES = ("loan_transfer", "repayment", "other")
+# INT-3 task 3: loan_agreement (차용증) joins the evidence roles.
+VALID_ROLES = ("loan_transfer", "repayment", "loan_agreement", "other")
 
 ORGANIZER_TEXT_FORMAT: Dict[str, Any] = {
     "type": "json_schema",
@@ -388,7 +391,18 @@ def _canon_text(raw: Any) -> str:
 
 
 def _text_contains(left: str, right: str) -> bool:
-    return bool(left) and bool(right) and (left in right or right in left)
+    """One-directional containment: value must hold the source (INT-3 6).
+
+    Only the value-contains-source direction counts, and the source
+    needs at least 2 characters (a one-character source no longer
+    passes). Dropping "(SAMPLE)"/"(주)" parens from the value now
+    conflicts instead of passing (M2c D2 strictness).
+    """
+    value = _canon_text(left)
+    source = _canon_text(right)
+    if len(source) < 2:
+        return False
+    return source in value
 
 
 def _canon_phone(raw: Any) -> str:
@@ -731,6 +745,17 @@ def run_organizer(
     total_in = 0
     total_out = 0
     total_cost = 0.0
+    # INT-3 B6: failures carry the spend so far for the step cost.
+    def _spent(exc: Optional[BaseException] = None) -> Dict[str, Any]:
+        spent: Dict[str, Any] = {
+            "cost_usd": total_cost, "latency_ms": total_latency,
+            "attempts": total_attempts, "tokens_in": total_in,
+            "tokens_out": total_out,
+        }
+        if exc is not None:
+            merge_partial(spent, exc)
+        return spent
+
     try:
         parsed, info = run_spark_json(
             model=MODEL, payload=payload, text_format=ORGANIZER_TEXT_FORMAT,
@@ -738,7 +763,9 @@ def run_organizer(
             run_id=run_id, max_output_tokens=MAX_OUTPUT_TOKENS,
         )
     except deps.IncompleteResponse as exc:
-        raise AgentSchemaError("사실 정리 응답이 끊겼습니다(2회 시도).") from exc
+        err = AgentSchemaError("사실 정리 응답이 끊겼습니다(2회 시도).")
+        err._spark_partial = _spent(exc)  # noqa: SLF001
+        raise err from exc
     total_latency += info["latency_ms"]
     total_attempts += info["attempts"]
     total_in += info["tokens_in"]
@@ -763,13 +790,19 @@ def run_organizer(
                 run_id=run_id, max_output_tokens=MAX_OUTPUT_TOKENS,
             )
         except deps.IncompleteResponse as exc:
-            raise AgentSchemaError("사실 정리 응답이 끊겼습니다(2회 시도).") from exc
+            err = AgentSchemaError("사실 정리 응답이 끊겼습니다(2회 시도).")
+            err._spark_partial = _spent(exc)  # noqa: SLF001
+            raise err from exc
         total_latency += info["latency_ms"]
         total_attempts += info["attempts"]
         total_in += info["tokens_in"]
         total_out += info["tokens_out"]
         total_cost += info["cost_usd"]
-        review = normalize_review(parsed, readings, ex_ids)
+        try:
+            review = normalize_review(parsed, readings, ex_ids)
+        except AgentSchemaError as exc:
+            exc._spark_partial = _spent()  # noqa: SLF001
+            raise
     return {
         "review": review,
         "model": MODEL,

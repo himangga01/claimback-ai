@@ -70,8 +70,23 @@ def build_plan(
 
     ``preview_images`` maps ex_id to the opened original preview (L4 ink
     geometry); without it splits fall back to box-proportional.
+    INT-3 1a: non-inline PII boxes first snap to the true glyph line
+    (refine_pii_box); a failed snap keeps the original box and the
+    current needs_review behavior.
     """
     plan: List[Dict[str, Any]] = []
+    label_boxes: Dict[str, List[List[int]]] = {}
+    for reading in readings or []:
+        boxes: List[List[int]] = []
+        for entry in reading.get("items", []) or []:
+            if str(entry.get("kind", "")) not in ("label", "header"):
+                continue
+            parsed = _box_list(entry.get("box"))
+            if parsed:
+                boxes.append(parsed)
+        label_boxes[str(reading.get("ex_id", ""))] = boxes
+    ink_masks: Dict[str, Any] = {}
+    rule_rows_cache: Dict[str, set] = {}
     for reading in readings or []:
         ex_id = str(reading.get("ex_id", ""))
         size = preview_sizes.get(ex_id)
@@ -91,6 +106,45 @@ def build_plan(
             text = str(item.get("text_verbatim", "")
                        or item.get("normalized", "") or "")
             inline = any(_center_inside(coords, bubble) for bubble in bubbles)
+            if not inline and image is not None:
+                mask = ink_masks.get(ex_id, "missing")
+                if mask == "missing":
+                    try:
+                        mask = redact_mod.build_ink_mask(image)
+                    except Exception:
+                        mask = None
+                    ink_masks[ex_id] = mask
+                if mask is not None:
+                    try:
+                        refined = redact_mod.refine_pii_box(
+                            mask, coords, text,
+                            label_boxes.get(ex_id))
+                    except Exception:
+                        refined = None
+                    if refined is not None:
+                        coords = refined
+            # INT-3 task 2: bands on all four sides of the planning box
+            # (a glyph sitting beside it means the box missed the line,
+            # even a sideways-only miss the mask bands skip).
+            reading_counts: Optional[Dict[str, int]] = None
+            reading_tripped = False
+            if not inline and image is not None:
+                band_mask = ink_masks.get(ex_id)
+                if band_mask is not None:
+                    if ex_id not in rule_rows_cache:
+                        try:
+                            rule_rows_cache[ex_id] = (
+                                redact_mod.rule_rows_of_mask(band_mask))
+                        except Exception:
+                            rule_rows_cache[ex_id] = set()
+                    try:
+                        reading_counts = redact_mod.reading_band_counts(
+                            band_mask, rule_rows_cache[ex_id], coords)
+                    except Exception:
+                        reading_counts = None
+                    if reading_counts and max(reading_counts.values()) >= \
+                            redact_mod.BAND_THRESHOLD:
+                        reading_tripped = True
             pad = redact_mod.compute_pad(coords[3] - coords[1])
             geom = None
             if image is not None and not inline:
@@ -126,34 +180,46 @@ def build_plan(
                 mask = redact_mod.pad_box(
                     raw_mask, pad, (True, True, False, True), ref_w, ref_h)
                 keep = redact_mod.clip_box(raw_keep, ref_w, ref_h)
+                reason = "계좌번호 끝 4자리 유지"
+                if reading_tripped:
+                    reason = f"{reason}; {redact_mod.READING_BAND_REVIEW_REASON}"
                 plan.append({
                     "ex_id": ex_id, "item_id": item_id, "kind": kind,
                     "mask_box": redact_mod._as_box_dict(mask, ref_w, ref_h),
                     "keep_box": redact_mod._as_box_dict(keep, ref_w, ref_h),
-                    "reason": "계좌번호 끝 4자리 유지",
-                    "needs_review": False,
+                    "reason": reason,
+                    "needs_review": reading_tripped,
+                    "reading_band_counts": reading_counts or {},
                 })
             elif kind == "id_number":
                 raw = redact_mod.split_id_box(coords, text, geom)
                 mask = redact_mod.pad_box(
                     raw, pad, (False, True, True, True), ref_w, ref_h)
+                reason = "주민번호 뒷 7자리 가림"
+                if reading_tripped:
+                    reason = f"{reason}; {redact_mod.READING_BAND_REVIEW_REASON}"
                 plan.append({
                     "ex_id": ex_id, "item_id": item_id, "kind": kind,
                     "mask_box": redact_mod._as_box_dict(mask, ref_w, ref_h),
                     "keep_box": None,
-                    "reason": "주민번호 뒷 7자리 가림",
-                    "needs_review": False,
+                    "reason": reason,
+                    "needs_review": reading_tripped,
+                    "reading_band_counts": reading_counts or {},
                 })
             else:  # phone
                 raw = redact_mod.split_phone_box(coords, text, geom)
                 mask = redact_mod.pad_box(
                     raw, pad, (False, True, False, True), ref_w, ref_h)
+                reason = "전화번호 가운데 4자리 가림"
+                if reading_tripped:
+                    reason = f"{reason}; {redact_mod.READING_BAND_REVIEW_REASON}"
                 plan.append({
                     "ex_id": ex_id, "item_id": item_id, "kind": kind,
                     "mask_box": redact_mod._as_box_dict(mask, ref_w, ref_h),
                     "keep_box": None,
-                    "reason": "전화번호 가운데 4자리 가림",
-                    "needs_review": False,
+                    "reason": reason,
+                    "needs_review": reading_tripped,
+                    "reading_band_counts": reading_counts or {},
                 })
     for reading in readings or []:
         ex_id = str(reading.get("ex_id", ""))
@@ -239,6 +305,14 @@ def run_privacy(
     segments_by_ex = {str(s.get("ex_id", "")): s for s in segments or []}
 
     def _not_redacted(ex_id: str, reason: str) -> None:
+        # INT-3 task 2: a stale copy from an earlier run must not
+        # survive next to a not_redacted preview (fail closed).
+        try:
+            stale = Path(files_dir) / f"redacted_{ex_id}.png"
+            if stale.exists():
+                stale.unlink()
+        except OSError:
+            pass
         previews.append({
             "ex_id": ex_id,
             "url": None,
@@ -263,7 +337,13 @@ def run_privacy(
             _not_redacted(ex_id, "판독이 보류되어 가림 대상을 알 수 없음")
             continue
         segment = segments_by_ex.get(ex_id)
-        if segment is None or str(segment.get("status", "")) == "hold":
+        # INT-3 task 2: only noun-call failure blocks redaction (faces
+        # unknown). A signature-retry-only hold keeps its noun objects,
+        # and signatures are not redaction targets, so redaction
+        # proceeds. Segments without the scope marker stay fail-closed.
+        if segment is None or (
+                str(segment.get("status", "")) == "hold"
+                and segment.get("hold_scope") != "signature_retry"):
             detail = ""
             if isinstance(segment, dict) and segment.get("error"):
                 detail = f": {str(segment['error'])[:80]}"

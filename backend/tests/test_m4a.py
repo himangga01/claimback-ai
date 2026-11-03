@@ -383,6 +383,82 @@ def test_redaction_padding_skips_keep_side():
     assert mask == [226, 203, 337, 228]
 
 
+def _refine_iou(first, second):
+    ix1, iy1 = max(first[0], second[0]), max(first[1], second[1])
+    ix2, iy2 = min(first[2], second[2]), min(first[3], second[3])
+    inter = max(0, ix2 - ix1) * max(0, iy2 - iy1)
+    union = ((first[2] - first[0]) * (first[3] - first[1])
+             + (second[2] - second[0]) * (second[3] - second[1]) - inter)
+    return inter / union if union else 0.0
+
+
+def test_refine_pii_box_snaps_shifted_boxes_to_golden():
+    """INT-3 1a: replay-era shifted boxes snap to the true glyph line.
+
+    No fixtures: the sample images plus the misaligned boxes stand in
+    for the reader output. Phones land tight; account/id boxes keep
+    the cell-border columns at their edges (analyze_text_box trims
+    edge runs, so splits stay exact — pinned by the golden e2e test).
+    """
+    cases = [
+        ("transfer_loan.png", [218, 198, 374, 234], "000-0000-1234",
+         [230, 207, 389, 224], 0.45),
+        ("transfer_loan.png", [218, 342, 374, 378], "000-0000-5678",
+         [230, 351, 389, 367], 0.45),
+        ("iou.png", [415, 383, 665, 414], "010-0000-0001",
+         [470, 368, 725, 393], 0.80),
+        ("iou.png", [415, 603, 667, 673], "010-0000-0002",
+         [470, 631, 725, 657], 0.80),
+        ("iou.png", [422, 1045, 768, 1195], "000000-0000000",
+         [470, 1160, 755, 1185], 0.50),
+    ]
+    for name, box, text, golden, floor in cases:
+        image = Image.open(SAMPLE / name).convert("RGB")
+        mask = redact_mod.build_ink_mask(image)
+        refined = redact_mod.refine_pii_box(mask, box, text)
+        assert refined is not None, (name, text)
+        assert _refine_iou(refined, golden) >= floor, (name, text, refined)
+        # The golden glyph rows sit inside the refined box.
+        assert refined[1] <= golden[1] and refined[3] >= golden[3] - 4, (
+            name, text, refined)
+
+
+def test_refine_pii_box_returns_none_without_match():
+    """INT-3 1a: blank ink or an absurd width keeps the original box."""
+    blank = Image.new("RGB", (640, 640), (255, 255, 255))
+    mask = redact_mod.build_ink_mask(blank)
+    assert redact_mod.refine_pii_box(
+        mask, [100, 100, 300, 130], "000-0000-1234") is None
+    image = Image.open(SAMPLE / "iou.png").convert("RGB")
+    mask = redact_mod.build_ink_mask(image)
+    assert redact_mod.refine_pii_box(
+        mask, [422, 1045, 768, 1195], "1") is None
+
+
+def test_reading_band_counts_flag_sideways_miss_only():
+    """INT-3 task 2: four-side bands on the planning box (synthetic)."""
+    image = Image.new("RGB", (200, 100), (255, 255, 255))
+    draw = ImageDraw.Draw(image)
+    draw.rectangle([80, 40, 119, 59], fill=(0, 0, 0))
+    mask = redact_mod.build_ink_mask(image)
+    rules = redact_mod.rule_rows_of_mask(mask)
+    assert rules == set()
+    aligned = redact_mod.reading_band_counts(mask, rules, [80, 40, 120, 60])
+    assert max(aligned.values()) == 0
+    shifted = redact_mod.reading_band_counts(mask, rules, [40, 40, 80, 60])
+    assert shifted["right"] >= redact_mod.BAND_THRESHOLD
+    # A cell-border rule next to the box is not a leaked glyph.
+    ruled = Image.new("RGB", (200, 100), (255, 255, 255))
+    ImageDraw.Draw(ruled).line([0, 38, 199, 38], fill=(0, 0, 0), width=1)
+    ImageDraw.Draw(ruled).rectangle([80, 40, 119, 59], fill=(0, 0, 0))
+    ruled_mask = redact_mod.build_ink_mask(ruled)
+    ruled_rows = redact_mod.rule_rows_of_mask(ruled_mask)
+    assert 38 in ruled_rows
+    counts = redact_mod.reading_band_counts(
+        ruled_mask, ruled_rows, [80, 40, 120, 60])
+    assert max(counts.values()) == 0
+
+
 def test_privacy_inline_is_wide_and_flagged():
     readings = [{"ex_id": "EX1", "items": [{
         "item_id": "item9", "kind": "account_number",

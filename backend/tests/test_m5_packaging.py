@@ -19,6 +19,7 @@ from app.agents import packager as packager_mod
 from app.main import app
 from app.services import exhibit_bundle as exhibit_bundle_mod
 from app.services import final_check as final_check_mod
+from app.services import pdf_compiler as pdf_compiler_mod
 from app.services.naming import DISCLAIMER_KO, NOTICE_KO
 
 from test_case_contract import (  # noqa: F401  (shared fakes)
@@ -74,7 +75,8 @@ def _make_redacted_dummies(case_id: str) -> None:
             image.save(path)
 
 
-def _run_to_package(client: TestClient, with_redacted: bool = False):
+def _run_to_package(client: TestClient, with_redacted: bool = False,
+                    without_redacted: bool = False):
     res = client.post("/api/cases/sample", json={"set": "kr"})
     assert res.status_code == 200, res.text
     case_id = res.json()["case_id"]
@@ -94,6 +96,13 @@ def _run_to_package(client: TestClient, with_redacted: bool = False):
     assert all(s["approved"] for s in res.json()["sentences"]), res.text
     if with_redacted:
         _make_redacted_dummies(case_id)
+    if without_redacted:
+        files = case_state_mod.files_dir(case_id)
+        for path in files.glob("redacted_*.png"):
+            try:
+                path.unlink()
+            except OSError:
+                pass
     res = client.post(f"/api/cases/{case_id}/run", json={})
     assert res.json()["state"] == "CHECKPOINT_2", res.text
     package = client.get(f"/api/cases/{case_id}/package").json()
@@ -188,12 +197,17 @@ def test_package_has_three_files_and_g1b_pass(case_env):
 
 
 def test_exhibits_pages_cover_and_labels(case_env, tmp_path):
-    case_id, _package, state = _run_to_package(case_env)
+    # INT-3 task 4: without redacted copies every evidence takes exactly
+    # one page (cover + evidence pages); split "(i/n)" headers are
+    # counted separately (none here — K10 covers the split case).
+    case_id, _package, state = _run_to_package(case_env, without_redacted=True)
     files = case_state_mod.files_dir(case_id)
     exhibits = files / "exhibits.pdf"
     assert exhibits.exists()
     reader = PdfReader(str(exhibits))
     assert len(reader.pages) == len(state.evidence) + 1  # cover + evidence pages
+    full = "\n".join((page.extract_text() or "") for page in reader.pages)
+    assert len(re.findall(r"갑 제\d+호증 \(\d+/\d+\)", full)) == 0
     cover = reader.pages[0].extract_text() or ""
     assert "갑 호 증" in cover
     assert NOTICE_KO in _norm(cover) and DISCLAIMER_KO in _norm(cover)
@@ -283,14 +297,28 @@ def test_no_full_account_or_resident_numbers_in_pdfs(case_env):
 # --- G1b --------------------------------------------------------------------------
 
 
+def _party(side: str):
+    from types import SimpleNamespace
+
+    return SimpleNamespace(
+        name=SAMPLE_FIELDS[f"{side}_name"],
+        address=SAMPLE_FIELDS.get(f"{side}_address"),
+        phone=SAMPLE_FIELDS.get(f"{side}_phone"),
+    )
+
+
 def _package_docs(case_env):
     case_id, package, _state = _run_to_package(case_env)
     files = case_state_mod.files_dir(case_id)
+    # INT-3 task 3: the checked ecourt text carries the parties block.
+    parties = pdf_compiler_mod.format_parties_text(
+        _party("creditor"), _party("debtor"))
     return package, {
         "content_proof.pdf": _pdf_text(files / "content_proof.pdf"),
         "exhibits.pdf": _pdf_text(files / "exhibits.pdf"),
         "evidence_list.pdf": _pdf_text(files / "evidence_list.pdf"),
-        "ecourt": (package["ecourt"]["claim_purpose"] + "\n"
+        "ecourt": (parties + "\n"
+                   + package["ecourt"]["claim_purpose"] + "\n"
                    + package["ecourt"]["claim_cause_payment_order"]),
     }
 

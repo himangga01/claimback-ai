@@ -66,6 +66,14 @@ class ConcurrentRun(Exception):
     pass
 
 
+class DeleteConflict(Exception):
+    """DELETE verified remnants (files in use) — retryable 409."""
+
+    def __init__(self, message: str):
+        super().__init__(message)
+        self.message = message
+
+
 # --- steps (contract 4장) ---------------------------------------------------------
 STEP_DEFS: List[Dict[str, Any]] = [
     {"key": "intake", "agent": "접수 담당", "group": "Forensic Visual", "model": None},
@@ -231,6 +239,31 @@ def _mark_skipped(step: StepState, note: str = "") -> None:
         step.note = note
 
 
+def _partial_spend(exc: BaseException) -> Dict[str, Any]:
+    """Spend riding on a failed call's ``_spark_partial`` (INT-3 B6)."""
+    part = getattr(exc, "_spark_partial", None) or {}
+    out: Dict[str, Any] = {}
+    for key in ("cost_usd", "latency_ms", "attempts",
+                "tokens_in", "tokens_out"):
+        try:
+            out[key] = part.get(key, 0) or 0
+        except AttributeError:
+            out[key] = 0
+    return out
+
+
+def _mark_hold_from_partial(step: StepState, exc: BaseException,
+                             extra: Optional[Dict[str, Any]] = None) -> None:
+    """Hold a step with the failed call's spend included (INT-3 B6)."""
+    part = _partial_spend(exc)
+    cost = float(part.get("cost_usd", 0.0) or 0.0)
+    latency = int(part.get("latency_ms", 0) or 0)
+    if extra:
+        cost += float(extra.get("cost_usd", 0.0) or 0.0)
+        latency += int(extra.get("latency_ms", 0) or 0)
+    _mark_hold(step, latency, cost=cost)
+
+
 def _reset_from(state: CaseState, key: str) -> None:
     """Reset a step and every later step back to waiting (costs kept)."""
     keys = [entry["key"] for entry in STEP_DEFS]
@@ -317,6 +350,28 @@ def hold_from_calc_or_draft(state: CaseState) -> bool:
     return all(reason.step in allowed for reason in state.hold_reasons)
 
 
+def hold_from_packaging_fixable(state: CaseState) -> bool:
+    """True for a packaging HOLD the user can fix (INT-3 B7 + task 3).
+
+    naming_violation (values) and g1b_failed (values or sentences):
+    PUT /facts re-enters at calculating, PUT /drafts (g1b only)
+    re-enters at draft approval, and POST /run retries packaging.
+    """
+    if state.state != "HOLD" or not state.hold_reasons:
+        return False
+    return all(reason.step == "packaging"
+               and reason.code in ("naming_violation", "g1b_failed")
+               for reason in state.hold_reasons)
+
+
+def hold_from_g1b(state: CaseState) -> bool:
+    """True when every hold reason is a packaging g1b_failed (task 3)."""
+    if state.state != "HOLD" or not state.hold_reasons:
+        return False
+    return all(reason.step == "packaging" and reason.code == "g1b_failed"
+               for reason in state.hold_reasons)
+
+
 # --- structural validators (agent outputs, real or fake) -------------------------------
 def _valid_box(box: Any) -> bool:
     if not isinstance(box, dict):
@@ -358,7 +413,7 @@ def validate_reading_items(items: Any) -> List[Dict[str, Any]]:
         side = _clean_nullable(raw.get("side"))
         if side is not None and side not in ("left", "right"):
             raise ValueError(f"items[{position}].side must be left|right")
-        cleaned.append({
+        entry: Dict[str, Any] = {
             "item_id": f"item{position}",
             "kind": str(kind),
             "text_verbatim": str(verbatim),
@@ -372,7 +427,17 @@ def validate_reading_items(items: Any) -> List[Dict[str, Any]]:
             "speaker": _clean_nullable(raw.get("speaker")),
             "side": side,
             "confidence": raw.get("confidence"),
-        })
+        }
+        # INT-3 (contract 6c, M4b 6.2): out-of-range boxes are flagged,
+        # not clamped; the flag (and video frame_ts) ride to the API.
+        if raw.get("box_warning") is not None:
+            entry["box_warning"] = str(raw.get("box_warning"))
+        if raw.get("frame_ts") is not None:
+            try:
+                entry["frame_ts"] = float(raw.get("frame_ts"))
+            except (TypeError, ValueError):
+                pass
+        cleaned.append(entry)
     return cleaned
 
 
@@ -466,7 +531,13 @@ def remove_case(case_id: str) -> None:
     if not lock.acquire(blocking=False):
         raise ConcurrentRun(case_id)
     try:
-        if not delete_case(case_id):
+        try:
+            deleted = delete_case(case_id)
+        except PermissionError as exc:
+            # INT-3 B2: locked files stay on disk — 409, not 200.
+            raise DeleteConflict(
+                "사건 파일이 사용 중이라 삭제하지 못했습니다.") from exc
+        if not deleted:
             raise CaseNotFound(case_id)
     finally:
         lock.release()
@@ -479,14 +550,23 @@ def _resume_step_for_hold(state: CaseState) -> Optional[str]:
     if all(r.step == "privacy" and r.code == "privacy_leak"
            for r in state.hold_reasons):
         return "privacy"
-    if not all(r.code == "internal_error" for r in state.hold_reasons):
+    # INT-3 B1/B7 + task 3: internal/config holds resume by step; a
+    # packaging naming/G1b hold retries packaging after the fix.
+    if all(r.code in ("internal_error", "config_missing_key")
+           for r in state.hold_reasons):
+        steps = {r.step for r in state.hold_reasons}
+        if steps <= {"reading", "organizing", "intake"}:
+            return "intake"
+        if steps <= {"calculating", "drafting", "verifying"}:
+            return "calc"
+        if steps <= {"packaging"}:
+            return "package"
+        if steps <= {"privacy"}:
+            return "privacy"
         return None
-    steps = {r.step for r in state.hold_reasons}
-    if steps <= {"reading", "organizing", "intake"}:
-        return "intake"
-    if steps <= {"calculating", "drafting", "verifying"}:
-        return "calc"
-    if steps <= {"packaging"}:
+    if all(r.step == "packaging"
+           and r.code in ("naming_violation", "g1b_failed")
+           for r in state.hold_reasons):
         return "package"
     return None
 
@@ -518,9 +598,11 @@ def load_segments(case_id: str) -> List[Dict[str, Any]]:
 
 def load_redactions(case_id: str) -> Dict[str, Any]:
     path = _redactions_path(case_id)
+    # INT-3 task 2 (contract 6c): before the privacy stage runs there
+    # is no file, and the leak check reads pending (never pass).
     empty: Dict[str, Any] = {
         "plan": [], "previews": [],
-        "leak_check": {"status": "pass", "findings": []},
+        "leak_check": {"status": "pending", "findings": []},
     }
     try:
         if not path.exists():
@@ -626,6 +708,7 @@ def run_case(case_id: str) -> CaseState:
                 "READING": "reading", "ORGANIZING": "organizing",
                 "CALCULATING": "calculating", "DRAFTING": "drafting",
                 "VERIFYING": "verifying", "PACKAGING": "packaging",
+                "PRIVACY": "privacy",
             }.get(state.state, "reading")
             try:
                 current = load_case(case_id)
@@ -633,6 +716,15 @@ def run_case(case_id: str) -> CaseState:
                     state = current
             except Exception:
                 pass
+            # INT-3 B6: a failed call's spend still lands on its step.
+            part = _partial_spend(exc)
+            if part.get("cost_usd") or part.get("latency_ms"):
+                running = next((entry for entry in state.steps
+                                if entry.status == "running"), None)
+                if running is not None:
+                    _mark_hold(running,
+                               int(part.get("latency_ms", 0) or 0),
+                               cost=float(part.get("cost_usd", 0.0) or 0.0))
             return _hold(state, step, "internal_error",
                          f"처리 중 오류가 생겨 멈췄습니다: {type(exc).__name__}")
     finally:
@@ -647,6 +739,10 @@ def _agent_failed_hold(
                       "기록된 응답이 없어 재생할 수 없습니다.")
     if isinstance(exc, deps.BudgetError):
         return _hold(state, step, "budget_exceeded", "예산 상한을 넘어 호출을 멈췄습니다.")
+    # INT-3 B1: a missing model key is its own resumable code (not schema).
+    if isinstance(exc, deps.MissingKeyError):
+        return _hold(state, step, "config_missing_key",
+                      "모델 호출 키가 없어 멈췄습니다.")
     if isinstance(exc, AgentSchemaError):
         return _hold(state, step, "schema_failed", str(exc) or "출력 형식이 맞지 않습니다.")
     raise exc
@@ -676,11 +772,38 @@ def _run_intake_flow(state: CaseState) -> CaseState:
     reading_cost = 0.0
     reading_attempts = 1
     hold_case = False
+    unexpected_failed = False
 
     def _read_one(record: Any) -> Dict[str, Any]:
+        # INT-3 B1: a missing key is its own case HOLD (config_missing_key,
+        # resumable); other unexpected errors (network, ...) ride raw and
+        # become a resumable internal_error when nothing was read — never
+        # a dead-end schema_failed.
+        # INT-3 B6: failures carry their spend ("partial") for the step cost.
         if record.kind == "video":
             return {"ex_id": record.ex_id, "skipped": True}
         started = time.perf_counter()
+
+        def _spend_of(output: Any) -> Dict[str, Any]:
+            if not isinstance(output, dict):
+                return {}
+            return {key: output.get(key, 0) or 0
+                    for key in ("cost_usd", "latency_ms", "attempts")}
+
+        def _failed(exc: BaseException,
+                    extras: Any = (),
+                    unexpected: bool = False) -> Dict[str, Any]:
+            part = _partial_spend(exc)
+            for extra in extras:
+                for key in ("cost_usd", "latency_ms", "attempts"):
+                    part[key] = (part.get(key, 0) or 0) + (extra.get(key, 0) or 0)
+            result: Dict[str, Any] = {
+                "ex_id": record.ex_id, "error": exc, "partial": part,
+                "latency_ms": int((time.perf_counter() - started) * 1000)}
+            if unexpected:
+                result["unexpected"] = True
+            return result
+
         try:
             output = reader(
                 case_id=state.case_id,
@@ -690,20 +813,20 @@ def _run_intake_flow(state: CaseState) -> CaseState:
                 meta_mode=deps.meta_mode(),
                 run_id=state.case_id,
             )
-        except (deps.FixtureNotFound, deps.BudgetError, AgentSchemaError) as exc:
-            return {"ex_id": record.ex_id, "error": exc,
-                    "latency_ms": int((time.perf_counter() - started) * 1000)}
+        except (deps.FixtureNotFound, deps.BudgetError, AgentSchemaError,
+                deps.MissingKeyError) as exc:
+            return _failed(exc)
         except Exception as exc:
-            return {"ex_id": record.ex_id,
-                    "error": AgentSchemaError(f"판독 중 오류: {type(exc).__name__}"),
-                    "latency_ms": int((time.perf_counter() - started) * 1000)}
+            return _failed(exc, unexpected=True)
         latency_ms = int((time.perf_counter() - started) * 1000)
         try:
             items = validate_reading_items(output.get("items"))
         except ValueError:
             # schema retry (fake agents): one more call, then evidence hold
+            first_spend = _spend_of(output)
+            retry_output: Any = None
             try:
-                output = reader(
+                retry_output = reader(
                     case_id=state.case_id,
                     evidence=record.model_dump(),
                     evidence_path=intake_mod.evidence_path(state, record),
@@ -711,18 +834,21 @@ def _run_intake_flow(state: CaseState) -> CaseState:
                     meta_mode=deps.meta_mode(),
                     run_id=state.case_id,
                 )
-                items = validate_reading_items(output.get("items"))
-                output["_retried"] = True
-            except (deps.FixtureNotFound, deps.BudgetError, AgentSchemaError) as exc:
-                return {"ex_id": record.ex_id, "error": exc, "latency_ms": latency_ms}
+                items = validate_reading_items(retry_output.get("items"))
+                retry_output["_retried"] = True
+                for key in ("cost_usd", "latency_ms", "attempts"):
+                    retry_output[key] = ((retry_output.get(key, 0) or 0)
+                                         + (first_spend.get(key, 0) or 0))
+                output = retry_output
+            except (deps.FixtureNotFound, deps.BudgetError, AgentSchemaError,
+                    deps.MissingKeyError) as exc:
+                return _failed(exc, (first_spend,))
             except ValueError as exc:
-                return {"ex_id": record.ex_id, "error": AgentSchemaError(str(exc)),
-                        "latency_ms": latency_ms}
+                err = AgentSchemaError(str(exc))
+                return _failed(err, (first_spend, _spend_of(retry_output)))
             except Exception as exc:
-                return {"ex_id": record.ex_id,
-                        "error": AgentSchemaError(
-                            f"판독 중 오류: {type(exc).__name__}"),
-                        "latency_ms": latency_ms}
+                return _failed(exc, (first_spend, _spend_of(retry_output)),
+                               unexpected=True)
         return {"ex_id": record.ex_id, "output": output, "items": items,
                 "latency_ms": latency_ms}
 
@@ -743,7 +869,10 @@ def _run_intake_flow(state: CaseState) -> CaseState:
             continue
         if "error" in result:
             exc = result["error"]
-            if isinstance(exc, (deps.FixtureNotFound, deps.BudgetError)):
+            part = result.get("partial") or {}
+            reading_cost += float(part.get("cost_usd", 0.0) or 0.0)
+            if isinstance(exc, (deps.FixtureNotFound, deps.BudgetError,
+                                deps.MissingKeyError)):
                 _agent_failed_hold(state, "reading", exc)
                 hold_case = True
                 substeps.append(SubStep(ex_id=ex_id, status="hold",
@@ -752,6 +881,9 @@ def _run_intake_flow(state: CaseState) -> CaseState:
             record.status = "hold"
             substeps.append(SubStep(ex_id=ex_id, status="hold",
                                     latency_ms=result["latency_ms"]))
+            if result.get("unexpected") or not isinstance(
+                    exc, AgentSchemaError):
+                unexpected_failed = True
             continue
         output = result["output"]
         attempts = int(output.get("attempts", 2 if output.get("_retried") else 1))
@@ -791,6 +923,10 @@ def _run_intake_flow(state: CaseState) -> CaseState:
                       ["evidence"], cost=reading_cost)
     if not readings:
         _mark_hold(reading_step, latency_ms, cost=reading_cost)
+        if unexpected_failed:
+            return _hold(state, "reading", "internal_error",
+                          "판독 중 오류가 생겨 멈췄습니다. 다시 실행해 주세요.",
+                          cost=reading_cost)
         return _hold(state, "reading", "schema_failed",
                       "판독에 성공한 증거가 없습니다.", cost=reading_cost)
     skipped_count = sum(1 for s in substeps if s.status == "skipped")
@@ -851,6 +987,7 @@ def _run_intake_flow(state: CaseState) -> CaseState:
             _partial = float(_result.get("cost", 0.0) or 0.0)
             _segments.append({"ex_id": _ex_id, "model": vision_mod.MODEL,
                               "objects": [], "status": "hold",
+                              "hold_scope": "nouns",
                               "error": str(_result["error"])[:200]})
             _vision_substeps.append(SubStep(
                 ex_id=_ex_id, status="hold",
@@ -896,8 +1033,12 @@ def _run_intake_flow(state: CaseState) -> CaseState:
         if _retry_error is not None:
             # L7: a failed signature retry is a hold with its message,
             # never a silent not_found; noun objects are still kept.
+            # INT-3 task 2: signatures are not redaction targets, so a
+            # retry-only hold (nouns fine) must not block redaction;
+            # the scope marker lets privacy tell it from noun failure.
             _segments.append({"ex_id": _ex_id, "model": vision_mod.MODEL,
                               "objects": _objects, "status": "hold",
+                              "hold_scope": "signature_retry",
                               "error": str(_retry_error)[:200]})
             _vision_cost += _cost
             _vision_substeps.append(SubStep(ex_id=_ex_id, status="hold",
@@ -942,6 +1083,9 @@ def _run_intake_flow(state: CaseState) -> CaseState:
     save_case(state)
     phase_started = time.perf_counter()
     all_ex_ids = [record.ex_id for record in state.evidence]
+    # INT-3 B6: the schema-retry spend (first call + retry) stays in
+    # the step cost on success and on every failure below.
+    first_org: Dict[str, Any] = {}
     try:
         output = organizer(
             case_id=state.case_id, readings=readings,
@@ -951,16 +1095,45 @@ def _run_intake_flow(state: CaseState) -> CaseState:
         try:
             review = validate_review(output.get("review"))
         except ValueError:
-            output = organizer(
-                case_id=state.case_id, readings=readings,
-                meta_mode=deps.meta_mode(), run_id=state.case_id,
-                ex_ids=all_ex_ids,
-            )
-            review = validate_review(output.get("review"))
+            first_org = {
+                "cost_usd": output.get("cost_usd", 0) or 0,
+                "latency_ms": output.get("latency_ms", 0) or 0,
+                "attempts": output.get("attempts", 0) or 0,
+            }
+            retry_out: Any = None
+            try:
+                retry_out = organizer(
+                    case_id=state.case_id, readings=readings,
+                    meta_mode=deps.meta_mode(), run_id=state.case_id,
+                    ex_ids=all_ex_ids,
+                )
+                review = validate_review(retry_out.get("review"))
+            except (deps.FixtureNotFound, deps.BudgetError, AgentSchemaError,
+                    deps.MissingKeyError) as exc:
+                _mark_hold_from_partial(organizing_step, exc,
+                                         first_org or None)
+                return _agent_failed_hold(state, "organizing", exc)
+            except ValueError as exc:
+                retry_spend = retry_out if isinstance(retry_out, dict) else {}
+                _mark_hold_from_partial(
+                    organizing_step, exc,
+                    {"cost_usd": (first_org.get("cost_usd", 0) or 0)
+                     + (retry_spend.get("cost_usd", 0) or 0),
+                     "latency_ms": (first_org.get("latency_ms", 0) or 0)
+                     + (retry_spend.get("latency_ms", 0) or 0)})
+                return _hold(state, "organizing", "schema_failed",
+                              f"사실 정리 출력 형식이 맞지 않습니다: {exc}")
+            output = retry_out
             output["_retried"] = True
-    except (deps.FixtureNotFound, deps.BudgetError, AgentSchemaError) as exc:
+            for key in ("cost_usd", "latency_ms", "attempts"):
+                output[key] = ((output.get(key, 0) or 0)
+                               + (first_org.get(key, 0) or 0))
+    except (deps.FixtureNotFound, deps.BudgetError, AgentSchemaError,
+            deps.MissingKeyError) as exc:
+        _mark_hold_from_partial(organizing_step, exc, first_org or None)
         return _agent_failed_hold(state, "organizing", exc)
     except ValueError as exc:
+        _mark_hold_from_partial(organizing_step, exc, first_org or None)
         return _hold(state, "organizing", "schema_failed",
                       f"사실 정리 출력 형식이 맞지 않습니다: {exc}")
     cost = float(output.get("cost_usd", 0.0) or 0.0)
@@ -1052,6 +1225,80 @@ def _hold_fields_from_messages(messages: List[str]) -> List[str]:
     return fields
 
 
+_CALC_FIELD_LABELS = {
+    "principal": "원금",
+    "interest_rate": "이율",
+    "loan_date": "대여일",
+    "due_date": "변제기",
+    "repayments": "변제 내역",
+    "creditor_name": "채권자 이름",
+    "debtor_name": "채무자 이름",
+    "creditor_address": "채권자 주소",
+    "debtor_address": "채무자 주소",
+    "creditor_phone": "채권자 연락처",
+    "debtor_phone": "채무자 연락처",
+}
+
+
+def _confirmed_field_for(loc: Any) -> str:
+    """pydantic error location -> confirmed-facts field name (B5)."""
+    parts = tuple(str(p) for p in (loc or ()))
+    if not parts:
+        return ""
+    head = parts[0]
+    if head == "principal_amount":
+        return "principal"
+    if head == "agreed_interest_rate":
+        return "interest_rate"
+    if head in ("loan_date", "due_date", "repayments", "transaction_kind"):
+        return head
+    if head in ("creditor", "debtor") and len(parts) > 1:
+        sub = {"name": "name", "address": "address",
+               "phone": "phone"}.get(parts[1], "")
+        if sub:
+            return f"{head}_{sub}"
+    return ""
+
+
+def _calc_value_hold(state: CaseState, exc: BaseException) -> CaseState:
+    """missing_facts HOLD for bad confirmed values (INT-3 B5).
+
+    The raw error text (pydantic "validation error", Decimal
+    "ConversionSyntax", ...) never reaches the HOLD message: only
+    field labels and model-level Korean notes are shown.
+    """
+    fields: List[str] = []
+    notes: List[str] = []
+    errors = None
+    try:
+        errors = exc.errors() if callable(getattr(exc, "errors", None)) else None
+    except Exception:
+        errors = None
+    if errors:
+        for err in errors:
+            if not isinstance(err, dict):
+                continue
+            loc = tuple(err.get("loc", ()))
+            name = _confirmed_field_for(loc)
+            if name and name not in fields:
+                fields.append(name)
+            if not loc:
+                msg = str(err.get("msg", ""))
+                if any("\uac00" <= ch <= "\ud7a3" for ch in msg):
+                    if msg not in notes:
+                        notes.append(msg)
+    if notes:
+        message = " ".join(notes)
+        if not fields:
+            fields = ["due_date"]
+    elif fields:
+        labels = [_CALC_FIELD_LABELS.get(name, name) for name in fields]
+        message = f"확정값을 확인해 주세요: {', '.join(labels)}."
+    else:
+        message = "입력값이 맞지 않습니다."
+    return _hold(state, "calculating", "missing_facts", message, fields)
+
+
 def _build_inputs_for_drafter(
     state: CaseState,
     confirmed: Dict[str, Any],
@@ -1122,7 +1369,7 @@ def _run_calc_flow(state: CaseState) -> CaseState:
             target_date=as_of,
         )
     except ValueError as exc:
-        return _hold(state, "calculating", "missing_facts", str(exc) or "입력값이 맞지 않습니다.")
+        return _calc_value_hold(state, exc)
     latency_ms = int((time.perf_counter() - phase_started) * 1000)
     if verification.missing_requirements:
         for message in verification.missing_requirements:
@@ -1172,6 +1419,15 @@ def _run_calc_flow(state: CaseState) -> CaseState:
     draft_cost = 0.0
     draft_attempts = 0
     draft_latency = 0
+
+    def _draft_hold_with_spend(exc: BaseException) -> None:
+        # INT-3 B6: attempts so far plus the failed call's spend.
+        part = _partial_spend(exc)
+        _mark_hold(drafting_step,
+                   draft_latency + int(part.get("latency_ms", 0) or 0),
+                   cost=(draft_cost
+                         + float(part.get("cost_usd", 0.0) or 0.0)))
+
     try:
         for attempt in range(3):
             try:
@@ -1180,7 +1436,9 @@ def _run_calc_flow(state: CaseState) -> CaseState:
                     findings=feedback, meta_mode=deps.meta_mode(),
                     run_id=state.case_id,
                 )
-            except (deps.FixtureNotFound, deps.BudgetError, AgentSchemaError) as exc:
+            except (deps.FixtureNotFound, deps.BudgetError, AgentSchemaError,
+                    deps.MissingKeyError) as exc:
+                _draft_hold_with_spend(exc)
                 return _agent_failed_hold(state, "drafting", exc)
             draft_attempts += int(output.get("attempts", 1) or 1)
             draft_latency += int(output.get("latency_ms", 0) or 0)
@@ -1197,21 +1455,42 @@ def _run_calc_flow(state: CaseState) -> CaseState:
             try:
                 sentences = validate_draft_sentences(output.get("sentences"), ex_ids)
             except ValueError:
+                retry_out: Any = None
                 try:
-                    output = drafter(
+                    retry_out = drafter(
                         case_id=state.case_id, draft_inputs=draft_inputs,
                         findings=feedback, meta_mode=deps.meta_mode(),
                         run_id=state.case_id,
                     )
-                    sentences = validate_draft_sentences(output.get("sentences"), ex_ids)
-                    draft_attempts += 1
+                    sentences = validate_draft_sentences(
+                        retry_out.get("sentences"), ex_ids)
+                    draft_attempts += int(retry_out.get("attempts", 1) or 1)
+                    draft_latency += int(retry_out.get("latency_ms", 0) or 0)
+                    draft_cost += float(retry_out.get("cost_usd", 0.0) or 0.0)
+                    _audit(state, "drafting", None,
+                           str(retry_out.get("model") or "muse-spark-1.3"),
+                           retry_out.get("prompt_version"),
+                           sha_short(json.dumps(draft_inputs, ensure_ascii=False,
+                                                sort_keys=True)
+                                     + json.dumps(feedback or [], ensure_ascii=False)),
+                           int(retry_out.get("latency_ms", 0) or 0),
+                           int(retry_out.get("tokens_in", 0) or 0),
+                           int(retry_out.get("tokens_out", 0) or 0),
+                           float(retry_out.get("cost_usd", 0.0) or 0.0))
                 except (deps.FixtureNotFound, deps.BudgetError,
-                        AgentSchemaError) as exc:
+                        AgentSchemaError, deps.MissingKeyError) as exc:
+                    _draft_hold_with_spend(exc)
                     return _agent_failed_hold(state, "drafting", exc)
                 except ValueError as exc:
+                    if isinstance(retry_out, dict):
+                        draft_attempts += int(retry_out.get("attempts", 1) or 1)
+                        draft_latency += int(retry_out.get("latency_ms", 0) or 0)
+                        draft_cost += float(retry_out.get("cost_usd", 0.0) or 0.0)
+                    _mark_hold(drafting_step, draft_latency, cost=draft_cost)
                     return _hold(state, "drafting", "schema_failed",
                                   f"문안 출력 형식이 맞지 않습니다: {exc}")
             state.state = "VERIFYING"
+            save_case(state)  # INT-3 B3: polling must see VERIFYING
             g1a = deps.check_g1a_case(sentences, allowed, parties, ex_ids)
             g3 = deps.check_g3_case(sentences, ex_ids)
             naming = deps.check_naming_case(sentences)
@@ -1393,6 +1672,28 @@ def _run_package_flow(state: CaseState) -> CaseState:
         return _hold(state, "packaging", "naming_violation", str(exc))
     latency_ms = int((time.perf_counter() - phase_started) * 1000)
     state.package = package
+    g1b_failed = [entry for entry in package.get("gate_results", []) or []
+                  if entry.get("gate") == "G1b"
+                  and entry.get("status") == "fail"]
+    if g1b_failed:
+        # INT-3 task 3: values/names/leak failures hold after packaging
+        # (files stay for inspection); fix, then POST /run repackages.
+        docs = sorted({str(finding.get("field", ""))
+                       for entry in g1b_failed
+                       for finding in entry.get("findings", []) or []
+                       if finding.get("field")})
+        count = sum(len(entry.get("findings", []) or [])
+                    for entry in g1b_failed)
+        where = "(" + ", ".join(docs) + ")" if docs else ""
+        _mark_hold(packaging_step, latency_ms, cost=0.0)
+        _audit(state, "packaging", None, None, None,
+               sha_short(json.dumps(sentences, ensure_ascii=False,
+                                    sort_keys=True)),
+               latency_ms, 0, 0, 0.0)
+        return _hold(state, "packaging", "g1b_failed",
+                      f"최종 검사(G1b)를 통과하지 못했습니다"
+                      f"({count}건{where}).",
+                      docs)
     _audit(state, "packaging", None, None, None,
            sha_short(json.dumps(sentences, ensure_ascii=False, sort_keys=True)),
            latency_ms, 0, 0, 0.0)
@@ -1410,8 +1711,13 @@ def _run_package_flow(state: CaseState) -> CaseState:
 REQUIRED_FACT_FIELDS = (
     "creditor_name", "debtor_name", "principal", "loan_date", "due_date",
 )
+# INT-3 task 7: amount errors carry no internal key; the screen matches
+# the field name from missing_requirements instead of the message text.
+AMOUNT_ERROR_MESSAGE = "금액은 숫자로 적어 주세요(예: 5,000,000원)"
+AMOUNT_POSITIVE_MESSAGE = "금액은 0보다 크게 적어 주세요(예: 5,000,000원)"
 KNOWN_FACT_FIELDS = tuple(REVIEW_FIELD_ORDER)
-VALID_ROLES = ("loan_transfer", "repayment", "other")
+# INT-3 task 3: loan_agreement (차용증) joins the evidence roles.
+VALID_ROLES = ("loan_transfer", "repayment", "loan_agreement", "other")
 
 
 def _has_fullwidth_digits(text: str) -> bool:
@@ -1442,16 +1748,22 @@ def _validate_facts_body(
         raise BadRequest("bad_request", "evidence_roles가 올바르지 않습니다.")
     if not isinstance(highlight, list):
         raise BadRequest("bad_request", "highlight가 올바르지 않습니다.")
-    for name in REQUIRED_FACT_FIELDS:
-        raw = fields.get(name)
-        if raw is None or (isinstance(raw, str) and not raw.strip()):
-            raise BadRequest("missing_facts", f"확정값에 {name}이(가) 없습니다.",
-                             missing=[name])
+    # INT-3 B5: report every missing required field (not just the first).
+    absent = [name for name in REQUIRED_FACT_FIELDS
+              if fields.get(name) is None
+              or (isinstance(fields.get(name), str)
+                  and not str(fields.get(name)).strip())]
+    if absent:
+        raise BadRequest("missing_facts",
+                         f"확정값에 {', '.join(absent)}이(가) 없습니다.",
+                         missing=absent)
     principal = str(fields.get("principal", "")).strip()
-    if _has_fullwidth_digits(principal):
-        raise BadRequest("bad_request", "principal에 전각 숫자를 쓸 수 없습니다.")
-    if not _is_ascii_digits(principal):
-        raise BadRequest("bad_request", "principal은 숫자 문자열이어야 합니다.")
+    if _has_fullwidth_digits(principal) or not _is_ascii_digits(principal):
+        raise BadRequest("bad_request", AMOUNT_ERROR_MESSAGE,
+                         missing=["principal"])
+    if int(principal.replace(",", "")) <= 0:
+        raise BadRequest("bad_request", AMOUNT_POSITIVE_MESSAGE,
+                         missing=["principal"])
     for name in ("loan_date", "due_date"):
         try:
             date.fromisoformat(str(fields.get(name)).strip())
@@ -1468,6 +1780,8 @@ def _validate_facts_body(
             raise BadRequest("bad_request", "interest_rate는 숫자 또는 null이어야 합니다.")
         if parsed.is_nan() or parsed.is_infinite():
             raise BadRequest("bad_request", "interest_rate는 숫자 또는 null이어야 합니다.")
+        if parsed < 0:
+            raise BadRequest("bad_request", "interest_rate는 0 이상이어야 합니다.")
     kind = fields.get("transaction_kind", "civil")
     if str(kind).strip().lower() not in ("civil", "commercial"):
         raise BadRequest("bad_request", "transaction_kind는 civil|commercial이어야 합니다.")
@@ -1484,10 +1798,12 @@ def _validate_facts_body(
         except (ValueError, AttributeError):
             raise BadRequest("bad_request", "repayments.date는 YYYY-MM-DD여야 합니다.")
         amount = str(entry.get("amount", "")).strip()
-        if _has_fullwidth_digits(amount):
-            raise BadRequest("bad_request", "repayments.amount에 전각 숫자를 쓸 수 없습니다.")
-        if not _is_ascii_digits(amount):
-            raise BadRequest("bad_request", "repayments.amount는 숫자 문자열이어야 합니다.")
+        if _has_fullwidth_digits(amount) or not _is_ascii_digits(amount):
+            raise BadRequest("bad_request", AMOUNT_ERROR_MESSAGE,
+                             missing=["repayments"])
+        if int(amount.replace(",", "")) <= 0:
+            raise BadRequest("bad_request", AMOUNT_POSITIVE_MESSAGE,
+                             missing=["repayments"])
     known_ex = {record.ex_id for record in state.evidence}
     for ex_id, role in roles.items():
         if ex_id not in known_ex:
@@ -1535,7 +1851,9 @@ def apply_facts(case_id: str, body: Any) -> CaseState:
         raise ConcurrentRun(case_id)
     try:
         state = get_case(case_id)
-        if state.state != "CHECKPOINT_1" and not hold_from_calc_or_draft(state):
+        if (state.state != "CHECKPOINT_1"
+                and not hold_from_calc_or_draft(state)
+                and not hold_from_packaging_fixable(state)):
             raise WrongState("wrong_state",
                              f"지금 상태({state.state})에서는 확정값을 저장할 수 없습니다.")
         cleaned = _validate_facts_body(body, state)
@@ -1566,7 +1884,10 @@ def apply_drafts(case_id: str, body: Any) -> Dict[str, Any]:
         raise ConcurrentRun(case_id)
     try:
         state = get_case(case_id)
-        if state.state != "DRAFT_APPROVAL":
+        # INT-3 task 3: a g1b_failed HOLD re-enters here for sentence
+        # fixes (naming violations need PUT /facts, not sentences).
+        from_g1b = state.state == "HOLD" and hold_from_g1b(state)
+        if state.state != "DRAFT_APPROVAL" and not from_g1b:
             raise WrongState("wrong_state",
                              f"지금 상태({state.state})에서는 문장을 고칠 수 없습니다.")
         if not isinstance(body, dict) or "sentences" not in body:
@@ -1658,6 +1979,14 @@ def apply_drafts(case_id: str, body: Any) -> Dict[str, Any]:
         drafts["gate_results"] = [gate_map[name] for name in order if name in gate_map]
         drafts["sentences"] = ordered
         state.drafts = drafts
+        if from_g1b:
+            state.hold_reasons = [
+                reason for reason in state.hold_reasons
+                if not (reason.step == "packaging"
+                        and reason.code == "g1b_failed")]
+            if not state.hold_reasons:
+                _reset_from(state, "packaging")
+                state.state = "DRAFT_APPROVAL"
         state.meta_mode = deps.meta_mode()
         save_case(state)
         return drafts

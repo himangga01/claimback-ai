@@ -227,7 +227,14 @@ def save_case(state: CaseState) -> CaseState:
 
 
 def delete_case(case_id: str) -> bool:
-    """Remove the whole case directory (uploads + generated files)."""
+    """Remove the whole case directory (uploads + generated files).
+
+    INT-3 B2: verify the directory is really gone and retry a few
+    times (an open file on Windows fails the first pass). Returns
+    False only when there is nothing to delete; raises PermissionError
+    (locked files) or OSError when remnants survive, so DELETE never
+    reports success while evidence stays on disk.
+    """
     if not valid_case_id(case_id):
         return False
     try:
@@ -238,5 +245,18 @@ def delete_case(case_id: str) -> bool:
         return False
     import shutil
 
+    last_error: Optional[BaseException] = None
+    for attempt in range(4):
+        try:
+            shutil.rmtree(root, ignore_errors=False)
+        except (PermissionError, OSError) as exc:
+            last_error = exc
+        if not root.exists():
+            return True
+        time.sleep(0.05 * (attempt + 1))
     shutil.rmtree(root, ignore_errors=True)
-    return True
+    if not root.exists():
+        return True
+    if isinstance(last_error, PermissionError):
+        raise PermissionError(f"case files are in use: {case_id!r}")
+    raise OSError(f"cannot remove case directory: {case_id!r}")

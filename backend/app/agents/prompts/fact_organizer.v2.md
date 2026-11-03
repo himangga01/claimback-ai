@@ -41,7 +41,8 @@
   `amount_mention`(금액 언급), `repay_promise`(갚겠다는 약속),
   `reminder`(독촉), `other`(기타). 목록 밖의 태그를 쓰지 않는다.
 - 증거마다 Suggested 역할을 정한다: `loan_transfer`(대여 이체),
-  `repayment`(변제 입금), `other`(기타). 목록 밖의 역할을 쓰지 않는다.
+  `repayment`(변제 입금), `loan_agreement`(차용증 문서),
+  `other`(기타). 목록 밖의 역할을 쓰지 않는다.
 - 판독 원문을 `fields`·`conflicts`·`questions`에 되풀이하지 않는다.
   발화 원문은 `utterances[].text`에만 넣는다.
 
