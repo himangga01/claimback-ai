@@ -43,6 +43,21 @@ def field_summary(exc: ValidationError) -> str:
     return ", ".join(unique[:12])
 
 
+PARTIAL_KEYS = ("cost_usd", "latency_ms", "attempts",
+                "tokens_in", "tokens_out")
+
+
+def merge_partial(total: Dict[str, Any], exc: BaseException) -> Dict[str, Any]:
+    """Add an exception's ``_spark_partial`` spend into totals (INT-3 B6)."""
+    part = getattr(exc, "_spark_partial", None) or {}
+    for key in PARTIAL_KEYS:
+        try:
+            total[key] = (total.get(key, 0) or 0) + (part.get(key, 0) or 0)
+        except (TypeError, AttributeError):
+            continue
+    return total
+
+
 def run_spark_json(
     *,
     model: str,
@@ -59,7 +74,9 @@ def run_spark_json(
     tokens_in/out, cost_usd, and the final response body. Raises
     IncompleteResponse (after one 8,000-token retry), FixtureNotFound,
     or BudgetError. Costs always come from this call's own response
-    usage so parallel calls never mix (C9).
+    usage so parallel calls never mix (C9). A second IncompleteResponse
+    or a parse failure carries the spend so far as ``_spark_partial``
+    (INT-3 B6).
     """
     client = deps.MetaClient(mode=meta_mode, run_id=run_id)
     info: Dict[str, Any] = {
@@ -70,35 +87,64 @@ def run_spark_json(
     latencies: list = []
     attempts = 0
     body: Any = None
+
+    def _partial() -> Dict[str, Any]:
+        tokens_in = 0
+        tokens_out = 0
+        for item in bodies:
+            usage = deps.extract_usage(item)
+            tokens_in += int(usage.get("input_tokens", 0) or 0)
+            tokens_out += int(usage.get("output_tokens", 0) or 0)
+        return {
+            "latency_ms": sum(latencies),
+            "attempts": attempts,
+            "tokens_in": tokens_in,
+            "tokens_out": tokens_out,
+            "cost_usd": round(
+                sum(deps.estimate_cost_from_body(model, "responses", item)
+                    for item in bodies), 6),
+        }
+
     try:
-        started = time.perf_counter()
         try:
-            body = client.responses_create(
-                model, payload, max_output_tokens=int(max_output_tokens),
-                text_format=text_format,
-                reasoning={"effort": reasoning_effort},
-            )
-        except deps.IncompleteResponse as exc:
-            truncated = getattr(exc, "body", None)
-            if truncated is not None:
-                bodies.append(truncated)
-            raise
-        finally:
-            latencies.append(int((time.perf_counter() - started) * 1000))
-            attempts += 1
-        bodies.append(body)
-    except deps.IncompleteResponse:
-        started = time.perf_counter()
-        try:
-            body = client.responses_create(
-                model, payload, max_output_tokens=8000,
-                text_format=text_format,
-                reasoning={"effort": reasoning_effort},
-            )
-        finally:
-            latencies.append(int((time.perf_counter() - started) * 1000))
-            attempts += 1
-        bodies.append(body)
+            started = time.perf_counter()
+            try:
+                body = client.responses_create(
+                    model, payload, max_output_tokens=int(max_output_tokens),
+                    text_format=text_format,
+                    reasoning={"effort": reasoning_effort},
+                )
+            except deps.IncompleteResponse as exc:
+                truncated = getattr(exc, "body", None)
+                if truncated is not None:
+                    bodies.append(truncated)
+                raise
+            finally:
+                latencies.append(int((time.perf_counter() - started) * 1000))
+                attempts += 1
+            bodies.append(body)
+        except deps.IncompleteResponse:
+            started = time.perf_counter()
+            try:
+                body = client.responses_create(
+                    model, payload, max_output_tokens=8000,
+                    text_format=text_format,
+                    reasoning={"effort": reasoning_effort},
+                )
+            except deps.IncompleteResponse as exc:
+                truncated = getattr(exc, "body", None)
+                if truncated is not None:
+                    bodies.append(truncated)
+                raise
+            finally:
+                latencies.append(int((time.perf_counter() - started) * 1000))
+                attempts += 1
+            bodies.append(body)
+    except deps.IncompleteResponse as exc:
+        # INT-3 B6: the second response broke too — the spend so far
+        # still counts. Callers forward it to the step cost.
+        exc._spark_partial = _partial()  # noqa: SLF001
+        raise
     finally:
         try:
             client.close()
@@ -106,17 +152,15 @@ def run_spark_json(
             pass
     info["attempts"] = attempts
     assert body is not None
-    tokens_in = 0
-    tokens_out = 0
-    for item in bodies:
-        usage = deps.extract_usage(item)
-        tokens_in += int(usage.get("input_tokens", 0) or 0)
-        tokens_out += int(usage.get("output_tokens", 0) or 0)
-    info["latency_ms"] = sum(latencies)
-    info["tokens_in"] = tokens_in
-    info["tokens_out"] = tokens_out
+    partial = _partial()
+    info["latency_ms"] = partial["latency_ms"]
+    info["tokens_in"] = partial["tokens_in"]
+    info["tokens_out"] = partial["tokens_out"]
     info["body"] = body
-    info["cost_usd"] = round(
-        sum(deps.estimate_cost_from_body(model, "responses", item)
-            for item in bodies), 6)
-    return parse_json_text(deps.extract_output_text(body)), info
+    info["cost_usd"] = partial["cost_usd"]
+    try:
+        return parse_json_text(deps.extract_output_text(body)), info
+    except (ValueError, AttributeError, TypeError) as exc:
+        # INT-3 B6: a parse failure spends the call all the same.
+        exc._spark_partial = dict(partial)  # noqa: SLF001
+        raise

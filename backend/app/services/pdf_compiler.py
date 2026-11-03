@@ -130,6 +130,18 @@ def format_ecourt_fact(text: str) -> str:
     return f"{prefix}{body}".strip()
 
 
+def format_parties_text(creditor, debtor) -> str:
+    """Ecourt parties block (real names; INT-3 task 3 checks this text)."""
+    return (
+        f"채권자: {creditor.name}\n"
+        f"주소: {creditor.address or '주소 불명'}\n"
+        f"연락처: {creditor.phone or '연락처 불명'}\n\n"
+        f"채무자: {debtor.name}\n"
+        f"주소: {debtor.address or '주소 불명'}\n"
+        f"연락처: {debtor.phone or '연락처 불명'}"
+    )
+
+
 def ensure_numbered_facts(sentences) -> List[str]:
     """Prefix kana labels when missing; keep existing labels (K6)."""
     out: List[str] = []
@@ -770,6 +782,7 @@ class KoreanLegalDocumentCompiler:
         """
         p = loan_fact.creditor
         d = loan_fact.debtor
+        parties_text = format_parties_text(p, d)
 
         base_date = as_of
         remaining_str = f"{_fmt_won(verification.reconciled_amount)}"
@@ -781,15 +794,6 @@ class KoreanLegalDocumentCompiler:
         else:
             interest_str = "____"
             total_str = "____"
-
-        parties_text = (
-            f"채권자: {p.name}\n"
-            f"주소: {p.address or '주소 불명'}\n"
-            f"연락처: {p.phone or '연락처 불명'}\n\n"
-            f"채무자: {d.name}\n"
-            f"주소: {d.address or '주소 불명'}\n"
-            f"연락처: {d.phone or '연락처 불명'}"
-        )
 
         sentence = ""
         if verification.calculation is not None:

@@ -86,7 +86,9 @@ def test_fix1_d2_different_parens_conflict():
     assert any(q["field"] == "creditor_name" for q in review["questions"])
 
 
-def test_fix1_d2_dropped_paren_still_passes():
+def test_fix1_d2_dropped_paren_conflicts():
+    # INT-3 task 6: one-directional containment — a value that drops
+    # the source's parens ("(SAMPLE)", "(주)") now conflicts.
     readings = [_reading("EX6", [
         _item("item4", "party_name", "서가온(SAMPLE)")])]
     review = _review(
@@ -94,7 +96,21 @@ def test_fix1_d2_dropped_paren_still_passes():
           "sources": [{"ex_id": "EX6", "item_id": "item4"}],
           "conflict": False, "null_reason": None}],
         readings)
-    assert _field(review, "creditor_name")["conflict"] is False
+    assert _field(review, "creditor_name")["conflict"] is True
+    assert any("creditor_name" in c["fields"] for c in review["conflicts"])
+    assert any(q["field"] == "creditor_name" for q in review["questions"])
+
+
+def test_int3_single_char_source_conflicts():
+    # INT-3 task 6: a one-character source never passes, either way.
+    readings = [_reading("EX6", [
+        _item("item4", "party_name", "가")])]
+    review = _review(
+        [{"field": "creditor_name", "value": "서가온(SAMPLE)",
+          "sources": [{"ex_id": "EX6", "item_id": "item4"}],
+          "conflict": False, "null_reason": None}],
+        readings)
+    assert _field(review, "creditor_name")["conflict"] is True
 
 
 # --- D9: header labels + containment ---------------------------------------------
@@ -266,3 +282,11 @@ def test_fix1_replayed_documents_keep_sample_mark(replay_env):
     cause = package["ecourt"]["claim_cause_payment_order"]
     assert "채권자" in cause and "채무자" in cause
     assert "(SAMPLE)" not in cause
+    # INT-3 task 4: the content proof keeps the (SAMPLE) parens.
+    from pypdf import PdfReader
+
+    letter = PdfReader(
+        str(case_state_mod.files_dir(case_id) / "content_proof.pdf"))
+    letter_text = "\n".join((page.extract_text() or "")
+                            for page in letter.pages)
+    assert "(SAMPLE)" in letter_text

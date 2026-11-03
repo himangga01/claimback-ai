@@ -50,6 +50,8 @@ class GateResult(BaseModel):
     gate: str = Field(..., description="게이트 이름")
     status: Literal["pass", "fail"] = Field(..., description="통과 여부")
     findings: List[Finding] = Field(default_factory=list, description="지적 목록")
+    # INT-3 task 3: pass-grade notes (e.g. excluded redacted copies).
+    notes: List[str] = Field(default_factory=list, description="참고 메모")
 
 
 _HANJA_NUM_MAP: Dict[str, str] = {

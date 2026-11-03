@@ -398,14 +398,6 @@ _NAME_DOCS: List[Tuple[str, Tuple[str, ...]]] = [
     ("debtor_name", (CONTENT_DOC, EVIDENCE_LIST_DOC, ECOURT_DOC)),
 ]
 
-# M5-fix2: ecourt facts use role terms, so either the real name or the
-# role term satisfies the ecourt name check.
-_ECOURT_NAME_ALIASES = {
-    "creditor_name": ("채권자",),
-    "debtor_name": ("채무자",),
-}
-
-
 def _required_docs(field: str, table: List[Tuple[str, Tuple[str, ...]]]) -> Tuple[str, ...]:
     for prefix, docs in table:
         if prefix.endswith("["):
@@ -565,14 +557,10 @@ def check_g1b(
             continue
 
         def _name_ok(doc: str) -> bool:
-            text = texts.get(doc, "")
-            if needle in text:
-                return True
-            if doc == ECOURT_DOC:
-                for alias in _ECOURT_NAME_ALIASES.get(str(field), ()):
-                    if alias and alias in text:
-                        return True
-            return False
+            # INT-3 task 3: ecourt carries the parties block (real names),
+            # so the old 채권자/채무자 alias pass is gone — a name check
+            # that fixed phrases always satisfy checks nothing.
+            return needle in texts.get(doc, "")
 
         missing = [doc for doc in required if not _name_ok(doc)]
         if missing:

@@ -72,6 +72,7 @@ const GATE_KO = {
 const ROLE_OPTIONS = [
   ["loan_transfer", "대여 이체"],
   ["repayment", "변제 입금"],
+  ["loan_agreement", "차용증"],
   ["other", "기타"],
 ];
 

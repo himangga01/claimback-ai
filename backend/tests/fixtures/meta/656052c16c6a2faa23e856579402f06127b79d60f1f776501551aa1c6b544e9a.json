@@ -1,0 +1,296 @@
+{
+  "latency_ms": 7128,
+  "request": {
+    "endpoint": "responses",
+    "model": "muse-spark-1.2",
+    "params": {
+      "max_output_tokens": 4000,
+      "reasoning": {
+        "effort": "low"
+      },
+      "store": false,
+      "text_format": {
+        "name": "reading",
+        "schema": {
+          "additionalProperties": false,
+          "properties": {
+            "items": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "box": {
+                    "items": {
+                      "type": "number"
+                    },
+                    "maxItems": 4,
+                    "minItems": 4,
+                    "type": "array"
+                  },
+                  "confidence": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "kind": {
+                    "enum": [
+                      "utterance",
+                      "amount",
+                      "date",
+                      "party_name",
+                      "account_number",
+                      "id_number",
+                      "address",
+                      "phone",
+                      "label",
+                      "header"
+                    ],
+                    "type": "string"
+                  },
+                  "normalized": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "side": {
+                    "enum": [
+                      "left",
+                      "right",
+                      null
+                    ],
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "speaker": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "text_verbatim": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "text_verbatim",
+                  "normalized",
+                  "box",
+                  "speaker",
+                  "side",
+                  "confidence"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "items"
+          ],
+          "type": "object"
+        },
+        "strict": true,
+        "type": "json_schema"
+      }
+    },
+    "payload": [
+      {
+        "content": [
+          {
+            "text": "# 판독 담당 프롬프트 v2\n\n버전: reader.v2 (M4b 비교에서 드러난 한글 금액 누락을 고침)\n\n너는 ClaimBack-AI의 판독 담당이다. 보이는 것만 그대로 옮겨 적는 기록원이다.\n\n## 할 일\n\n- 입력 이미지(또는 PDF)의 모든 글 항목을 빠짐없이 읽는다.\n- 항목마다 `kind`, `text_verbatim`, `normalized`, `box`, `speaker`,\n  `side`, `confidence`를 낸다.\n- `kind`는 다음 중 하나: `utterance`(대화 말풍선, 말풍선 단위),\n  `amount`(금액), `date`(날짜), `party_name`(사람·상호 이름),\n  `account_number`(계좌번호), `id_number`(주민번호 등 식별번호),\n  `address`(주소), `phone`(전화번호), `label`(칸 제목), `header`(머리말).\n- 문장 안에 들어 있는 금액·날짜도 말풍선·칸 항목과 별개의 항목으로 낸다.\n- `text_verbatim`은 원문 그대로(띄어쓰기·기호 포함) 옮긴다.\n- `normalized`는 금액·날짜·전화·계좌에만 쓴다. 금액은 쉼표·단위 없는 숫자만,\n  날짜는 연도가 보일 때만 `YYYY-MM-DD` 형식, 전화·계좌는 숫자·하이픈만.\n  금액이 한글로만 쓰였으면 아라비아 숫자로 환산하여 쓴다.\n  연도가 보이지 않는 날짜는 `null`로 둔다(연도를 지어내지 않는다).\n  그 밖의 항목은 `null`로 둔다.\n- 빈 값은 진짜 `null`로 낸다. 문자열 `\"null\"`을 쓰지 않는다.\n- `box`는 항목을 둘러싸는 가장 작은 박스를 축별 0~1000 정규화 좌표\n  `[x1, y1, x2, y2]`로 낸다.\n- `speaker`는 말풍선을 보낸 사람의 표시 그대로, 없으면 `null`.\n- `side`는 말풍선의 화면 위치가 왼쪽이면 `left`, 오른쪽이면 `right`.\n  말풍선이 아니면 `null`.\n- `confidence`는 0~1 사이의 확신도.\n\n## 하지 않을 일\n\n- 의미를 해석하거나 보이지 않는 값을 추측하지 않는다. 안 보이면 항목을 만들지 않는다.\n- 사건의 결론이나 전망을 단정하는 말을 쓰지 않는다.\n- 발화에 법적 성격을 붙이지 않는다. 갚겠다는 말도 원문 그대로 옮길 뿐이다.\n- 자격이나 공직을 내세우는 말을 출력에 쓰지 않는다.\n- 법률 상담을 하지 않는다.\n\n## 출력\n\n- Reading JSON 스키마만 따른다.\n  `{\"items\": [{\"kind\", \"text_verbatim\", \"normalized\", \"box\", \"speaker\", \"side\", \"confidence\"}]}`\n- JSON 외의 글자를 출력하지 않는다.\n",
+            "type": "input_text"
+          },
+          {
+            "image_url": "sha256:7de2ac604b856eb14056c2425dd0010fa08de65a509f77dfe43e6bb792a4c7c4:image/png",
+            "type": "input_image"
+          }
+        ],
+        "role": "user"
+      }
+    ]
+  },
+  "response": {
+    "access_programs": null,
+    "background": false,
+    "completed_at": 1793695955.0,
+    "conversation": null,
+    "created_at": 1793695955.0,
+    "error": null,
+    "id": "resp_6ae9a0d3f93ca764b1be418f",
+    "incomplete_details": null,
+    "instructions": null,
+    "max_output_tokens": 4000,
+    "max_tool_calls": null,
+    "metadata": null,
+    "model": "muse-spark-1.2",
+    "moderation": null,
+    "object": "response",
+    "output": [
+      {
+        "content": null,
+        "encrypted_content": "<redacted>",
+        "id": "rs_6ae9a0d3f93ca764b1be418f:rs_a2b02b0e-4caa-4203-a069-e2e1796d4811",
+        "status": "completed",
+        "summary": [],
+        "type": "reasoning"
+      },
+      {
+        "content": [
+          {
+            "annotations": [],
+            "logprobs": [],
+            "text": "{\"items\": [{\"box\": [415, 5, 585, 20], \"confidence\": 0.99, \"kind\": \"header\", \"normalized\": null, \"side\": null, \"speaker\": null, \"text_verbatim\": \"SAMPLE / 데모용\"}, {\"box\": [378, 56, 618, 108], \"confidence\": 0.99, \"kind\": \"header\", \"normalized\": null, \"side\": null, \"speaker\": null, \"text_verbatim\": \"차용증\"}, {\"box\": [95, 146, 165, 178], \"confidence\": 0.99, \"kind\": \"label\", \"normalized\": null, \"side\": null, \"speaker\": null, \"text_verbatim\": \"채권자\"}, {\"box\": [355, 143, 545, 178], \"confidence\": 0.99, \"kind\": \"party_name\", \"normalized\": null, \"side\": null, \"speaker\": null, \"text_verbatim\": \"서가온(SAMPLE)\"}, {\"box\": [95, 215, 195, 247], \"confidence\": 0.99, \"kind\": \"label\", \"normalized\": null, \"side\": null, \"speaker\": null, \"text_verbatim\": \"채권자 주소\"}, {\"box\": [355, 213, 658, 247], \"confidence\": 0.99, \"kind\": \"address\", \"normalized\": null, \"side\": null, \"speaker\": null, \"text_verbatim\": \"서울특별시 샘플구 데모로 0\"}, {\"box\": [95, 283, 215, 315], \"confidence\": 0.99, \"kind\": \"label\", \"normalized\": null, \"side\": null, \"speaker\": null, \"text_verbatim\": \"채권자 연락처\"}, {\"box\": [355, 281, 537, 315], \"confidence\": 0.99, \"kind\": \"phone\", \"normalized\": \"010-0000-0001\", \"side\": null, \"speaker\": null, \"text_verbatim\": \"010-0000-0001\"}, {\"box\": [95, 358, 165, 390], \"confidence\": 0.99, \"kind\": \"label\", \"normalized\": null, \"side\": null, \"speaker\": null, \"text_verbatim\": \"채무자\"}, {\"box\": [355, 355, 545, 390], \"confidence\": 0.99, \"kind\": \"party_name\", \"normalized\": null, \"side\": null, \"speaker\": null, \"text_verbatim\": \"탁나루(SAMPLE)\"}, {\"box\": [95, 428, 195, 460], \"confidence\": 0.99, \"kind\": \"label\", \"normalized\": null, \"side\": null, \"speaker\": null, \"text_verbatim\": \"채무자 주소\"}, {\"box\": [355, 426, 635, 460], \"confidence\": 0.99, \"kind\": \"address\", \"normalized\": null, \"side\": null, \"speaker\": null, \"text_verbatim\": \"경기도 샘플시 데모동 0\"}, {\"box\": [95, 498, 215, 530], \"confidence\": 0.99, \"kind\": \"label\", \"normalized\": null, \"side\": null, \"speaker\": null, \"text_verbatim\": \"채무자 연락처\"}, {\"box\": [355, 496, 537, 530], \"confidence\": 0.99, \"kind\": \"phone\", \"normalized\": \"010-0000-0002\", \"side\": null, \"speaker\": null, \"text_verbatim\": \"010-0000-0002\"}, {\"box\": [95, 568, 135, 598], \"confidence\": 0.99, \"kind\": \"label\", \"normalized\": null, \"side\": null, \"speaker\": null, \"text_verbatim\": \"금액\"}, {\"box\": [355, 565, 493, 598], \"confidence\": 0.99, \"kind\": \"amount\", \"normalized\": \"5000000\", \"side\": null, \"speaker\": null, \"text_verbatim\": \"5,000,000원\"}, {\"box\": [95, 633, 182, 668], \"confidence\": 0.99, \"kind\": \"label\", \"normalized\": null, \"side\": null, \"speaker\": null, \"text_verbatim\": \"금액(한글)\"}, {\"box\": [355, 631, 478, 665], \"confidence\": 0.99, \"kind\": \"amount\", \"normalized\": \"5000000\", \"side\": null, \"speaker\": null, \"text_verbatim\": \"금 오백만 원\"}, {\"box\": [95, 708, 165, 738], \"confidence\": 0.99, \"kind\": \"label\", \"normalized\": null, \"side\": null, \"speaker\": null, \"text_verbatim\": \"대여일\"}, {\"box\": [355, 705, 488, 738], \"confidence\": 0.99, \"kind\": \"date\", \"normalized\": \"2026-03-10\", \"side\": null, \"speaker\": null, \"text_verbatim\": \"2026-03-10\"}, {\"box\": [95, 773, 165, 805], \"confidence\": 0.99, \"kind\": \"label\", \"normalized\": null, \"side\": null, \"speaker\": null, \"text_verbatim\": \"변제기\"}, {\"box\": [355, 770, 488, 805], \"confidence\": 0.99, \"kind\": \"date\", \"normalized\": \"2026-04-10\", \"side\": null, \"speaker\": null, \"text_verbatim\": \"2026-04-10\"}, {\"box\": [95, 848, 245, 878], \"confidence\": 0.99, \"kind\": \"label\", \"normalized\": null, \"side\": null, \"speaker\": null, \"text_verbatim\": \"이자 약정 없음\"}, {\"box\": [95, 935, 215, 962], \"confidence\": 0.99, \"kind\": \"label\", \"normalized\": null, \"side\": null, \"speaker\": null, \"text_verbatim\": \"주민등록번호\"}, {\"box\": [345, 928, 595, 965], \"confidence\": 0.99, \"kind\": \"id_number\", \"normalized\": null, \"side\": null, \"speaker\": null, \"text_verbatim\": \"000000-0000000\"}]}",
+            "type": "output_text"
+          }
+        ],
+        "id": "msg_7ca43450-3ab2-4eeb-b520-935c1674e971",
+        "phase": null,
+        "role": "assistant",
+        "status": "completed",
+        "type": "message"
+      }
+    ],
+    "parallel_tool_calls": true,
+    "previous_response_id": null,
+    "prompt": null,
+    "prompt_cache_diagnostics": null,
+    "prompt_cache_key": null,
+    "prompt_cache_options": null,
+    "prompt_cache_retention": null,
+    "reasoning": {
+      "context": null,
+      "effort": "low",
+      "generate_summary": null,
+      "mode": null,
+      "summary": null
+    },
+    "safety_identifier": null,
+    "service_tier": "auto",
+    "status": "completed",
+    "store": false,
+    "temperature": 1.0,
+    "text": {
+      "format": {
+        "description": null,
+        "name": "reading",
+        "schema_": {
+          "additionalProperties": false,
+          "properties": {
+            "items": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "box": {
+                    "items": {
+                      "type": "number"
+                    },
+                    "maxItems": 4,
+                    "minItems": 4,
+                    "type": "array"
+                  },
+                  "confidence": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "kind": {
+                    "enum": [
+                      "utterance",
+                      "amount",
+                      "date",
+                      "party_name",
+                      "account_number",
+                      "id_number",
+                      "address",
+                      "phone",
+                      "label",
+                      "header"
+                    ],
+                    "type": "string"
+                  },
+                  "normalized": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "side": {
+                    "enum": [
+                      "left",
+                      "right",
+                      null
+                    ],
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "speaker": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "text_verbatim": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "text_verbatim",
+                  "normalized",
+                  "box",
+                  "speaker",
+                  "side",
+                  "confidence"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "items"
+          ],
+          "type": "object"
+        },
+        "strict": true,
+        "type": "json_schema"
+      },
+      "verbosity": null
+    },
+    "tool_choice": "auto",
+    "tool_usage": null,
+    "tools": [],
+    "top_logprobs": 0,
+    "top_p": 1.0,
+    "truncation": "disabled",
+    "usage": {
+      "input_tokens": 2668,
+      "input_tokens_details": {
+        "cache_write_tokens": null,
+        "cached_tokens": 611
+      },
+      "output_tokens": 2514,
+      "output_tokens_details": {
+        "reasoning_tokens": 1065
+      },
+      "total_tokens": 5182
+    },
+    "user": null
+  },
+  "usage": {
+    "cached_input_tokens": 611,
+    "images_processed": 0,
+    "input_tokens": 2668,
+    "output_tokens": 2514,
+    "reasoning_tokens": 1065,
+    "total_tokens": 5182,
+    "video_frames_processed": 0
+  }
+}

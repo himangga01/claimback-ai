@@ -190,12 +190,29 @@ def is_redaction_confirmed(state: CaseState) -> bool:
     return confirmed.get("redaction_confirmed") is True
 
 
+def _pixel_hash(path: Path) -> Optional[str]:
+    """SHA-256 over RGB pixels (INT-3 task 3).
+
+    A PNG re-encode (Pillow version, metadata) changes file bytes while
+    the pixels stay put; comparing pixels instead of bytes keeps the
+    identical-copy guard honest. None when the file is not an image.
+    """
+    try:
+        from PIL import Image
+
+        with Image.open(path) as image:
+            return hashlib.sha256(
+                image.convert("RGB").tobytes()).hexdigest()
+    except Exception:
+        return None
+
+
 def get_redaction_status(
     state: CaseState,
 ) -> Tuple[Dict[str, str], set, set]:
     """Valid redacted copies + needs-review/identical exclusions (M5-fix2).
 
-    A copy whose SHA-256 equals the original (images) or the PDF preview
+    A copy whose pixels equal the original (images) or the PDF preview
     PNG is not a redacted copy and is excluded. A preview flagged
     ``needs_review``/``not_redacted`` is excluded unless the user confirmed.
     """
@@ -226,7 +243,9 @@ def get_redaction_status(
         ) and not confirmed:
             needs_review.add(ex_id)
             continue
-        red_hash = _sha256_file(candidate)
+        red_hash = _pixel_hash(candidate)
+        if red_hash is None:
+            red_hash = _sha256_file(candidate)
         if red_hash is not None:
             compare: List[Path] = []
             try:
@@ -240,7 +259,10 @@ def get_redaction_status(
             for other in compare:
                 try:
                     if other.exists() and other.is_file():
-                        if _sha256_file(other) == red_hash:
+                        other_hash = _pixel_hash(other)
+                        if other_hash is None:
+                            other_hash = _sha256_file(other)
+                        if other_hash == red_hash:
                             identical.add(ex_id)
                             break
                 except OSError:
@@ -392,7 +414,10 @@ def build_package(state: CaseState) -> Dict[str, Any]:
         "content_proof.pdf": final_check_mod.extract_pdf_text(content_pdf),
         "exhibits.pdf": final_check_mod.extract_pdf_text(exhibits_pdf),
         "evidence_list.pdf": final_check_mod.extract_pdf_text(evidence_list_pdf),
-        "ecourt": f"{claim_purpose}\n{claim_cause}",
+        # INT-3 task 3: the checked ecourt text includes the parties block
+        # (real names), so the name check verifies something instead of
+        # passing on the fixed 채권자/채무자 phrases alone.
+        "ecourt": f"{packet.get('parties', '')}\n{claim_purpose}\n{claim_cause}",
     }
     g1b = final_check_mod.check_g1b(
         final_check_mod.build_expected_amounts(
@@ -418,7 +443,10 @@ def build_package(state: CaseState) -> Dict[str, Any]:
                 message=f"{doc_name}에 계좌/주민번호로 보이는 값이 있습니다: {hit}",
                 fix_hint="가림 사본을 확인하세요.",
             ))
-    # K3 + M5-fix2: missing/identical/needs-review copies are G1b findings.
+    # INT-3 task 3: missing/identical/needs-review copies stay caption
+    # lines, but they are G1b notes now, not fail findings (the user
+    # reads the original instead). Only values/names/leaks fail G1b.
+    notes: List[str] = []
     for record in _missing_redacted_ex_ids(evidence_dicts, redacted_map):
         ex_id = str(record.get("ex_id", ""))
         label = str(record.get("label", ex_id))
@@ -437,14 +465,10 @@ def build_package(state: CaseState) -> Dict[str, Any]:
                 f"exhibits.pdf: {label}({ex_id})의 가림 사본("
                 f"files/redacted_{ex_id}.png)이 없어 이미지를 넣지 않았습니다."
             )
-        findings.append(deps.Finding(
-            sentence_id="",
-            field=str(ex_id or "exhibits.pdf"),
-            message=message,
-            fix_hint="가림 사본을 확인하세요.",
-        ))
+        notes.append(message)
     g1b = deps.GateResult(
         gate="G1b", status="fail" if findings else "pass", findings=findings,
+        notes=notes,
     )
     return {
         "files": [

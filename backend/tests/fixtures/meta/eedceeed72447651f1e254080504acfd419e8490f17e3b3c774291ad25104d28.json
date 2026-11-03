@@ -1,8 +1,8 @@
 {
-  "latency_ms": 14715,
+  "latency_ms": 3863,
   "request": {
     "endpoint": "responses",
-    "model": "muse-spark-1.3",
+    "model": "muse-spark-1.2",
     "params": {
       "max_output_tokens": 4000,
       "reasoning": {
@@ -101,11 +101,11 @@
       {
         "content": [
           {
-            "text": "# 판독 담당 프롬프트 v1\n\n버전: reader.v1 (M2a 최초 작성)\n\n너는 ClaimBack-AI의 판독 담당이다. 보이는 것만 그대로 옮겨 적는 기록원이다.\n\n## 할 일\n\n- 입력 이미지(또는 PDF)의 모든 글 항목을 빠짐없이 읽는다.\n- 항목마다 `kind`, `text_verbatim`, `normalized`, `box`, `speaker`,\n  `side`, `confidence`를 낸다.\n- `kind`는 다음 중 하나: `utterance`(대화 말풍선, 말풍선 단위),\n  `amount`(금액), `date`(날짜), `party_name`(사람·상호 이름),\n  `account_number`(계좌번호), `id_number`(주민번호 등 식별번호),\n  `address`(주소), `phone`(전화번호), `label`(칸 제목), `header`(머리말).\n- `text_verbatim`은 원문 그대로(띄어쓰기·기호 포함) 옮긴다.\n- `normalized`는 금액·날짜·전화·계좌에만 쓴다. 금액은 쉼표·단위 없는 숫자만,\n  날짜는 연도가 보일 때만 `YYYY-MM-DD` 형식, 전화·계좌는 숫자·하이픈만.\n  연도가 보이지 않는 날짜는 `null`로 둔다(연도를 지어내지 않는다).\n  그 밖의 항목은 `null`로 둔다.\n- 빈 값은 진짜 `null`로 낸다. 문자열 `\"null\"`을 쓰지 않는다.\n- `box`는 항목을 둘러싸는 가장 작은 박스를 축별 0~1000 정규화 좌표\n  `[x1, y1, x2, y2]`로 낸다.\n- `speaker`는 말풍선을 보낸 사람의 표시 그대로, 없으면 `null`.\n- `side`는 말풍선의 화면 위치가 왼쪽이면 `left`, 오른쪽이면 `right`.\n  말풍선이 아니면 `null`.\n- `confidence`는 0~1 사이의 확신도.\n\n## 하지 않을 일\n\n- 의미를 해석하거나 보이지 않는 값을 추측하지 않는다. 안 보이면 항목을 만들지 않는다.\n- 사건의 결론이나 전망을 단정하는 말을 쓰지 않는다.\n- 발화에 법적 성격을 붙이지 않는다. 갚겠다는 말도 원문 그대로 옮길 뿐이다.\n- 자격이나 공직을 내세우는 말을 출력에 쓰지 않는다.\n- 법률 상담을 하지 않는다.\n\n## 출력\n\n- Reading JSON 스키마만 따른다.\n  `{\"items\": [{\"kind\", \"text_verbatim\", \"normalized\", \"box\", \"speaker\", \"side\", \"confidence\"}]}`\n- JSON 외의 글자를 출력하지 않는다.\n",
+            "text": "# 판독 담당 프롬프트 v2\n\n버전: reader.v2 (M4b 비교에서 드러난 한글 금액 누락을 고침)\n\n너는 ClaimBack-AI의 판독 담당이다. 보이는 것만 그대로 옮겨 적는 기록원이다.\n\n## 할 일\n\n- 입력 이미지(또는 PDF)의 모든 글 항목을 빠짐없이 읽는다.\n- 항목마다 `kind`, `text_verbatim`, `normalized`, `box`, `speaker`,\n  `side`, `confidence`를 낸다.\n- `kind`는 다음 중 하나: `utterance`(대화 말풍선, 말풍선 단위),\n  `amount`(금액), `date`(날짜), `party_name`(사람·상호 이름),\n  `account_number`(계좌번호), `id_number`(주민번호 등 식별번호),\n  `address`(주소), `phone`(전화번호), `label`(칸 제목), `header`(머리말).\n- 문장 안에 들어 있는 금액·날짜도 말풍선·칸 항목과 별개의 항목으로 낸다.\n- `text_verbatim`은 원문 그대로(띄어쓰기·기호 포함) 옮긴다.\n- `normalized`는 금액·날짜·전화·계좌에만 쓴다. 금액은 쉼표·단위 없는 숫자만,\n  날짜는 연도가 보일 때만 `YYYY-MM-DD` 형식, 전화·계좌는 숫자·하이픈만.\n  금액이 한글로만 쓰였으면 아라비아 숫자로 환산하여 쓴다.\n  연도가 보이지 않는 날짜는 `null`로 둔다(연도를 지어내지 않는다).\n  그 밖의 항목은 `null`로 둔다.\n- 빈 값은 진짜 `null`로 낸다. 문자열 `\"null\"`을 쓰지 않는다.\n- `box`는 항목을 둘러싸는 가장 작은 박스를 축별 0~1000 정규화 좌표\n  `[x1, y1, x2, y2]`로 낸다.\n- `speaker`는 말풍선을 보낸 사람의 표시 그대로, 없으면 `null`.\n- `side`는 말풍선의 화면 위치가 왼쪽이면 `left`, 오른쪽이면 `right`.\n  말풍선이 아니면 `null`.\n- `confidence`는 0~1 사이의 확신도.\n\n## 하지 않을 일\n\n- 의미를 해석하거나 보이지 않는 값을 추측하지 않는다. 안 보이면 항목을 만들지 않는다.\n- 사건의 결론이나 전망을 단정하는 말을 쓰지 않는다.\n- 발화에 법적 성격을 붙이지 않는다. 갚겠다는 말도 원문 그대로 옮길 뿐이다.\n- 자격이나 공직을 내세우는 말을 출력에 쓰지 않는다.\n- 법률 상담을 하지 않는다.\n\n## 출력\n\n- Reading JSON 스키마만 따른다.\n  `{\"items\": [{\"kind\", \"text_verbatim\", \"normalized\", \"box\", \"speaker\", \"side\", \"confidence\"}]}`\n- JSON 외의 글자를 출력하지 않는다.\n",
             "type": "input_text"
           },
           {
-            "image_url": "sha256:b984e7ba284244e334e9d7a98d1d9111a83cc887c47a38353fd22c20c83d32bb:image/png",
+            "image_url": "sha256:8eda94a7afad25e6efc54e42cb44fe75ec9d50989c6c261f3d2b244989a54f00:image/png",
             "type": "input_image"
           }
         ],
@@ -116,24 +116,24 @@
   "response": {
     "access_programs": null,
     "background": false,
-    "completed_at": 1793683745.0,
+    "completed_at": 1793690371.0,
     "conversation": null,
-    "created_at": 1793683744.0,
+    "created_at": 1793690371.0,
     "error": null,
-    "id": "resp_6ae97121e623a51c001d4b40",
+    "id": "resp_6ae98b03408865264e0d4ede",
     "incomplete_details": null,
     "instructions": null,
     "max_output_tokens": 4000,
     "max_tool_calls": null,
     "metadata": null,
-    "model": "muse-spark-1.3",
+    "model": "muse-spark-1.2",
     "moderation": null,
     "object": "response",
     "output": [
       {
         "content": null,
         "encrypted_content": "<redacted>",
-        "id": "rs_6ae97121e623a51c001d4b40:rs_b57cc799-8b70-42d9-985e-362908a95300",
+        "id": "rs_6ae98b03408865264e0d4ede:rs_fbf0dcde-cb1e-46b4-ac5c-87eb99d5352b",
         "status": "completed",
         "summary": [],
         "type": "reasoning"
@@ -143,11 +143,11 @@
           {
             "annotations": [],
             "logprobs": [],
-            "text": "{\"items\": [{\"box\": [350, 5, 650, 45], \"confidence\": 0.99, \"kind\": \"header\", \"normalized\": null, \"side\": null, \"speaker\": null, \"text_verbatim\": \"SAMPLE / \\ub370\\ubaa8\\uc6a9\"}, {\"box\": [55, 90, 545, 145], \"confidence\": 0.99, \"kind\": \"header\", \"normalized\": null, \"side\": null, \"speaker\": null, \"text_verbatim\": \"\\uc0d8\\ud50c\\uc740\\ud589 \\uc1a1\\uae08\\ud655\\uc778\\uc99d\"}, {\"box\": [55, 210, 180, 245], \"confidence\": 0.99, \"kind\": \"label\", \"normalized\": null, \"side\": null, \"speaker\": null, \"text_verbatim\": \"\\ubcf4\\ub0b8 \\uc0ac\\ub78c\"}, {\"box\": [315, 205, 570, 245], \"confidence\": 0.98, \"kind\": \"party_name\", \"normalized\": null, \"side\": null, \"speaker\": null, \"text_verbatim\": \"\\uc11c\\uac00\\uc628(SAMPLE)\"}, {\"box\": [55, 320, 180, 355], \"confidence\": 0.99, \"kind\": \"label\", \"normalized\": null, \"side\": null, \"speaker\": null, \"text_verbatim\": \"\\ubcf4\\ub0b8 \\uacc4\\uc88c\"}, {\"box\": [340, 310, 630, 365], \"confidence\": 0.99, \"kind\": \"account_number\", \"normalized\": \"000-0000-1234\", \"side\": null, \"speaker\": null, \"text_verbatim\": \"000-0000-1234\"}, {\"box\": [55, 435, 180, 470], \"confidence\": 0.99, \"kind\": \"label\", \"normalized\": null, \"side\": null, \"speaker\": null, \"text_verbatim\": \"\\ubc1b\\ub294 \\uc0ac\\ub78c\"}, {\"box\": [370, 430, 570, 470], \"confidence\": 0.98, \"kind\": \"party_name\", \"normalized\": null, \"side\": null, \"speaker\": null, \"text_verbatim\": \"\\ud0c1\\ub098\\ub8e8(SAMPLE)\"}, {\"box\": [55, 545, 180, 580], \"confidence\": 0.99, \"kind\": \"label\", \"normalized\": null, \"side\": null, \"speaker\": null, \"text_verbatim\": \"\\ubc1b\\ub294 \\uacc4\\uc88c\"}, {\"box\": [340, 535, 630, 590], \"confidence\": 0.99, \"kind\": \"account_number\", \"normalized\": \"000-0000-5678\", \"side\": null, \"speaker\": null, \"text_verbatim\": \"000-0000-5678\"}, {\"box\": [55, 660, 120, 695], \"confidence\": 0.99, \"kind\": \"label\", \"normalized\": null, \"side\": null, \"speaker\": null, \"text_verbatim\": \"\\uae08\\uc561\"}, {\"box\": [360, 655, 545, 695], \"confidence\": 0.99, \"kind\": \"amount\", \"normalized\": \"5000000\", \"side\": null, \"speaker\": null, \"text_verbatim\": \"5,000,000\\uc6d0\"}, {\"box\": [55, 770, 140, 805], \"confidence\": 0.99, \"kind\": \"label\", \"normalized\": null, \"side\": null, \"speaker\": null, \"text_verbatim\": \"\\uc1a1\\uae08\\uc77c\"}, {\"box\": [358, 770, 592, 805], \"confidence\": 0.99, \"kind\": \"date\", \"normalized\": \"2026-03-10\", \"side\": null, \"speaker\": null, \"text_verbatim\": \"2026-03-10\"}]}",
+            "text": "{\"items\":[{\"box\":[335,12,668,48],\"confidence\":0.99,\"kind\":\"header\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"SAMPLE / 데모용\"},{\"box\":[32,76,198,102],\"confidence\":0.98,\"kind\":\"party_name\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"탁나루(SAMPLE)\"},{\"box\":[31,109,678,182],\"confidence\":0.98,\"kind\":\"utterance\",\"normalized\":null,\"side\":\"left\",\"speaker\":\"탁나루(SAMPLE)\",\"text_verbatim\":\"정말 죄송합니다. 5월 1일에는 꼭 보내드릴게요.\"},{\"box\":[279,131,385,162],\"confidence\":0.97,\"kind\":\"date\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"5월 1일\"},{\"box\":[410,523,592,552],\"confidence\":0.99,\"kind\":\"date\",\"normalized\":\"2026-05-01\",\"side\":null,\"speaker\":null,\"text_verbatim\":\"2026년 5월 1일\"},{\"box\":[32,865,198,890],\"confidence\":0.98,\"kind\":\"party_name\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"탁나루(SAMPLE)\"},{\"box\":[31,896,454,968],\"confidence\":0.98,\"kind\":\"utterance\",\"normalized\":null,\"side\":\"left\",\"speaker\":\"탁나루(SAMPLE)\",\"text_verbatim\":\"오늘 100만 원 먼저 보냈어.\"},{\"box\":[87,915,252,946],\"confidence\":0.98,\"kind\":\"amount\",\"normalized\":\"1000000\",\"side\":null,\"speaker\":null,\"text_verbatim\":\"100만 원\"}]}",
             "type": "output_text"
           }
         ],
-        "id": "msg_44d68578-e634-487a-914a-84bc63004340",
+        "id": "msg_e87115e1-bf82-49f2-befe-32344e81b7e9",
         "phase": null,
         "role": "assistant",
         "status": "completed",
@@ -271,26 +271,26 @@
     "top_p": 1.0,
     "truncation": "disabled",
     "usage": {
-      "input_tokens": 1118,
+      "input_tokens": 1172,
       "input_tokens_details": {
         "cache_write_tokens": null,
-        "cached_tokens": 0
+        "cached_tokens": 1123
       },
-      "output_tokens": 1531,
+      "output_tokens": 1141,
       "output_tokens_details": {
-        "reasoning_tokens": 592
+        "reasoning_tokens": 748
       },
-      "total_tokens": 2649
+      "total_tokens": 2313
     },
     "user": null
   },
   "usage": {
-    "cached_input_tokens": 0,
+    "cached_input_tokens": 1123,
     "images_processed": 0,
-    "input_tokens": 1118,
-    "output_tokens": 1531,
-    "reasoning_tokens": 592,
-    "total_tokens": 2649,
+    "input_tokens": 1172,
+    "output_tokens": 1141,
+    "reasoning_tokens": 748,
+    "total_tokens": 2313,
     "video_frames_processed": 0
   }
 }

@@ -106,7 +106,8 @@ def meta_mode() -> str:
     return (os.environ.get("META_MODE") or "replay").strip().lower() or "replay"
 
 
-READER_MODEL = (os.environ.get("READER_MODEL") or "muse-spark-1.3").strip()
+# INT-3: M4b decision adopted by contract 6c (was 1.3). Env still wins.
+READER_MODEL = (os.environ.get("READER_MODEL") or "muse-spark-1.2").strip()
 
 
 def reader_concurrency() -> int:
@@ -254,8 +255,22 @@ def render_sentence(
     values: Dict[str, str],
     quotes: Dict[str, str],
 ) -> str:
-    """Substitute slots+quotes (M1 josa fitting) then convert cite tags."""
-    return ex_tag_to_label(substitute_text(text_with_slots, values, quotes))
+    """Substitute slots+quotes (M1 josa fitting) then convert cite tags.
+
+    INT-3 task 3: a sentence ending in quote+cites closes after the
+    cites (``...했습니다 [갑 제1호증].``) — the period never sits
+    before the tags with nothing after them.
+    """
+    rendered = ex_tag_to_label(
+        substitute_text(text_with_slots, values, quotes))
+    match = re.search(r"\.\s*((?:\[갑 제\d+호증\]\s*)+)$", rendered)
+    if match:
+        cites = " ".join(re.findall(r"\[갑 제\d+호증\]", match.group(1)))
+        rendered = rendered[:match.start()].rstrip() + " " + cites + "."
+    elif (re.search(r"\[갑 제\d+호증\]\s*$", rendered)
+          and not rendered.rstrip().endswith(".")):
+        rendered = rendered.rstrip() + "."
+    return rendered
 
 
 # --- slot values ----------------------------------------------------------------

@@ -94,13 +94,27 @@ def _norm(text: str) -> str:
 def _package_docs(case_env):
     case_id, package, _state = _run_to_package(case_env, with_redacted=True)
     files = case_state_mod.files_dir(case_id)
+    # INT-3 task 3: the checked ecourt text carries the parties block.
+    parties = pdf_compiler_mod.format_parties_text(
+        _party("creditor"), _party("debtor"))
     return package, {
         "content_proof.pdf": _pdf_text(files / "content_proof.pdf"),
         "exhibits.pdf": _pdf_text(files / "exhibits.pdf"),
         "evidence_list.pdf": _pdf_text(files / "evidence_list.pdf"),
-        "ecourt": (package["ecourt"]["claim_purpose"] + "\n"
+        "ecourt": (parties + "\n"
+                   + package["ecourt"]["claim_purpose"] + "\n"
                    + package["ecourt"]["claim_cause_payment_order"]),
     }
+
+
+def _party(side: str):
+    from types import SimpleNamespace
+
+    return SimpleNamespace(
+        name=SAMPLE_FIELDS[f"{side}_name"],
+        address=SAMPLE_FIELDS.get(f"{side}_address"),
+        phone=SAMPLE_FIELDS.get(f"{side}_phone"),
+    )
 
 
 def _expected():
@@ -289,10 +303,12 @@ def test_needs_review_g1b_finding(case_env):
         "previews": [{"ex_id": "EX1", "needs_review": True}],
         "leak_check": {"status": "pass", "findings": []},
     }), encoding="utf-8")
+    # INT-3 task 3: needs-review copies are G1b notes, not fail findings.
     package = packager_mod.build_package(coord.get_case(case_id))
     gates = {e["gate"]: e for e in package["gate_results"]}
-    assert gates["G1b"]["status"] == "fail"
-    joined = " ".join(e.get("message", "") for e in gates["G1b"]["findings"])
+    assert gates["G1b"]["status"] == "pass"
+    assert gates["G1b"]["findings"] == []
+    joined = " ".join(gates["G1b"]["notes"])
     assert "EX1" in joined and "가림 확인" in joined
     exhibits = _pdf_text(files_base / "exhibits.pdf")
     assert exhibit_bundle_mod.NEEDS_REVIEW_LINE in _norm(exhibits)
@@ -345,16 +361,18 @@ def test_cover_uses_same_display_names(case_env):
 
 # --- 4. G1b reinforcement ----------------------------------------------------------
 
-def test_ecourt_names_accept_role_terms(case_env):
+def test_ecourt_names_require_real_names(case_env):
+    # INT-3 task 3: the old 채권자/채무자 alias pass is gone — ecourt
+    # must carry the parties block with real names.
     _package, docs = _package_docs(case_env)
     amounts, dates, names = _expected()
-    assert "서가온(SAMPLE)" not in docs["ecourt"]
-    assert "채권자" in docs["ecourt"] and "채무자" in docs["ecourt"]
+    assert "서가온(SAMPLE)" in docs["ecourt"]
+    assert "탁나루(SAMPLE)" in docs["ecourt"]
     gate = final_check_mod.check_g1b(amounts, dates, names, docs)
     assert gate.status == "pass", [f.message for f in gate.findings]
     tampered = dict(docs)
-    tampered["ecourt"] = tampered["ecourt"].replace("채권자", "XXXX").replace(
-        "채무자", "YYYY")
+    tampered["ecourt"] = tampered["ecourt"].replace(
+        "서가온(SAMPLE)", "OOO").replace("탁나루(SAMPLE)", "XXX")
     gate = final_check_mod.check_g1b(amounts, dates, names, tampered)
     assert gate.status == "fail"
     assert any("creditor_name" in f.field or "debtor_name" in f.field

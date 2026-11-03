@@ -540,6 +540,352 @@ def test_hold_fixture_missing(case_env, monkeypatch):
     assert any(r["code"] == "replay_fixture_missing" for r in view["hold_reasons"])
 
 
+# --- INT-3 B1: key / unexpected reading errors ----------------------------------
+def test_b1_missing_key_hold_and_resume(case_env, monkeypatch):
+    def _keyless_reader(**kwargs):
+        raise deps.MissingKeyError("MODEL_API_KEY is not set")
+
+    monkeypatch.setitem(coord.AGENTS, "reader", _keyless_reader)
+    client = case_env
+    case_id = _sample(client)
+    res = client.post(f"/api/cases/{case_id}/run", json={})
+    assert res.status_code == 200
+    view = res.json()
+    assert view["state"] == "HOLD"
+    assert any(r["code"] == "config_missing_key" and r["step"] == "reading"
+               for r in view["hold_reasons"])
+    monkeypatch.setitem(coord.AGENTS, "reader", fake_reader)
+    res = client.post(f"/api/cases/{case_id}/run", json={})
+    assert res.status_code == 200, res.text
+    assert res.json()["state"] == "CHECKPOINT_1"
+
+
+def test_b1_unexpected_all_fail_is_resumable(case_env, monkeypatch):
+    def _flaky_reader(**kwargs):
+        raise RuntimeError("network down")
+
+    monkeypatch.setitem(coord.AGENTS, "reader", _flaky_reader)
+    client = case_env
+    case_id = _sample(client)
+    res = client.post(f"/api/cases/{case_id}/run", json={})
+    assert res.status_code == 200
+    view = res.json()
+    assert view["state"] == "HOLD"
+    assert any(r["code"] == "internal_error" and r["step"] == "reading"
+               for r in view["hold_reasons"])
+    assert not any(r["code"] == "schema_failed" for r in view["hold_reasons"])
+    monkeypatch.setitem(coord.AGENTS, "reader", fake_reader)
+    res = client.post(f"/api/cases/{case_id}/run", json={})
+    assert res.status_code == 200, res.text
+    assert res.json()["state"] == "CHECKPOINT_1"
+
+
+# --- INT-3 B2: verified delete ---------------------------------------------------
+def test_b2_delete_reports_409_when_locked(case_env, monkeypatch):
+    import shutil as _shutil
+
+    def _locked_rmtree(*args, **kwargs):
+        raise PermissionError("file in use")
+
+    monkeypatch.setattr(_shutil, "rmtree", _locked_rmtree)
+    monkeypatch.setattr("time.sleep", lambda *a, **k: None)
+    client = case_env
+    case_id = _sample(client)
+    root = Path(case_state_mod.get_cases_root())
+    res = client.delete(f"/api/cases/{case_id}")
+    assert res.status_code == 409
+    assert res.json()["detail"]["code"] == "wrong_state"
+    assert (root / case_id).exists()
+
+
+def test_b2_delete_retries_transient_lock(case_env, monkeypatch):
+    import shutil as _shutil
+
+    real_rmtree = _shutil.rmtree
+    calls = []
+
+    def _flaky_rmtree(*args, **kwargs):
+        calls.append(1)
+        if len(calls) == 1:
+            raise PermissionError("file in use")
+        return real_rmtree(*args, **kwargs)
+
+    monkeypatch.setattr(_shutil, "rmtree", _flaky_rmtree)
+    monkeypatch.setattr("time.sleep", lambda *a, **k: None)
+    client = case_env
+    case_id = _sample(client)
+    root = Path(case_state_mod.get_cases_root())
+    res = client.delete(f"/api/cases/{case_id}")
+    assert res.status_code == 200, res.text
+    assert res.json() == {"deleted": True}
+    assert not (root / case_id).exists()
+
+
+# --- INT-3 B4: batch upload validation -------------------------------------------
+def test_b4_upload_batch_validates_before_writing(case_env):
+    client = case_env
+    res = client.post("/api/cases", json={"jurisdiction": "KR"})
+    case_id = res.json()["case_id"]
+    png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
+    res = client.post(
+        f"/api/cases/{case_id}/evidence",
+        files=[("files", ("good.png", png, "image/png")),
+               ("files", ("bad.png", b"not-an-image", "image/png"))],
+    )
+    assert res.status_code == 400
+    view = client.get(f"/api/cases/{case_id}").json()
+    assert view["evidence"] == []
+    leftovers = [p for p in (Path(case_state_mod.get_cases_root()) / case_id).rglob("*")
+                 if p.is_file() and p.suffix.lower() == ".png"]
+    assert leftovers == []
+
+
+# --- INT-3 B5: facts validation + sanitized calc HOLD ------------------------------
+def test_b5_put_facts_reports_all_missing(case_env):
+    client = case_env
+    case_id = _sample(client)
+    _to_checkpoint_1(client, case_id)
+    review = client.get(f"/api/cases/{case_id}/review").json()
+    facts = demo_inputs.build_demo_confirmed_facts(review)
+    del facts["fields"]["principal"]
+    del facts["fields"]["loan_date"]
+    res = client.put(f"/api/cases/{case_id}/facts", json=facts)
+    assert res.status_code == 400
+    detail = res.json()["detail"]
+    assert detail["code"] == "missing_facts"
+    assert detail["missing_requirements"] == ["principal", "loan_date"]
+
+
+def test_b5_put_facts_rejects_zero_principal_and_negative_rate(case_env):
+    client = case_env
+    case_id = _sample(client)
+    _to_checkpoint_1(client, case_id)
+    review = client.get(f"/api/cases/{case_id}/review").json()
+    facts = demo_inputs.build_demo_confirmed_facts(review)
+    facts["fields"]["principal"] = "0"
+    res = client.put(f"/api/cases/{case_id}/facts", json=facts)
+    assert res.status_code == 400
+    detail = res.json()["detail"]
+    assert "principal" not in detail["message"]
+    assert detail["missing_requirements"] == ["principal"]
+    facts["fields"]["principal"] = "5000000"
+    facts["fields"]["interest_rate"] = "-5"
+    res = client.put(f"/api/cases/{case_id}/facts", json=facts)
+    assert res.status_code == 400
+
+
+def test_b5_calc_hold_hides_pydantic_text(case_env):
+    client = case_env
+    case_id = _sample(client)
+    _to_checkpoint_1(client, case_id)
+    review = client.get(f"/api/cases/{case_id}/review").json()
+    facts = demo_inputs.build_demo_confirmed_facts(review)
+    facts["fields"]["due_date"] = "2026-01-01"  # before loan_date
+    res = client.put(f"/api/cases/{case_id}/facts", json=facts)
+    assert res.status_code == 200, res.text
+    res = client.post(f"/api/cases/{case_id}/run", json={})
+    assert res.status_code == 200
+    view = res.json()
+    assert view["state"] == "HOLD"
+    reason = next(r for r in view["hold_reasons"]
+                  if r["code"] == "missing_facts")
+    assert "validation error" not in reason["message"].lower()
+    assert "변제기" in reason["message"]
+    assert reason["fields"] == ["due_date"]
+
+
+# --- INT-3 B7 + task 3: packaging HOLD recovery -------------------------------------
+def _approve_all(client, case_id):
+    drafts = client.get(f"/api/cases/{case_id}/drafts").json()
+    res = client.put(f"/api/cases/{case_id}/drafts", json={"sentences": [
+        {"sentence_id": s["sentence_id"], "approved": True}
+        for s in drafts["sentences"]]})
+    assert all(s["approved"] for s in res.json()["sentences"]), res.text
+
+
+def test_b7_naming_violation_resumes_after_fix(case_env):
+    client = case_env
+    case_id = _sample(client)
+    _to_checkpoint_1(client, case_id)
+    review = client.get(f"/api/cases/{case_id}/review").json()
+    facts = demo_inputs.build_demo_confirmed_facts(review)
+    facts["fields"]["creditor_address"] = "서울시 법무사 앞"
+    res = client.put(f"/api/cases/{case_id}/facts", json=facts)
+    assert res.status_code == 200, res.text
+    res = client.post(f"/api/cases/{case_id}/run", json={})
+    assert res.json()["state"] == "DRAFT_APPROVAL", res.text
+    _approve_all(client, case_id)
+    res = client.post(f"/api/cases/{case_id}/run", json={})
+    assert res.status_code == 200
+    assert res.json()["state"] == "HOLD"
+    assert any(r["code"] == "naming_violation"
+               for r in res.json()["hold_reasons"])
+    # Unfixed retry holds again; the fix path recovers fully.
+    res = client.post(f"/api/cases/{case_id}/run", json={})
+    assert res.json()["state"] == "HOLD"
+    facts["fields"]["creditor_address"] = "서울특별시 샘플구 데모로 0"
+    res = client.put(f"/api/cases/{case_id}/facts", json=facts)
+    assert res.status_code == 200, res.text
+    assert res.json()["state"] == "CALCULATING"
+    res = client.post(f"/api/cases/{case_id}/run", json={})
+    assert res.json()["state"] == "DRAFT_APPROVAL", res.text
+    _approve_all(client, case_id)
+    res = client.post(f"/api/cases/{case_id}/run", json={})
+    assert res.json()["state"] == "CHECKPOINT_2", res.text
+
+
+def test_task3_g1b_hold_retries_packaging(case_env, monkeypatch):
+    from app.services import final_check as final_check_mod
+
+    real_check_g1b = final_check_mod.check_g1b
+    calls = []
+
+    def _fail_once(*args, **kwargs):
+        calls.append(1)
+        if len(calls) == 1:
+            gate = real_check_g1b(*args, **kwargs)
+            gate.findings.append(deps.Finding(
+                sentence_id="", field="content_proof.pdf",
+                message="synthetic G1b failure",
+                fix_hint="retry packaging."))
+            gate.status = "fail"
+            return gate
+        return real_check_g1b(*args, **kwargs)
+
+    monkeypatch.setattr(final_check_mod, "check_g1b", _fail_once)
+    client = case_env
+    case_id = _sample(client)
+    _to_checkpoint_1(client, case_id)
+    review = client.get(f"/api/cases/{case_id}/review").json()
+    facts = demo_inputs.build_demo_confirmed_facts(review)
+    res = client.put(f"/api/cases/{case_id}/facts", json=facts)
+    assert res.status_code == 200, res.text
+    res = client.post(f"/api/cases/{case_id}/run", json={})
+    assert res.json()["state"] == "DRAFT_APPROVAL", res.text
+    _approve_all(client, case_id)
+    res = client.post(f"/api/cases/{case_id}/run", json={})
+    assert res.status_code == 200
+    view = res.json()
+    assert view["state"] == "HOLD"
+    assert any(r["code"] == "g1b_failed" and r["step"] == "packaging"
+               for r in view["hold_reasons"])
+    res = client.post(f"/api/cases/{case_id}/run", json={})
+    assert res.json()["state"] == "CHECKPOINT_2", res.text
+    assert len(calls) == 2
+
+
+def test_task3_g1b_hold_fixed_via_drafts(case_env, monkeypatch):
+    from app.services import final_check as final_check_mod
+
+    real_check_g1b = final_check_mod.check_g1b
+    failing = {"on": True}
+
+    def _fail_while_set(*args, **kwargs):
+        gate = real_check_g1b(*args, **kwargs)
+        if failing["on"]:
+            gate.findings.append(deps.Finding(
+                sentence_id="", field="ecourt",
+                message="synthetic G1b failure",
+                fix_hint="fix the sentence."))
+            gate.status = "fail"
+        return gate
+
+    monkeypatch.setattr(final_check_mod, "check_g1b", _fail_while_set)
+    client = case_env
+    case_id = _sample(client)
+    _to_checkpoint_1(client, case_id)
+    review = client.get(f"/api/cases/{case_id}/review").json()
+    facts = demo_inputs.build_demo_confirmed_facts(review)
+    res = client.put(f"/api/cases/{case_id}/facts", json=facts)
+    assert res.status_code == 200, res.text
+    res = client.post(f"/api/cases/{case_id}/run", json={})
+    assert res.json()["state"] == "DRAFT_APPROVAL", res.text
+    _approve_all(client, case_id)
+    res = client.post(f"/api/cases/{case_id}/run", json={})
+    assert res.json()["state"] == "HOLD"
+    failing["on"] = False
+    _approve_all(client, case_id)
+    view = client.get(f"/api/cases/{case_id}").json()
+    assert view["state"] == "DRAFT_APPROVAL"
+    assert view["hold_reasons"] == []
+    res = client.post(f"/api/cases/{case_id}/run", json={})
+    assert res.json()["state"] == "CHECKPOINT_2", res.text
+
+
+# --- INT-3 B6: retry/partial spend stays in the step cost ---------------------------
+def test_b6_schema_retry_costs_accumulate(case_env, monkeypatch):
+    org_calls = []
+    drafter_calls = []
+
+    def _retry_organizer(case_id, readings, meta_mode, run_id, **kwargs):
+        org_calls.append(1)
+        if len(org_calls) == 1:
+            return {"review": {"bogus": True}, "model": "fake-bad",
+                    "latency_ms": 1, "attempts": 1, "cost_usd": 0.01}
+        out = fake_organizer(case_id, readings, meta_mode, run_id, **kwargs)
+        out["cost_usd"] = 0.02
+        return out
+
+    def _retry_drafter(case_id, draft_inputs, findings, meta_mode, run_id,
+                       **kwargs):
+        drafter_calls.append(1)
+        if len(drafter_calls) == 1:
+            return {"sentences": [{"bogus": True}], "model": "fake-bad",
+                    "latency_ms": 1, "attempts": 1, "cost_usd": 0.03}
+        out = fake_drafter(case_id, draft_inputs, findings, meta_mode,
+                           run_id, **kwargs)
+        out["cost_usd"] = 0.04
+        return out
+
+    monkeypatch.setitem(coord.AGENTS, "organizer", _retry_organizer)
+    monkeypatch.setitem(coord.AGENTS, "drafter", _retry_drafter)
+    client = case_env
+    case_id = _sample(client)
+    view = _to_checkpoint_1(client, case_id)
+    org_step = next(s for s in view["steps"] if s["key"] == "organizing")
+    assert org_step["cost_usd"] == "0.0300"
+    assert org_step["attempts"] == 2
+    view = _to_draft_approval(client, case_id)
+    draft_step = next(s for s in view["steps"] if s["key"] == "drafting")
+    assert draft_step["cost_usd"] == "0.0700"
+    assert len(org_calls) == 2 and len(drafter_calls) == 2
+
+
+def test_b6_spark_partial_on_second_incomplete(monkeypatch):
+    from app.agents.spark import run_spark_json
+
+    bodies = [
+        {"id": "r-1", "object": "response", "status": "incomplete",
+         "usage": {"input_tokens": 100, "output_tokens": 50}},
+        {"id": "r-2", "object": "response", "status": "incomplete",
+         "usage": {"input_tokens": 100, "output_tokens": 60}},
+    ]
+    calls = []
+
+    class _CutClient:
+        def __init__(self, mode, run_id):
+            pass
+
+        def responses_create(self, *args, **kwargs):
+            body = bodies[len(calls)]
+            calls.append(1)
+            raise deps.IncompleteResponse("cut", reason="max_output_tokens",
+                                          body=body)
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(deps, "MetaClient", _CutClient)
+    with pytest.raises(deps.IncompleteResponse) as excinfo:
+        run_spark_json(model="muse-spark-1.3", payload={}, text_format={},
+                       reasoning_effort="none", meta_mode="live",
+                       run_id="b6")
+    part = excinfo.value._spark_partial
+    assert part["attempts"] == 2
+    assert part["tokens_in"] == 200 and part["tokens_out"] == 110
+    assert part["cost_usd"] > 0
+
+
 # --- uploads + static guards --------------------------------------------------------------
 def test_evidence_upload_and_serving(case_env):
     client = case_env

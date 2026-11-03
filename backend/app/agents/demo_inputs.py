@@ -59,7 +59,9 @@ def _as_dict(review: Any) -> Dict[str, Any]:
     raise TypeError(f"not a Review: {type(review)!r}")
 
 
-def build_demo_confirmed_facts(review: Any) -> Dict[str, Any]:
+def build_demo_confirmed_facts(
+    review: Any, *, needs_review: bool = False
+) -> Dict[str, Any]:
     """ConfirmedFacts from a Review by the fixed demo rule (contract 5장)."""
     data = _as_dict(review)
     fallback = fallback_fields()
@@ -96,9 +98,13 @@ def build_demo_confirmed_facts(review: Any) -> Dict[str, Any]:
     highlight = (
         [f"{candidates[0]['ex_id']}:{candidates[0]['item_id']}"] if candidates else []
     )
-    return {
+    out: Dict[str, Any] = {
         "fields": fields,
         "evidence_roles": evidence_roles,
         "highlight": highlight,
         "as_of": DEMO_AS_OF,
     }
+    # INT-3b step 5: confirm redaction when needs-review copies exist.
+    if needs_review:
+        out["redaction_confirmed"] = True
+    return out

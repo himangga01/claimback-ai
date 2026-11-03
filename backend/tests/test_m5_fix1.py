@@ -50,8 +50,19 @@ def case_env(tmp_path, monkeypatch):
     return TestClient(app)
 
 
+def _clear_redacted_copies(case_id: str) -> None:
+    """INT-3 task 4: drop redacted copies before packaging (K3 path)."""
+    files = case_state_mod.files_dir(case_id)
+    for path in files.glob("redacted_*.png"):
+        try:
+            path.unlink()
+        except OSError:
+            pass
+
+
 def _run_to_package(client: TestClient, with_redacted: bool = False,
-                    facts_override=None, roles_override=None):
+                    facts_override=None, roles_override=None,
+                    without_redacted: bool = False):
     res = client.post("/api/cases/sample", json={"set": "kr"})
     assert res.status_code == 200, res.text
     case_id = res.json()["case_id"]
@@ -75,6 +86,8 @@ def _run_to_package(client: TestClient, with_redacted: bool = False,
     assert all(s["approved"] for s in res.json()["sentences"]), res.text
     if with_redacted:
         _make_redacted_dummies(case_id)
+    if without_redacted:
+        _clear_redacted_copies(case_id)
     res = client.post(f"/api/cases/{case_id}/run", json={})
     assert res.json()["state"] == "CHECKPOINT_2", res.text
     package = client.get(f"/api/cases/{case_id}/package").json()
@@ -94,13 +107,27 @@ def _norm(text: str) -> str:
 def _package_docs(case_env):
     case_id, package, _state = _run_to_package(case_env)
     files = case_state_mod.files_dir(case_id)
+    # INT-3 task 3: the checked ecourt text carries the parties block.
+    parties = pdf_compiler_mod.format_parties_text(
+        _party("creditor"), _party("debtor"))
     return package, {
         "content_proof.pdf": _pdf_text(files / "content_proof.pdf"),
         "exhibits.pdf": _pdf_text(files / "exhibits.pdf"),
         "evidence_list.pdf": _pdf_text(files / "evidence_list.pdf"),
-        "ecourt": (package["ecourt"]["claim_purpose"] + "\n"
+        "ecourt": (parties + "\n"
+                   + package["ecourt"]["claim_purpose"] + "\n"
                    + package["ecourt"]["claim_cause_payment_order"]),
     }
+
+
+def _party(side: str):
+    from types import SimpleNamespace
+
+    return SimpleNamespace(
+        name=SAMPLE_FIELDS[f"{side}_name"],
+        address=SAMPLE_FIELDS.get(f"{side}_address"),
+        phone=SAMPLE_FIELDS.get(f"{side}_phone"),
+    )
 
 
 def _expected():
@@ -211,6 +238,15 @@ def test_k2_expected_uses_last_remaining_only():
 
 def test_k3_discover_ignores_evidence_dir_user_files(case_env, tmp_path):
     _case_id, _package, state = _run_to_package(case_env)
+    # INT-3 task 4: the flow now leaves real redacted copies behind;
+    # clear the copy and the previews file so discovery starts clean.
+    files_base = case_state_mod.files_dir(state.case_id)
+    for name in ("redacted_EX1.png", "redactions.json"):
+        try:
+            (files_base / name).unlink()
+        except OSError:
+            pass
+    state = coord.get_case(state.case_id)
     evidence_base = case_state_mod.evidence_dir(state.case_id)
     # User upload named redacted.png lands as EX1_redacted.png (must be ignored).
     decoy = evidence_base / "EX1_redacted.png"
@@ -225,7 +261,9 @@ def test_k3_discover_ignores_evidence_dir_user_files(case_env, tmp_path):
 
 
 def test_k3_missing_redacted_line_and_g1b_findings(case_env):
-    case_id, package, state = _run_to_package(case_env)
+    # INT-3 tasks 3+4: copies are cleared before packaging; exclusions
+    # stay caption lines but move from G1b findings to G1b notes.
+    case_id, package, state = _run_to_package(case_env, without_redacted=True)
     files = case_state_mod.files_dir(case_id)
     exhibits = files / "exhibits.pdf"
     reader = PdfReader(str(exhibits))
@@ -237,11 +275,9 @@ def test_k3_missing_redacted_line_and_g1b_findings(case_env):
         assert exhibit_bundle_mod.MISSING_REDACTED_LINE in text
         assert len(reader.pages[position].images) == 0
     gates = {entry["gate"]: entry for entry in package["gate_results"]}
-    assert gates["G1b"]["status"] == "fail"
-    joined = " ".join(
-        f"{entry.get('field', '')} {entry.get('message', '')}"
-        for entry in gates["G1b"]["findings"]
-    )
+    assert gates["G1b"]["status"] == "pass"
+    assert gates["G1b"]["findings"] == []
+    joined = " ".join(gates["G1b"]["notes"])
     for ex_id in ("EX1", "EX2", "EX4", "EX5", "EX6"):
         assert ex_id in joined
 
@@ -275,15 +311,151 @@ def test_k4_sensitive_patterns():
         "연락처 010-0000-0000", exclude=["010-0000-0000"]) == []
 
 
+def _drive_to_packaging(client, facts_patch=None):
+    """Sample flow up to the packaging POST (returns case_id + view)."""
+    res = client.post("/api/cases/sample", json={"set": "kr"})
+    case_id = res.json()["case_id"]
+    res = client.post(f"/api/cases/{case_id}/run", json={})
+    assert res.json()["state"] == "CHECKPOINT_1", res.text
+    review = client.get(f"/api/cases/{case_id}/review").json()
+    facts = demo_inputs.build_demo_confirmed_facts(review)
+    if facts_patch:
+        facts["fields"].update(facts_patch)
+    res = client.put(f"/api/cases/{case_id}/facts", json=facts)
+    assert res.status_code == 200, res.text
+    res = client.post(f"/api/cases/{case_id}/run", json={})
+    assert res.json()["state"] == "DRAFT_APPROVAL", res.text
+    drafts = client.get(f"/api/cases/{case_id}/drafts").json()
+    res = client.put(f"/api/cases/{case_id}/drafts", json={"sentences": [
+        {"sentence_id": s["sentence_id"], "approved": True}
+        for s in drafts["sentences"]]})
+    assert all(s["approved"] for s in res.json()["sentences"]), res.text
+    return case_id
+
+
 def test_k4_packaging_blocks_leak(case_env):
-    _case_id, package, _state = _run_to_package(
-        case_env, with_redacted=True,
-        facts_override={"creditor_address": "서울시 계좌 123-456789-01234"},
-    )
+    # INT-3 task 3: a G1b leak fail HOLDS after packaging (files stay
+    # for inspection); fixing the value recovers to CHECKPOINT_2.
+    client = case_env
+    case_id = _drive_to_packaging(
+        client, {"creditor_address": "서울시 계좌 123-456789-01234"})
+    res = client.post(f"/api/cases/{case_id}/run", json={})
+    assert res.status_code == 200
+    view = res.json()
+    assert view["state"] == "HOLD"
+    assert any(r["code"] == "g1b_failed" and r["step"] == "packaging"
+               for r in view["hold_reasons"])
+    files = case_state_mod.files_dir(case_id)
+    assert (files / "content_proof.pdf").exists()
+    package = coord.get_case(case_id).package or {}
     gates = {entry["gate"]: entry for entry in package["gate_results"]}
     assert gates["G1b"]["status"] == "fail"
     assert any("계좌/주민번호" in entry.get("message", "")
                for entry in gates["G1b"]["findings"])
+    # Fix the value via PUT /facts, then re-run to the checkpoint.
+    review = client.get(f"/api/cases/{case_id}/review").json()
+    facts = demo_inputs.build_demo_confirmed_facts(review)
+    res = client.put(f"/api/cases/{case_id}/facts", json=facts)
+    assert res.status_code == 200, res.text
+    assert res.json()["state"] == "CALCULATING"
+    res = client.post(f"/api/cases/{case_id}/run", json={})
+    assert res.json()["state"] == "DRAFT_APPROVAL", res.text
+    drafts = client.get(f"/api/cases/{case_id}/drafts").json()
+    client.put(f"/api/cases/{case_id}/drafts", json={"sentences": [
+        {"sentence_id": s["sentence_id"], "approved": True}
+        for s in drafts["sentences"]]})
+    res = client.post(f"/api/cases/{case_id}/run", json={})
+    assert res.json()["state"] == "CHECKPOINT_2", res.text
+
+
+# --- INT-3 task 3: G1b strictness ------------------------------------------------------
+
+def test_int3_ecourt_names_require_parties(case_env):
+    _package, docs = _package_docs(case_env)
+    expected = _expected()
+    gate = final_check_mod.check_g1b(
+        expected_amounts=expected[0], expected_dates=expected[1],
+        expected_names=expected[2], docs=docs,
+    )
+    assert gate.status == "pass", [f.message for f in gate.findings]
+    broken = dict(docs)
+    broken["ecourt"] = docs["ecourt"].replace(
+        SAMPLE_FIELDS["creditor_name"], "OOO").replace(
+        SAMPLE_FIELDS["debtor_name"], "XXX")
+    gate = final_check_mod.check_g1b(
+        expected_amounts=expected[0], expected_dates=expected[1],
+        expected_names=expected[2], docs=broken,
+    )
+    assert gate.status == "fail"
+    assert any("ecourt" in f.message and "찾을 수 없습니다" in f.message
+               for f in gate.findings)
+
+
+def test_int3_ecourt_amount_transposition_and_deletion(case_env):
+    _package, docs = _package_docs(case_env)
+    expected = _expected()
+    swapped = dict(docs)
+    swapped["ecourt"] = docs["ecourt"].replace("4,014,383", "4,041,383")
+    assert swapped["ecourt"] != docs["ecourt"]
+    gate = final_check_mod.check_g1b(
+        expected_amounts=expected[0], expected_dates=expected[1],
+        expected_names=expected[2], docs=swapped,
+    )
+    assert gate.status == "fail"
+    assert any("4,014,383" in f.message and "찾을 수 없습니다" in f.message
+               for f in gate.findings)
+    deleted = dict(docs)
+    deleted["ecourt"] = docs["ecourt"].replace("5,000,000", "")
+    assert deleted["ecourt"] != docs["ecourt"]
+    gate = final_check_mod.check_g1b(
+        expected_amounts=expected[0], expected_dates=expected[1],
+        expected_names=expected[2], docs=deleted,
+    )
+    assert gate.status == "fail"
+    assert any("5,000,000" in f.message and "찾을 수 없습니다" in f.message
+               for f in gate.findings)
+
+
+def test_int3_pixel_hash_catches_reencoded_identical(case_env):
+    from PIL import Image as PILImageLocal
+
+    case_id, _package, state = _run_to_package(case_env)
+    evidence_base = case_state_mod.evidence_dir(case_id)
+    files = case_state_mod.files_dir(case_id)
+    record = next(r for r in state.evidence if r.ex_id == "EX4")
+    original = evidence_base / record.stored_name
+    assert original.exists()
+    with PILImageLocal.open(original) as image:
+        reencoded = files / "redacted_EX4.png"
+        image.save(reencoded, compress_level=0)
+    assert reencoded.read_bytes() != original.read_bytes()
+    assert packager_mod._pixel_hash(reencoded) == packager_mod._pixel_hash(original)
+    _redacted, _needs, identical = packager_mod.get_redaction_status(state)
+    assert "EX4" in identical
+
+
+def test_int3_rendered_citation_closes_with_period():
+    rendered = deps.render_sentence(
+        "탁나루(SAMPLE)은 돈을 빌렸습니다. [[EX:4]] [[EX:6]]", {}, {})
+    assert rendered.endswith("[갑 제4호증] [갑 제6호증].")
+    assert ". [" not in rendered
+    rendered = deps.render_sentence(
+        "원금은 {{principal}}원입니다. [[EX:4]]",
+        {"principal": "5,000,000"}, {})
+    assert rendered.endswith("[갑 제4호증].")
+    assert not rendered.endswith("..")
+
+
+def test_int3_loan_agreement_role_flows_to_exhibits(case_env):
+    case_id, _package, state = _run_to_package(
+        case_env, roles_override={"EX6": "loan_agreement"})
+    files = case_state_mod.files_dir(case_id)
+    reader = PdfReader(str(files / "evidence_list.pdf"))
+    full = _norm("\n".join((page.extract_text() or "")
+                           for page in reader.pages))
+    assert "차용증" in full
+    state = coord.get_case(case_id)
+    assert state.confirmed_facts["evidence_roles"]["EX6"] == "loan_agreement"
 
 
 # --- K5: pre-write naming screen ------------------------------------------------------

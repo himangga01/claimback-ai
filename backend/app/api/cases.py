@@ -37,6 +37,21 @@ def _internal_error() -> JSONResponse:
     return err(500, "internal_error", "처리 중 오류가 생겼습니다.")
 
 
+async def _read_upload_bounded(upload: Any, limit: int) -> bytes:
+    """Read an upload in chunks, stopping just past ``limit`` (B4)."""
+    chunks: list = []
+    total = 0
+    while True:
+        piece = await upload.read(1024 * 1024)
+        if not piece:
+            break
+        chunks.append(bytes(piece))
+        total += len(piece)
+        if total > limit:
+            break
+    return b"".join(chunks)
+
+
 async def _read_json(request: Request) -> Any:
     try:
         raw = await request.body()
@@ -157,23 +172,29 @@ async def upload_evidence(case_id: str, request: Request) -> Any:
             if len(state.evidence) + len(uploads) > intake_mod.MAX_EVIDENCE_COUNT:
                 return err(400, "bad_request",
                            f"증거는 {intake_mod.MAX_EVIDENCE_COUNT}개까지 올릴 수 있습니다.")
+            # INT-3 B4: size first (bounded read), then validate every
+            # file before writing any of them (no orphan on disk).
+            staged: list = []
             for upload in uploads:
                 filename = Path(upload.filename or "upload").name
                 kind = intake_mod.kind_for(filename)
                 if kind is None:
                     return err(400, "bad_request", f"지원하지 않는 파일 형식입니다: {filename}")
                 try:
-                    data = await upload.read()
+                    data = await _read_upload_bounded(
+                        upload, intake_mod.MAX_UPLOAD_BYTES + 1)
                 except Exception:
                     return err(400, "bad_request", f"파일을 읽을 수 없습니다: {filename}")
                 if not data:
                     return err(400, "bad_request", f"빈 파일입니다: {filename}")
-                if len(bytes(data)) > intake_mod.MAX_UPLOAD_BYTES:
+                if len(data) > intake_mod.MAX_UPLOAD_BYTES:
                     return err(400, "bad_request",
                                f"파일이 너무 큽니다(20MB 이하): {filename}")
                 if not intake_mod.content_matches_kind(bytes(data), kind):
                     return err(400, "bad_request",
                                f"파일 내용과 확장자가 맞지 않습니다: {filename}")
+                staged.append((filename, bytes(data), kind))
+            for filename, data, kind in staged:
                 intake_mod.register_file(state, filename, bytes(data), kind)
             step = state.step("intake")
             step.status = "done"
@@ -378,6 +399,9 @@ async def generated_file(case_id: str, name: str) -> Any:
         path = files_dir(case_id) / safe
         if not path.exists() or not path.is_file():
             return err(404, "not_found", "파일을 찾을 수 없습니다.")
+        if safe.endswith(".png"):
+            # L7: redacted copies and masks open inside the browser.
+            return FileResponse(str(path), media_type="image/png")
         media = "application/pdf" if safe.endswith(".pdf") else "application/octet-stream"
         return FileResponse(str(path), media_type=media, filename=safe)
     except Exception:
@@ -392,9 +416,35 @@ async def delete(case_id: str) -> Any:
         return err(404, "not_found", "사건을 찾을 수 없습니다.")
     except coord.ConcurrentRun:
         return err(409, "wrong_state", "같은 사건이 실행 중이라 삭제할 수 없습니다.")
+    except coord.DeleteConflict as exc:
+        return err(409, "wrong_state", exc.message)
     except Exception:
         return _internal_error()
     return {"deleted": True}
+
+
+@router.get("/{case_id}/segments")
+async def get_segments(case_id: str) -> Any:
+    try:
+        try:
+            coord.get_case(case_id)
+        except coord.CaseNotFound:
+            return err(404, "not_found", "사건을 찾을 수 없습니다.")
+        return coord.load_segments(case_id)
+    except Exception:
+        return _internal_error()
+
+
+@router.get("/{case_id}/redactions")
+async def get_redactions(case_id: str) -> Any:
+    try:
+        try:
+            coord.get_case(case_id)
+        except coord.CaseNotFound:
+            return err(404, "not_found", "사건을 찾을 수 없습니다.")
+        return coord.load_redactions(case_id)
+    except Exception:
+        return _internal_error()
 
 
 @router.api_route("/{rest:path}", methods=["GET", "POST", "PUT", "DELETE",
