@@ -381,6 +381,10 @@ async def get_package(case_id: str) -> Any:
             return err(404, "not_found", "사건을 찾을 수 없습니다.")
         if state.package is None:
             return err(409, "wrong_state", "아직 편철이 끝나지 않았습니다.")
+        if state.state != "CHECKPOINT_2":
+            # INT-3c F1: a package that failed G1b is never handed out.
+            return err(409, "wrong_state",
+                       "최종 검사를 통과하지 못해 서류를 받을 수 없습니다. 지적을 고친 뒤 다시 실행하세요.")
         return state.package
     except Exception:
         return _internal_error()
@@ -390,7 +394,7 @@ async def get_package(case_id: str) -> Any:
 async def generated_file(case_id: str, name: str) -> Any:
     try:
         try:
-            coord.get_case(case_id)
+            state = coord.get_case(case_id)
         except coord.CaseNotFound:
             return err(404, "not_found", "사건을 찾을 수 없습니다.")
         safe = Path(name or "").name
@@ -399,6 +403,9 @@ async def generated_file(case_id: str, name: str) -> Any:
         path = files_dir(case_id) / safe
         if not path.exists() or not path.is_file():
             return err(404, "not_found", "파일을 찾을 수 없습니다.")
+        if safe.endswith(".pdf") and state.state != "CHECKPOINT_2":
+            # INT-3c F1: generated documents only after the final check passed.
+            return err(409, "wrong_state", "최종 검사를 통과한 뒤에 서류를 받을 수 있습니다.")
         if safe.endswith(".png"):
             # L7: redacted copies and masks open inside the browser.
             return FileResponse(str(path), media_type="image/png")

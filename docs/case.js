@@ -1416,6 +1416,11 @@ async function loadPackage(opts) {
     li.appendChild(a);
     files.appendChild(li);
   }
+  const parties = (S.pkg.ecourt || {}).parties || "";
+  if ($("claim-parties")) {
+    $("claim-parties").textContent = parties;
+    $("parties-wrap").hidden = !parties;
+  }
   $("claim-purpose").textContent = (S.pkg.ecourt || {}).claim_purpose || "";
   $("claim-cause").textContent = (S.pkg.ecourt || {}).claim_cause_payment_order || "";
   $("pkg-notice").textContent = (S.pkg.notices || {}).notice_ko || "";

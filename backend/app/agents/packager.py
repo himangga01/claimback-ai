@@ -489,6 +489,9 @@ def build_package(state: CaseState) -> Dict[str, Any]:
             },
         ],
         "ecourt": {
+            # INT-3c F2: the parties block G1b checks is also what the user
+            # sees and copies (it carries the real names).
+            "parties": str(packet.get("parties", "") or ""),
             "claim_purpose": claim_purpose,
             "claim_cause_payment_order": claim_cause,
         },

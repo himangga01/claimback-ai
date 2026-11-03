@@ -176,17 +176,57 @@ def _doc_template(output_path: Union[str, Path]) -> SimpleDocTemplate:
     )
 
 
+# INT-3c F3: document-shaped images (A4 is 1.41) stay on one page so a
+# signature box or stamp is never cut; only long screenshots are sliced.
+DOCUMENT_MAX_ASPECT = 1.6
+# Any pixel darker than near-white counts (light-gray timestamps and chat
+# bubbles too), so cuts fall on plain background rows and only truly empty
+# slices are dropped.
+INK_THRESHOLD = 235
+BLANK_SLICE_MIN_INK = 20     # a slice with fewer marked pixels is empty paper
+CUT_SEARCH_FRACTION = 0.3    # look for a blank row in the last 30% of a slice
+
+
+def _row_ink(gray: Any, width: int, height: int) -> List[int]:
+    buf = gray.tobytes()
+    return [sum(1 for value in buf[y * width:(y + 1) * width]
+                if value < INK_THRESHOLD)
+            for y in range(height)]
+
+
+def _cut_rows(row_ink: Sequence[int], max_slice_h: int) -> List[Tuple[int, int]]:
+    """Slice bounds that end on the emptiest row near each page limit."""
+    height = len(row_ink)
+    bounds: List[Tuple[int, int]] = []
+    top = 0
+    while top < height:
+        limit = top + max_slice_h
+        if limit >= height:
+            bounds.append((top, height))
+            break
+        start = max(top + 1, limit - int(max_slice_h * CUT_SEARCH_FRACTION))
+        window = range(limit, start - 1, -1)
+        cut = min(window, key=lambda y: row_ink[y])
+        bounds.append((top, cut))
+        top = cut
+    return bounds
+
+
 def _slice_tall_image(path: Path, max_w: float, max_h: float) -> List[Path]:
     """Split a tall image so each slice stays legible (K10).
 
     Slices keep full width; each slice height fits ``max_h`` when scaled to
     ``max_w``. Single-slice images return ``[path]`` (no temp files).
+    Document-shaped images are not sliced, cuts fall on the emptiest row
+    near the page limit, and near-blank slices are dropped (INT-3c F3).
     """
     size = _image_size(path)
     if not size or size[0] <= 0 or size[1] <= 0:
         return [path]
     width, height = size
     if width <= 0:
+        return [path]
+    if height / float(width) <= DOCUMENT_MAX_ASPECT:
         return [path]
     scale_w = max_w / float(width)
     if scale_w <= 0:
@@ -206,11 +246,14 @@ def _slice_tall_image(path: Path, max_w: float, max_h: float) -> List[Path]:
     try:
         with _PILImage.open(path) as image:
             mode = image.mode
-            total = (height + max_slice_h - 1) // max_slice_h
+            row_ink = _row_ink(image.convert("L"), width, height)
+            bounds = [(top, bottom) for top, bottom in _cut_rows(row_ink, max_slice_h)
+                      if sum(row_ink[top:bottom]) >= BLANK_SLICE_MIN_INK]
+            if not bounds or bounds == [(0, height)]:
+                return [path]
+            total = len(bounds)
             out: List[Path] = []
-            for idx in range(total):
-                top = idx * max_slice_h
-                bottom = min(height, top + max_slice_h)
+            for idx, (top, bottom) in enumerate(bounds):
                 crop = image.crop((0, top, width, bottom))
                 target = tmpdir / f"{path.stem}_p{idx + 1}of{total}.png"
                 save_mode = mode if mode in ("RGB", "RGBA", "L") else "RGB"

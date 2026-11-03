@@ -263,12 +263,16 @@ def render_sentence(
     """
     rendered = ex_tag_to_label(
         substitute_text(text_with_slots, values, quotes))
+    # INT-3c F6: a chat bubble's line breaks become spaces in the sentence
+    # (render time only, so the drafter's request and replay stay the same).
+    rendered = re.sub(r"\s*\n\s*", " ", rendered)
     match = re.search(r"\.\s*((?:\[갑 제\d+호증\]\s*)+)$", rendered)
     if match:
         cites = " ".join(re.findall(r"\[갑 제\d+호증\]", match.group(1)))
         rendered = rendered[:match.start()].rstrip() + " " + cites + "."
-    elif (re.search(r"\[갑 제\d+호증\]\s*$", rendered)
+    elif (re.search(r"(?:\[갑 제\d+호증\]|\(사용자 진술\))\s*$", rendered)
           and not rendered.rstrip().endswith(".")):
+        # INT-3c F6: user statements close with a period too.
         rendered = rendered.rstrip() + "."
     return rendered
 

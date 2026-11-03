@@ -1494,7 +1494,7 @@ def _run_calc_flow(state: CaseState) -> CaseState:
             g1a = deps.check_g1a_case(sentences, allowed, parties, ex_ids)
             g3 = deps.check_g3_case(sentences, ex_ids)
             naming = deps.check_naming_case(sentences)
-            draft_gate = draft_rules_mod.check_draft_rules(sentences)
+            draft_gate = draft_rules_mod.check_draft_rules(sentences, sourced_slots=draft_rules_mod.sourced_slots_from_review(state.review))
             quote_findings = _unresolved_quotes(sentences, quotes)
             if quote_findings:
                 g1a.findings.extend(quote_findings)
@@ -1650,7 +1650,7 @@ def _run_package_flow(state: CaseState) -> CaseState:
     g1a = deps.check_g1a_case(slim, allowed, parties, ex_ids)
     g3 = deps.check_g3_case(slim, ex_ids)
     naming = deps.check_naming_case(slim)
-    draft_gate = draft_rules_mod.check_draft_rules(slim)
+    draft_gate = draft_rules_mod.check_draft_rules(slim, sourced_slots=draft_rules_mod.sourced_slots_from_review(state.review))
     if (g1a.status != "pass" or g3.status != "pass"
             or naming.status != "pass" or draft_gate.status != "pass"):
         raise WrongState("unapproved_sentences", "검사를 통과하지 못한 문장이 있습니다.")
@@ -1676,8 +1676,15 @@ def _run_package_flow(state: CaseState) -> CaseState:
                   if entry.get("gate") == "G1b"
                   and entry.get("status") == "fail"]
     if g1b_failed:
-        # INT-3 task 3: values/names/leak failures hold after packaging
-        # (files stay for inspection); fix, then POST /run repackages.
+        # INT-3 task 3: values/names/leak failures hold after packaging;
+        # fix, then POST /run repackages. INT-3c F1: the failed PDFs are
+        # deleted so a leak can never be downloaded.
+        from pathlib import Path as _Path
+
+        for file_entry in package.get("files", []) or []:
+            name = _Path(str(file_entry.get("name", "") or "")).name
+            if name.endswith(".pdf"):
+                (_Path(files_dir(state.case_id)) / name).unlink(missing_ok=True)
         docs = sorted({str(finding.get("field", ""))
                        for entry in g1b_failed
                        for finding in entry.get("findings", []) or []
@@ -1931,7 +1938,7 @@ def apply_drafts(case_id: str, body: Any) -> Dict[str, Any]:
         g1a = deps.check_g1a_case(slim, allowed, parties, ex_ids)
         g3 = deps.check_g3_case(slim, ex_ids)
         naming = deps.check_naming_case(slim)
-        draft_gate = draft_rules_mod.check_draft_rules(slim)
+        draft_gate = draft_rules_mod.check_draft_rules(slim, sourced_slots=draft_rules_mod.sourced_slots_from_review(state.review))
         quote_findings = _unresolved_quotes(slim, quotes)
         if quote_findings:
             g1a.findings.extend(quote_findings)

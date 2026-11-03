@@ -151,11 +151,32 @@ SPEECH_MATRIX = (
     "묻",
 )
 
+# INT-3c F5: in a ``fact`` sentence, a quotative followed by a request
+# verb ("… 달라고 요청했습니다", "… 부탁했습니다") is reported speech too.
+# ``user`` sentences keep the M2c-fix1 allowance ("… 달라고
+# 요청하였으나 받지 못했다").
+FACT_REQUEST_MATRIX = ("요청했", "요청하였", "요청합", "부탁했", "부탁하였", "부탁합", "부탁드")
+
 # After a quotative ending, a message noun followed by a send verb
 # ("... 달라고 문자를 보냈습니다") is reported speech (M2c-fix1 D1).
 # These never trigger on their own: "보냈습니다" and "연락" pass.
-MESSAGE_NOUNS = ("문자", "메시지", "연락")
-SEND_VERBS = ("보내", "보냈", "보낸", "보냄")
+MESSAGE_NOUNS = ("문자", "메시지", "연락", "답장")
+SEND_VERBS = ("보내", "보냈", "보낸", "보냄", "받았", "받은", "받음")
+
+# INT-3c F5: adnominal quotatives ("… 보겠다는 답장을 보냈습니다") count
+# only with a message noun + send verb, never alone ("… 라는 내용").
+ADNOMINAL_QUOTATIVES = ("다는", "라는")
+
+# INT-3c F5: a sentence that describes what a document says
+# ("차용증에는 … 갚기로 적혀 있습니다") is not a promise in speech. It
+# must name a document, and a quotative before the phrase ("갚기로
+# 했다고 적혀") still counts as speech.
+DOCUMENT_PHRASES = ("적혀", "적힌", "기재", "쓰여", "쓰인")
+DOCUMENT_NOUNS = ("차용증", "확인증", "영수증", "계약서", "각서", "증서", "내역서")
+
+# INT-3c F5: "주기로" means "every …" only after a duration
+# (일주일 주기로, 한 달 주기로, 3일 주기로), not after 내일/다음 달.
+_DURATION_RE = re.compile(r"^(?:일주일|보름|한달|\d+(?:일|주|주일|개월|달|년|시간|분))$")
 
 _SLOT_RE = re.compile(r"\{\{\s*([^}]*?)\s*\}\}")
 _QUOTE_RE = re.compile(r"\{\{\s*quote:[A-Za-z0-9_]+:[A-Za-z0-9_]+\s*\}\}")
@@ -178,6 +199,7 @@ __all__ = [
     "drafter_allowed_slots",
     "has_speech",
     "check_draft_rules",
+    "sourced_slots_from_review",
 ]
 
 
@@ -192,26 +214,63 @@ def _eojeols(text: str) -> List[str]:
     return [part.strip(_STRIP_CHARS) for part in str(text).split()]
 
 
-def _starts_with_matrix(word: str) -> Optional[str]:
-    for form in SPEECH_MATRIX:
+def _starts_with_matrix(word: str, matrix: tuple = SPEECH_MATRIX) -> Optional[str]:
+    for form in matrix:
         if word.startswith(form):
             return form
     return None
 
 
-def has_speech(text: str) -> Optional[str]:
+def _message_sent(words: List[str], index: int) -> bool:
+    window = words[index + 1:index + 5]
+    for pos2, cand in enumerate(window):
+        if any(noun in cand for noun in MESSAGE_NOUNS):
+            return any(any(send in later for send in SEND_VERBS)
+                       for later in window[pos2:])
+    return False
+
+
+def _is_period_juki(words: List[str], index: int) -> bool:
+    """"주기로" right after a duration means "every …", not a promise."""
+    if not words[index].startswith("주기로") or index == 0:
+        return False
+    prev = words[index - 1]
+    if _DURATION_RE.match(prev):
+        return True
+    return prev == "달" and index > 1 and words[index - 2] == "한"
+
+
+def _describes_document(words: List[str]) -> bool:
+    """Names a document and says what it states, without reported speech."""
+    if not any(noun in word for word in words for noun in DOCUMENT_NOUNS):
+        return False
+    for index, word in enumerate(words):
+        if any(phrase in word for phrase in DOCUMENT_PHRASES):
+            before = words[max(0, index - 1):index]
+            return not any(quot in prev for prev in before
+                           for quot in SPEECH_QUOTATIVES)
+    return False
+
+
+def has_speech(text: str, stype: str = "") -> Optional[str]:
     """Detect a speech/promise expression, or return None.
 
-    Returns the matched marker for messages/tests.
+    Returns the matched marker for messages/tests. ``stype="fact"`` widens
+    the quotative matrix with request verbs (INT-3c); other callers keep
+    the M2c-fix1 behavior.
     """
     words = [word for word in _eojeols(text) if word]
-    for word in words:
+    describes_document = _describes_document(words)
+    for index, word in enumerate(words):
         for verb in SPEECH_VERBS:
             if verb in word:
                 return verb
+        if describes_document or _is_period_juki(words, index):
+            continue
         for marker in GIRO_MARKERS:
             if marker in word:
                 return marker
+    matrix = SPEECH_MATRIX + (FACT_REQUEST_MATRIX if stype == "fact" else ())
     for index, word in enumerate(words):
         for quot in SPEECH_QUOTATIVES:
             pos = word.find(quot)
@@ -219,25 +278,46 @@ def has_speech(text: str) -> Optional[str]:
                 continue
             rest = word[pos + len(quot):].strip(_STRIP_CHARS)
             if rest:
-                hit = _starts_with_matrix(rest)
+                hit = _starts_with_matrix(rest, matrix)
                 if hit is not None:
                     return quot + "+" + hit
             if index + 1 < len(words):
-                hit = _starts_with_matrix(words[index + 1])
+                hit = _starts_with_matrix(words[index + 1], matrix)
                 if hit is not None:
                     return quot + "+" + hit
-            window = words[index + 1:index + 5]
-            for pos2, cand in enumerate(window):
-                if any(noun in cand for noun in MESSAGE_NOUNS):
-                    for later in window[pos2:]:
-                        if any(send in later for send in SEND_VERBS):
-                            return quot + "+문자보냈"
-                    break
+            if _message_sent(words, index):
+                return quot + "+문자보냈"
+        for quot in ADNOMINAL_QUOTATIVES:
+            if word.endswith(quot) and _message_sent(words, index):
+                return quot + "+문자보냈"
     return None
 
 
-def _has_speech_verb(text: str) -> str | None:
-    return has_speech(text)
+def _has_speech_verb(text: str, stype: str = "fact") -> str | None:
+    return has_speech(text, stype)
+
+
+# Confirmed field -> drafter slots (INT-3c F5: coordinator passes the
+# slots of evidence-backed fields to the user-sentence rule).
+FIELD_SLOTS = {
+    "principal": ("principal",),
+    "loan_date": ("loan_date",),
+    "due_date": ("due_date",),
+    "repayments": ("repaid_amount", "repaid_date"),
+    "interest_rate": ("agreed_rate",),
+    "creditor_name": ("creditor_name",),
+    "debtor_name": ("debtor_name",),
+}
+
+
+def sourced_slots_from_review(review: Any) -> List[str]:
+    """Slots whose Review field cites at least one evidence item."""
+    fields = (review or {}).get("fields", []) if isinstance(review, dict) else []
+    slots: List[str] = []
+    for entry in fields or []:
+        if isinstance(entry, dict) and entry.get("sources"):
+            slots.extend(FIELD_SLOTS.get(str(entry.get("field", "")), ()))
+    return slots
 
 
 def _slot_names(text: str) -> List[str]:
@@ -312,7 +392,7 @@ def check_draft_rules(
                     message=f"계산값 슬롯은 쓸 수 없습니다: {name}",
                     fix_hint="계산값은 편철 담당이 정형 문구로 넣습니다.",
                 ))
-        verb = _has_speech_verb(text)
+        verb = _has_speech_verb(text, stype)
         has_quote = _QUOTE_RE.search(text) is not None
         if has_quote or verb is not None:
             for name in _slot_names(text):
