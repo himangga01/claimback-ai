@@ -92,7 +92,7 @@
 | `repayments[ {date, amount} ]` | `repayments[ {payment_date, amount} ]` |
 | `evidence_roles` | `evidences[]`: `id` = "갑 제N호증", `title` = 파일 종류 설명, `evidence_type` = 역할이 `loan_transfer`·`repayment`면 `transfer_receipt`, 대화면 `messenger_chat`, 차용증이면 `loan_agreement`, `role`, `source_filename`, `sha256_hash` |
 
-- 태그는 설계 3-4 목록만. 화면 표시 이름: `loan_request` "빌려 달라는 말", `amount_mention` "금액 언급", `repay_promise` "갚겠다는 말", `reminder` "갚아 달라는 말"(15:20 변경, 법적 절차 이름 "독촉"과 헷갈리지 않게), `other` "기타".
+- 태그는 설계 3-4 목록만. 화면 표시 이름: `loan_request` "빌려 달라는 말", `amount_mention` "금액 언급", `repay_promise` "갚겠다는 말", `reminder` "갚아 달라는 말"(15:16 변경, 법적 절차 이름 "독촉"과 헷갈리지 않게), `other` "기타".
 
 ### `ConfirmedFacts` — `PUT /facts` (예시 `confirmed_facts_kr.json`)
 `{ fields: {...위 field...}, evidence_roles: { "EX4": "loan_transfer", ... }, highlight: [ "EX1:item4" ], as_of: "2026-06-01" }`
