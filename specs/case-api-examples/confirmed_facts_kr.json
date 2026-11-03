@@ -1,0 +1,34 @@
+{
+  "_rule": "build_demo_confirmed_facts(review): fields = review values; empty fields only from fallback_fields; evidence_roles = suggested_role; highlight = first repay_promise utterance in ex_id then item_id order; as_of = 2026-06-01. Never read backend/tests/golden.",
+  "fallback_fields": {
+    "creditor_name": "서가온(SAMPLE)",
+    "creditor_address": "서울특별시 샘플구 데모로 0",
+    "creditor_phone": "010-0000-0000",
+    "debtor_name": "탁나루(SAMPLE)",
+    "debtor_address": "경기도 샘플시 데모동 0",
+    "principal": "5000000",
+    "loan_date": "2026-03-10",
+    "due_date": "2026-04-10",
+    "interest_rate": null,
+    "transaction_kind": "civil",
+    "repayments": [ { "date": "2026-05-01", "amount": "1000000" } ]
+  },
+  "example_request": {
+    "fields": {
+      "creditor_name": "서가온(SAMPLE)",
+      "creditor_address": "서울특별시 샘플구 데모로 0",
+      "creditor_phone": "010-0000-0000",
+      "debtor_name": "탁나루(SAMPLE)",
+      "debtor_address": "경기도 샘플시 데모동 0",
+      "principal": "5000000",
+      "loan_date": "2026-03-10",
+      "due_date": "2026-04-10",
+      "interest_rate": null,
+      "transaction_kind": "civil",
+      "repayments": [ { "date": "2026-05-01", "amount": "1000000" } ]
+    },
+    "evidence_roles": { "EX1": "other", "EX2": "other", "EX3": "other", "EX4": "loan_transfer", "EX5": "repayment", "EX6": "other" },
+    "highlight": [ "EX1:item4" ],
+    "as_of": "2026-06-01"
+  }
+}

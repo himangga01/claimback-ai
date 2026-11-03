@@ -1,0 +1,32 @@
+{
+  "fields": [
+    { "field": "creditor_name", "label": "채권자 이름", "value": "서가온(SAMPLE)", "display": "서가온(SAMPLE)", "sources": [ { "ex_id": "EX4", "item_id": "item1" }, { "ex_id": "EX6", "item_id": "item1" } ], "conflict": false },
+    { "field": "creditor_address", "label": "채권자 주소", "value": "서울특별시 샘플구 데모로 0", "display": "서울특별시 샘플구 데모로 0", "sources": [ { "ex_id": "EX6", "item_id": "item2" } ], "conflict": false },
+    { "field": "creditor_phone", "label": "채권자 연락처", "value": null, "display": "", "sources": [], "conflict": false },
+    { "field": "debtor_name", "label": "채무자 이름", "value": "탁나루(SAMPLE)", "display": "탁나루(SAMPLE)", "sources": [ { "ex_id": "EX4", "item_id": "item5" }, { "ex_id": "EX6", "item_id": "item3" } ], "conflict": false },
+    { "field": "debtor_address", "label": "채무자 주소", "value": "경기도 샘플시 데모동 0", "display": "경기도 샘플시 데모동 0", "sources": [ { "ex_id": "EX6", "item_id": "item4" } ], "conflict": false },
+    { "field": "principal", "label": "원금", "value": "5000000", "display": "5,000,000원", "sources": [ { "ex_id": "EX4", "item_id": "item3" }, { "ex_id": "EX6", "item_id": "item5" } ], "conflict": false },
+    { "field": "loan_date", "label": "대여일", "value": "2026-03-10", "display": "2026. 3. 10.", "sources": [ { "ex_id": "EX4", "item_id": "item4" }, { "ex_id": "EX6", "item_id": "item7" } ], "conflict": false },
+    { "field": "due_date", "label": "변제기", "value": "2026-04-10", "display": "2026. 4. 10.", "sources": [ { "ex_id": "EX6", "item_id": "item8" }, { "ex_id": "EX1", "item_id": "item4" } ], "conflict": false },
+    { "field": "interest_rate", "label": "약정 이율(연 %)", "value": null, "display": "약정 없음", "sources": [ { "ex_id": "EX6", "item_id": "item9" } ], "conflict": false },
+    { "field": "transaction_kind", "label": "거래 종류", "value": "civil", "display": "개인 간 거래", "sources": [], "conflict": false },
+    { "field": "repayments", "label": "받은 돈", "value": [ { "date": "2026-05-01", "amount": "1000000" } ], "display": "2026. 5. 1. 1,000,000원", "sources": [ { "ex_id": "EX5", "item_id": "item3" }, { "ex_id": "EX2", "item_id": "item6" } ], "conflict": false }
+  ],
+  "conflicts": [],
+  "questions": [ { "field": "creditor_phone", "question": "채권자 연락처를 입력하세요(서류의 연락처 칸)." } ],
+  "utterances": [
+    { "ex_id": "EX1", "item_id": "item2", "speaker": "탁나루(SAMPLE)", "text": "서가온님, 급하게 500만 원만 빌려주실 수 있나요?", "tags": [ "loan_request", "amount_mention" ] },
+    { "ex_id": "EX1", "item_id": "item4", "speaker": "탁나루(SAMPLE)", "text": "네, 병원비로 500만 원이 필요해요. 4월 10일까지 갚을게요.", "tags": [ "amount_mention", "repay_promise" ] },
+    { "ex_id": "EX1", "item_id": "item5", "speaker": "서가온(SAMPLE)", "text": "알겠어요. 오늘 5,000,000원 보낼게요.", "tags": [ "amount_mention" ] },
+    { "ex_id": "EX2", "item_id": "item3", "speaker": "서가온(SAMPLE)", "text": "약속한 4월 10일이 지났는데 언제 보내 줄 수 있어요?", "tags": [ "reminder" ] },
+    { "ex_id": "EX2", "item_id": "item6", "speaker": "탁나루(SAMPLE)", "text": "오늘 100만 원 먼저 보냈어요. 나머지는 곧 갚을게요.", "tags": [ "amount_mention", "repay_promise" ] }
+  ],
+  "evidence_roles": [
+    { "ex_id": "EX1", "suggested_role": "other" },
+    { "ex_id": "EX2", "suggested_role": "other" },
+    { "ex_id": "EX3", "suggested_role": "other" },
+    { "ex_id": "EX4", "suggested_role": "loan_transfer" },
+    { "ex_id": "EX5", "suggested_role": "repayment" },
+    { "ex_id": "EX6", "suggested_role": "other" }
+  ]
+}

@@ -1,6 +1,6 @@
 # M3 합성 샘플 증거 세트와 정답 데이터 (작업 지시서)
 
-- 작성: 2026-11-03 12:05 KST, Claude / 갱신 12:40 KST(서브에이전트 교차 리뷰와 M0 결과 반영)
+- 작성: 2026-11-03 12:05 KST, Claude / 갱신 12:21 KST(서브에이전트 교차 리뷰와 M0 결과 반영)
 - 수행: Muse Code (`muse-spark-1.3`), git 작업 트리 `C:\2026_project\claimback-wt\m3-samples`(브랜치 `m3-samples`). M0-fix1·M1과 동시에 진행하므로 아래 "파일 범위" 밖은 건드리지 않습니다.
 - 먼저 읽을 것: `AGENTS.md`, 이 지시서, `reports/M-1-review.md`(R1, R2, R3, R5, R10), `reports/M0-review.md`(M3에 넘긴 항목)
 - 참조: 계획서 `specs/ClaimBack-AI_검토_및_구현테스트계획.md` 1-2(8)·(9)·(12), 4-6 L3, 5장 데모, 6장 고지 문구 / 에이전트 설계 `specs/ClaimBack-AI_에이전트_설계.md` 3-1(판독 출력), 3-2(감식 대상), 3-3(가림 정책), 3-4(발화 유형)

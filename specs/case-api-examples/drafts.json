@@ -1,0 +1,45 @@
+{
+  "calculation": {
+    "allocations": [
+      { "payment_date": "2026-05-01", "payment_amount": "1000000", "applied_to_cost": "0", "applied_to_interest": "14383", "applied_to_principal": "985617", "remaining_principal_after": "4014383" }
+    ],
+    "remaining_principal": "4014383",
+    "accrual_start_date": "2026-05-02",
+    "rate_clause": {
+      "pre_service_rate": "5.0",
+      "post_service_rate": "12.0",
+      "sentence": "채무자는 채권자에게 4,014,383원 및 이에 대하여 2026. 5. 2.부터 이 사건 지급명령 정본 송달일까지는 연 5%, 그 다음 날부터 다 갚는 날까지는 연 12%의 각 비율로 계산한 돈을 지급하라."
+    },
+    "reference_total": { "as_of": "2026-06-01", "amount": "4031430" },
+    "limit_check": { "jurisdiction": "KR", "threshold": "30000000", "compared_amount": "4014383", "exceeded": false, "message": null },
+    "missing_fields": [],
+    "warnings": [],
+    "calculation_steps": [
+      { "label": "지연손해금", "formula": "5,000,000 × 5% × 21/365 = 14,383.56", "amount": "14383.56164383561643835616438" },
+      { "label": "충당 시 이자 합계", "formula": "14,383.56 → 14,383원", "amount": "14383" },
+      { "label": "지연손해금", "formula": "4,014,383 × 5% × 31/365 = 17,047.38", "amount": "17047.37986301369863013698630" },
+      { "label": "기준일 이자 합계", "formula": "17,047.38 → 17,047원", "amount": "17047" }
+    ],
+    "overpayment_amount": "0",
+    "accrued_interest": "17047"
+  },
+  "gate_results": [
+    { "gate": "G2", "status": "pass", "findings": [] },
+    { "gate": "G4", "status": "pass", "findings": [] },
+    { "gate": "G1a", "status": "pass", "findings": [] },
+    { "gate": "G3", "status": "pass", "findings": [] }
+  ],
+  "sentences": [
+    { "sentence_id": "s1", "type": "fact", "text_with_slots": "{{creditor_name}}은 {{loan_date}} {{debtor_name}}에게 {{principal}}을 보냈습니다. [[EX:4]]", "rendered_text": "서가온(SAMPLE)은 2026. 3. 10. 탁나루(SAMPLE)에게 5,000,000원을 보냈습니다. [갑 제4호증]", "ex_refs": [ "EX4" ], "findings": [], "approved": false },
+    { "sentence_id": "s2", "type": "fact", "text_with_slots": "{{debtor_name}}은 {{due_date}}까지 갚겠다고 했습니다. {{quote:EX1:item4}} [[EX:1]] [[EX:6]]", "rendered_text": "탁나루(SAMPLE)는 2026. 4. 10.까지 갚겠다고 했습니다. \"네, 병원비로 500만 원이 필요해요. 4월 10일까지 갚을게요.\" [갑 제1호증] [갑 제6호증]", "ex_refs": [ "EX1", "EX6" ], "findings": [], "approved": false },
+    { "sentence_id": "s3", "type": "fact", "text_with_slots": "{{debtor_name}}은 {{repaid_date}} {{repaid_amount}}을 보냈습니다. [[EX:5]]", "rendered_text": "탁나루(SAMPLE)는 2026. 5. 1. 1,000,000원을 보냈습니다. [갑 제5호증]", "ex_refs": [ "EX5" ], "findings": [], "approved": false },
+    { "sentence_id": "s4", "type": "user", "text_with_slots": "그 뒤로 남은 돈을 받지 못했습니다. [[USER]]", "rendered_text": "그 뒤로 남은 돈을 받지 못했습니다. (사용자 진술)", "ex_refs": [], "findings": [], "approved": false }
+  ],
+  "revision_rounds": 1,
+  "revisions": [
+    { "round": 1, "gate_results": [
+      { "gate": "G1a", "status": "fail", "findings": [ { "sentence_id": "s3", "field": "text_with_slots", "message": "슬롯 밖에 금액이 있습니다: 100만 원", "fix_hint": "금액은 {{repaid_amount}} 슬롯을 쓰세요." } ] },
+      { "gate": "G3", "status": "pass", "findings": [] }
+    ] }
+  ]
+}

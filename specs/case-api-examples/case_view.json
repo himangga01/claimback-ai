@@ -1,0 +1,39 @@
+{
+  "case_id": "case_0a1b2c3d4e5f",
+  "jurisdiction": "KR",
+  "state": "CHECKPOINT_1",
+  "meta_mode": "replay",
+  "run_cost_usd": "0.0712",
+  "stub": false,
+  "hold_reasons": [],
+  "steps": [
+    { "key": "intake", "agent": "접수 담당", "group": "Forensic Visual", "model": null, "status": "done", "started_at": "2026-11-03T13:00:00+09:00", "ended_at": "2026-11-03T13:00:00+09:00", "latency_ms": 41, "attempts": 1, "cost_usd": "0", "note": "증거 6개, SHA-256 기록", "substeps": [] },
+    { "key": "reading", "agent": "판독 담당", "group": "Fact-Timeline Chronology", "model": "muse-spark-1.3", "status": "done", "started_at": "2026-11-03T13:00:00+09:00", "ended_at": "2026-11-03T13:00:19+09:00", "latency_ms": 18840, "attempts": 1, "cost_usd": "0.0521", "note": "5개 판독, 1개 건너뜀(영상)",
+      "substeps": [
+        { "ex_id": "EX1", "status": "done", "latency_ms": 12110 },
+        { "ex_id": "EX2", "status": "done", "latency_ms": 18840 },
+        { "ex_id": "EX3", "status": "skipped", "latency_ms": 0 },
+        { "ex_id": "EX4", "status": "done", "latency_ms": 9020 },
+        { "ex_id": "EX5", "status": "done", "latency_ms": 8710 },
+        { "ex_id": "EX6", "status": "done", "latency_ms": 10330 }
+      ] },
+    { "key": "vision", "agent": "시각 감식 담당", "group": "Forensic Visual", "model": "sam-3.1", "status": "skipped", "started_at": null, "ended_at": null, "latency_ms": 0, "attempts": 0, "cost_usd": "0", "note": "이 버전에서는 사용하지 않음", "substeps": [] },
+    { "key": "organizing", "agent": "사실 정리 담당", "group": "Fact-Timeline Chronology", "model": "muse-spark-1.3", "status": "done", "started_at": "2026-11-03T13:00:19+09:00", "ended_at": "2026-11-03T13:00:31+09:00", "latency_ms": 12400, "attempts": 1, "cost_usd": "0.0191", "note": "필드 11개, 충돌 0, 질문 1", "substeps": [] },
+    { "key": "privacy", "agent": "개인정보 보호 담당", "group": "Forensic Visual", "model": null, "status": "skipped", "started_at": null, "ended_at": null, "latency_ms": 0, "attempts": 0, "cost_usd": "0", "note": "이 버전에서는 사용하지 않음", "substeps": [] },
+    { "key": "checkpoint_1", "agent": "사용자 확인", "group": "User", "model": null, "status": "running", "started_at": "2026-11-03T13:00:31+09:00", "ended_at": null, "latency_ms": 0, "attempts": 0, "cost_usd": "0", "note": "사실값 확인과 강조할 발화 선택", "substeps": [] },
+    { "key": "calculating", "agent": "계산 담당", "group": "Financial Auditor", "model": null, "status": "waiting", "started_at": null, "ended_at": null, "latency_ms": 0, "attempts": 0, "cost_usd": "0", "note": "", "substeps": [] },
+    { "key": "drafting", "agent": "문안 작성 담당", "group": "Fact-Timeline Chronology", "model": "muse-spark-1.3", "status": "waiting", "started_at": null, "ended_at": null, "latency_ms": 0, "attempts": 0, "cost_usd": "0", "note": "", "substeps": [] },
+    { "key": "verifying", "agent": "검증 담당(G1a·G3)", "group": "Financial Auditor", "model": null, "status": "waiting", "started_at": null, "ended_at": null, "latency_ms": 0, "attempts": 0, "cost_usd": "0", "note": "", "substeps": [] },
+    { "key": "draft_approval", "agent": "사용자 문장 승인", "group": "User", "model": null, "status": "waiting", "started_at": null, "ended_at": null, "latency_ms": 0, "attempts": 0, "cost_usd": "0", "note": "", "substeps": [] },
+    { "key": "packaging", "agent": "편철 담당", "group": "Judicial Form Filler", "model": null, "status": "waiting", "started_at": null, "ended_at": null, "latency_ms": 0, "attempts": 0, "cost_usd": "0", "note": "", "substeps": [] },
+    { "key": "checkpoint_2", "agent": "사용자 최종 확인", "group": "User", "model": null, "status": "waiting", "started_at": null, "ended_at": null, "latency_ms": 0, "attempts": 0, "cost_usd": "0", "note": "", "substeps": [] }
+  ],
+  "evidence": [
+    { "ex_id": "EX1", "label": "갑 제1호증", "filename": "chat_01.png", "sha256": "(파일 해시)", "kind": "image", "status": "ok", "url": "/api/cases/case_0a1b2c3d4e5f/evidence/EX1/file", "preview_url": "/api/cases/case_0a1b2c3d4e5f/evidence/EX1/preview" },
+    { "ex_id": "EX2", "label": "갑 제2호증", "filename": "chat_02_tall.png", "sha256": "(파일 해시)", "kind": "image", "status": "ok", "url": "/api/cases/case_0a1b2c3d4e5f/evidence/EX2/file", "preview_url": "/api/cases/case_0a1b2c3d4e5f/evidence/EX2/preview" },
+    { "ex_id": "EX3", "label": "갑 제3호증", "filename": "chat_02_scroll.mp4", "sha256": "(파일 해시)", "kind": "video", "status": "skipped", "url": "/api/cases/case_0a1b2c3d4e5f/evidence/EX3/file", "preview_url": null },
+    { "ex_id": "EX4", "label": "갑 제4호증", "filename": "transfer_loan.png", "sha256": "(파일 해시)", "kind": "image", "status": "ok", "url": "/api/cases/case_0a1b2c3d4e5f/evidence/EX4/file", "preview_url": "/api/cases/case_0a1b2c3d4e5f/evidence/EX4/preview" },
+    { "ex_id": "EX5", "label": "갑 제5호증", "filename": "transfer_repay.png", "sha256": "(파일 해시)", "kind": "image", "status": "ok", "url": "/api/cases/case_0a1b2c3d4e5f/evidence/EX5/file", "preview_url": "/api/cases/case_0a1b2c3d4e5f/evidence/EX5/preview" },
+    { "ex_id": "EX6", "label": "갑 제6호증", "filename": "iou.pdf", "sha256": "(파일 해시)", "kind": "pdf", "status": "ok", "url": "/api/cases/case_0a1b2c3d4e5f/evidence/EX6/file", "preview_url": "/api/cases/case_0a1b2c3d4e5f/evidence/EX6/preview" }
+  ]
+}
