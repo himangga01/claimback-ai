@@ -1,0 +1,308 @@
+"""M2b-fix1 case-flow E2E (pytest + Playwright, Chromium, 1920x1080).
+
+Target is $E2E_BASE_URL when set (the real M2a backend); otherwise the stub
+server in this folder is started on a free 127.0.0.1 port for the test.
+
+The test never assumes model-chosen ids or counts: the confirmed-facts input
+is computed from GET /review with the contract section 5 rule
+(build_demo_confirmed_facts), sentences are found by [data-testid^=...]
+locators, and the revision note is only checked when present. Visible values
+(amounts, Korean state names, gate names) may change; assertions use
+data-state / data-gate / data-status attributes.
+"""
+
+import json
+import os
+import re
+import socket
+import sys
+import threading
+import time
+import urllib.request
+from pathlib import Path
+
+import pytest
+import uvicorn
+from playwright.sync_api import expect
+
+HERE = Path(__file__).resolve().parent
+ROOT = HERE.parent
+sys.path.insert(0, str(HERE))
+sys.path.insert(0, str(ROOT / "backend"))
+
+from stub_server import app as stub_app  # noqa: E402
+from app.services.naming import check_text  # noqa: E402
+
+ARTIFACTS = HERE / "artifacts"
+CONFIRMED_EXAMPLE = ROOT / "specs" / "case-api-examples" / "confirmed_facts_kr.json"
+KNOWN_ROLES = ("loan_transfer", "repayment", "other")
+
+
+def _free_port() -> int:
+    s = socket.socket()
+    s.bind(("127.0.0.1", 0))
+    port = s.getsockname()[1]
+    s.close()
+    return port
+
+
+@pytest.fixture(scope="session")
+def base_url():
+    env = os.environ.get("E2E_BASE_URL")
+    if env:
+        yield env.rstrip("/")
+        return
+    port = _free_port()
+    config = uvicorn.Config(stub_app, host="127.0.0.1", port=port, log_level="warning")
+    server = uvicorn.Server(config)
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    base = f"http://127.0.0.1:{port}"
+    for _ in range(200):
+        try:
+            with urllib.request.urlopen(base + "/health", timeout=2) as r:
+                if r.status == 200:
+                    break
+        except Exception:
+            time.sleep(0.1)
+    else:
+        raise RuntimeError("stub server did not start")
+    yield base
+    server.should_exit = True
+    thread.join(timeout=20)
+
+
+@pytest.fixture(scope="session")
+def browser_context_args(browser_context_args):
+    return {
+        **browser_context_args,
+        "viewport": {"width": 1920, "height": 1080},
+    }
+
+
+def _ex_num(ex_id: str) -> int:
+    return int(ex_id[2:])
+
+
+def _item_num(item_id: str) -> int:
+    m = re.search(r"\d+", item_id or "")
+    return int(m.group()) if m else 0
+
+
+def _is_empty(value) -> bool:
+    return value is None or value == "" or value == []
+
+
+def expected_confirmed_facts(review: dict, fallback: dict) -> dict:
+    """Contract section 5 rule: review values, empty fields from fallback,
+    roles from suggested_role, highlight = first repay_promise utterance in
+    ex_id then item_id order, as_of 2026-06-01."""
+    fields = {}
+    for f in review["fields"]:
+        name = f["field"]
+        val = f["value"]
+        if _is_empty(val) and name in fallback and not _is_empty(fallback[name]):
+            fields[name] = fallback[name]
+        else:
+            fields[name] = val
+    roles = {}
+    for r in review["evidence_roles"]:
+        suggested = r["suggested_role"]
+        roles[r["ex_id"]] = suggested if suggested in KNOWN_ROLES else "other"
+    promised = [u for u in review["utterances"] if "repay_promise" in (u["tags"] or [])]
+    promised.sort(key=lambda u: (_ex_num(u["ex_id"]), _item_num(u["item_id"])))
+    highlight = [f"{promised[0]['ex_id']}:{promised[0]['item_id']}"] if promised else []
+    return {
+        "fields": fields,
+        "evidence_roles": roles,
+        "highlight": highlight,
+        "as_of": "2026-06-01",
+    }
+
+
+def settle_scroll(page) -> None:
+    page.wait_for_function(
+        """() => new Promise((resolve) => {
+             let last = -1, stable = 0;
+             const t = setInterval(() => {
+               const y = window.scrollY;
+               if (y === last) { stable += 1; if (stable >= 3) { clearInterval(t); resolve(true); } }
+               else { stable = 0; last = y; }
+             }, 100);
+             setTimeout(() => { clearInterval(t); resolve(true); }, 3000);
+           })"""
+    )
+
+
+class Steps:
+    def __init__(self, page):
+        self.page = page
+        self.n = 0
+
+    def shot(self, name: str) -> None:
+        settle_scroll(self.page)
+        ARTIFACTS.mkdir(exist_ok=True)
+        self.n += 1
+        self.page.screenshot(
+            path=str(ARTIFACTS / f"{self.n:02d}-{name}.png"), full_page=True
+        )
+        found = check_text(self.page.inner_text("body"))
+        assert found == [], f"forbidden names at step {name}: {found}"
+
+
+def test_case_flow(page, base_url):
+    expect_stub = not os.environ.get("E2E_BASE_URL")
+    steps = Steps(page)
+    page.goto(base_url + "/", wait_until="networkidle")
+    expect(page.get_by_test_id("offline-notice")).to_be_hidden()
+    expect(page.locator("#app")).to_be_visible()
+
+    # 1. sample load -> agent board -> CHECKPOINT_1
+    page.get_by_test_id("load-sample").click()
+    expect(page.get_by_test_id("case-state")).to_have_attribute(
+        "data-state", "CHECKPOINT_1", timeout=30000
+    )
+    if expect_stub:
+        expect(page.get_by_test_id("stub-banner")).to_be_visible()
+    else:
+        expect(page.get_by_test_id("stub-banner")).to_be_hidden()
+    expect(page.get_by_test_id("step-reading")).to_be_visible()
+    expect(page.get_by_test_id("board-summary")).to_contain_text("Meta 모델 호출")
+    if expect_stub:
+        expect(page.get_by_test_id("replay-badge")).to_be_visible()
+    steps.shot("board")
+
+    # 2. checkpoint 1: at least one reading box, then switch evidence
+    page.locator(".reading-box").first.wait_for(state="visible", timeout=15000)
+    assert page.locator(".reading-box").count() >= 1
+    page.get_by_test_id("evidence-EX4").click()
+    expect(page.get_by_test_id("viewer-title")).to_contain_text("갑 제4호증")
+    expect(page.get_by_test_id("viewer-img")).to_be_visible()
+    steps.shot("checkpoint-evidence")
+
+    # 3. fixed demo inputs computed from GET /review (contract section 5).
+    case_id = page.get_by_test_id("case-id").inner_text().strip()
+    resp = page.request.get(f"{base_url}/api/cases/{case_id}/review")
+    assert resp.ok, f"GET /review failed: {resp.status}"
+    review = resp.json()
+    fallback = json.loads(CONFIRMED_EXAMPLE.read_text(encoding="utf-8"))[
+        "fallback_fields"
+    ]
+    expected = expected_confirmed_facts(review, fallback)
+    for f in review["fields"]:
+        name = f["field"]
+        if name in ("repayments", "transaction_kind"):
+            continue
+        if _is_empty(f["value"]) and not _is_empty(expected["fields"][name]):
+            page.get_by_test_id(f"field-{name}").fill(str(expected["fields"][name]))
+    if isinstance(expected["fields"].get("repayments"), list):
+        for i, row in enumerate(expected["fields"]["repayments"]):
+            date_el = page.get_by_test_id(f"field-repayments-{i}-date")
+            amount_el = page.get_by_test_id(f"field-repayments-{i}-amount")
+            if date_el.count() and not (date_el.input_value() or "").strip():
+                date_el.fill(row["date"])
+            if amount_el.count() and not (amount_el.input_value() or "").strip():
+                amount_el.fill(row["amount"])
+    for ex, role in expected["evidence_roles"].items():
+        expect(page.get_by_test_id(f"role-{ex}")).to_have_value(role)
+    for h in expected["highlight"]:
+        ex, item = h.split(":")
+        page.get_by_test_id(f"highlight-{ex}-{item}").check()
+    first_utt = page.locator("#utterance-list li").first
+    assert first_utt.get_attribute("data-tags") is not None
+    expect(page.get_by_test_id("asof")).to_have_value("2026-06-01")
+    steps.shot("checkpoint-filled")
+
+    # 4. confirm -> CALCULATING -> DRAFT_APPROVAL; PUT body must equal the
+    # fixed input so replay matches.
+    with page.expect_response(
+        lambda r: r.request.method == "PUT" and r.url.endswith("/facts")
+    ) as put_info:
+        page.get_by_test_id("confirm-facts").click()
+    put_body = json.loads(put_info.value.request.post_data)
+    assert put_body == expected
+    expect(page.get_by_test_id("case-state")).to_have_attribute(
+        "data-state", "DRAFT_APPROVAL", timeout=30000
+    )
+    expect(page.get_by_test_id("calc-section")).to_be_visible()
+    expect(page.get_by_test_id("remaining-principal")).to_contain_text("4,014,383")
+    expect(page.get_by_test_id("reference-total")).to_contain_text("4,031,430")
+    steps.shot("calculation")
+
+    # 5. drafts shown; slot source folded, edit box opens with "고치기".
+    first_sentence = page.locator("[data-testid^='sentence-']").first
+    expect(first_sentence).to_be_visible()
+    rev = page.get_by_test_id("revision-rounds")
+    if rev.is_visible():
+        expect(rev).to_contain_text("문안 작성")
+    fact = page.locator(
+        "[data-testid^='sentence-'][data-sentence-type='fact']"
+    ).first
+    if fact.count() == 0:
+        fact = first_sentence
+    sid = fact.get_attribute("data-testid").removeprefix("sentence-")
+    expect(page.get_by_test_id(f"slots-{sid}")).to_be_hidden()
+    expect(page.get_by_test_id(f"edit-{sid}")).to_be_hidden()
+    page.get_by_test_id(f"edit-toggle-{sid}").click()
+    expect(page.get_by_test_id(f"edit-{sid}")).to_be_visible()
+    steps.shot("drafts")
+
+    # 6. G1a scene: digits outside slots are blocked.
+    edit = page.get_by_test_id(f"edit-{sid}")
+    original = edit.input_value()
+    assert "{{" in original, "edit box should hold text_with_slots"
+    edit.fill("500만 원을 보냈습니다.")
+    with page.expect_response(
+        lambda r: r.request.method == "PUT" and "/drafts" in r.url
+    ):
+        page.get_by_test_id(f"update-{sid}").click()
+    findings = page.get_by_test_id(f"findings-{sid}")
+    expect(findings.locator("[data-gate='G1a']")).to_be_visible(timeout=15000)
+    expect(findings).to_have_attribute("data-status", "fail")
+    expect(page.get_by_test_id(f"notice-{sid}")).to_be_visible()
+    expect(page.get_by_test_id(f"approve-{sid}")).to_be_disabled()
+    steps.shot("g1a-blocked")
+
+    # 7. revert -> pass
+    edit.fill(original)
+    with page.expect_response(
+        lambda r: r.request.method == "PUT" and "/drafts" in r.url
+    ):
+        page.get_by_test_id(f"update-{sid}").click()
+    expect(findings).to_contain_text("지적 없음", timeout=15000)
+    expect(findings).to_have_attribute("data-status", "pass")
+    expect(page.get_by_test_id(f"approve-{sid}")).to_be_enabled()
+    steps.shot("drafts-fixed")
+
+    # 8. approve every sentence
+    boxes = page.locator("input[data-testid^='approve-']")
+    assert boxes.count() >= 1, "no sentence approve checkboxes"
+    for i in range(boxes.count()):
+        box = boxes.nth(i)
+        if not box.is_checked():
+            with page.expect_response(
+                lambda r: r.request.method == "PUT" and "/drafts" in r.url
+            ):
+                box.check()
+        expect(box).to_be_checked(timeout=15000)
+    steps.shot("drafts-approved")
+
+    # 9. continue -> package
+    page.get_by_test_id("approve-continue").click()
+    expect(page.get_by_test_id("case-state")).to_have_attribute(
+        "data-state", "CHECKPOINT_2", timeout=30000
+    )
+    expect(page.get_by_test_id("package-section")).to_be_visible()
+    expect(page.get_by_test_id("file-content_proof.pdf")).to_be_visible()
+    expect(page.get_by_test_id("claim-purpose")).to_contain_text("2026. 5. 2.")
+    copy_btn = page.get_by_test_id("copy-claim-purpose")
+    expect(copy_btn).to_be_visible()
+    copy_btn.click()
+    expect(copy_btn).to_contain_text("복사 완료", timeout=5000)
+    steps.shot("package")
+
+    # 10. delete case
+    page.get_by_test_id("delete-case").click()
+    expect(page.get_by_test_id("board-section")).to_be_hidden(timeout=15000)
+    expect(page.get_by_test_id("status-line")).to_contain_text("사건을 삭제했습니다.")
+    steps.shot("deleted")

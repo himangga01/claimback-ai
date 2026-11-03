@@ -3,22 +3,32 @@
 > **Meta Global AI Developer Hackathon (Theme 1: Build for Your World)**
 > Free self-help tool that organizes your own evidence for an unpaid small loan and fills standard court forms with facts you confirm.
 
-이 저장소의 코드는 Meta Global AI Developer Hackathon 기간(2026-10-27~11-04)에 만들었습니다. Muse Code로 구현하고 Claude Code로 지시·리뷰했습니다.
+2026-11-02 기준 코드(커밋 76d9cce까지)는 대회 기간에 저장소 소유자가 작성했고, 2026-11-03 M-1부터는 Muse Code(`muse-spark-1.3`)가 구현하고 Claude Code가 지시·리뷰했다.
+
+Code up to 2026-11-02 (through commit 76d9cce) was written by the repository owner during the hackathon; from 2026-11-03 M-1 on, Muse Code (`muse-spark-1.3`) implements and Claude Code directs and reviews.
 
 ---
 
 ## What it does
 
-1. **Forensic Visual**: finds boxes for amounts, dates, signatures, and seals in your evidence images, and burns PII redaction (account numbers, resident registration numbers) into the pixels before building PDFs. Labels exhibits (갑 제N호증, Exhibit A).
+1. **Forensic Visual**: labels exhibits (갑 제N호증, Exhibit A) and records SHA-256 hashes at intake; reading boxes for amounts, dates, and signatures are drawn from the reader output.
 2. **Fact-Timeline Chronology**: orders messenger and receipt text into a fact timeline, and drafts claim text (지급명령 청구원인 / SC-100 statement of facts) only from facts you confirm.
 3. **Financial Auditor**: deterministic calculator for interest and totals; blocks document generation when numbers differ from your confirmed values.
 4. **Judicial Form Filler**: fills 내용증명 and payment-order packets and SC-100 fields from your confirmed facts. You review everything and sign the declaration yourself.
+
+## In progress (진행 중)
+
+- SAM segmentation and masks for visual evidence
+- Pixel redaction of account and ID numbers before PDF assembly
+- Video reading (scroll-capture keyframes)
+- Timeline illustrations
 
 ---
 
 ## Quick Start
 
 ```powershell
+python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 cd backend
 ..\.venv\Scripts\python.exe -m uvicorn app.main:app --port 8000

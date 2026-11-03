@@ -133,6 +133,20 @@
 | GET | `/api/cases/{id}/files/{name}` | | 생성 파일 |
 | DELETE | `/api/cases/{id}` | | `{ "deleted": true }`(올린 파일과 생성 파일 모두 삭제) |
 
+## 6a. M4·M5 추가분 (13:46 KST, v3 예고)
+
+M4a(시각 감식·가림)와 M5(편철)가 더하는 응답입니다. 기존 응답 키는 바꾸지 않고 새 키·엔드포인트만 더합니다.
+
+| 메서드 | 경로 | 응답 |
+|---|---|---|
+| GET | `/api/cases/{id}/segments` | `[ { ex_id, model: "sam-3.1", objects: [ { target: "signature"\|"stamp"\|"chat_bubble"\|"face", source: "noun"\|"box", box: Box(pixel), score, mask_url } ], status: ok\|not_found\|skipped } ]` |
+| GET | `/api/cases/{id}/redactions` | `{ plan: [ { ex_id, item_id, kind: "account_number"\|"id_number"\|"phone"\|"face", mask_box: Box, keep_box: Box\|null, reason } ], previews: [ { ex_id, url } ], leak_check: { status: pass\|fail, findings: [] } }` |
+| PUT | `/api/cases/{id}/facts` | 기존 본문에 선택 키 `redaction_confirmed: true`(없으면 `false`로 보고 서류에 원본 대신 가린 사본만 쓰도록 유지) |
+
+- 단계 표의 `vision`·`privacy`는 M4a 이후 `skipped`가 아니라 실제 단계가 됩니다. `vision` 담당 묶음은 Forensic Visual, 모델 `sam-3.1`.
+- `Package.files`에 M5가 `exhibits.pdf`(갑호증 통합, 가린 사본 + "갑 제N호증" 표시), `evidence_list.pdf`(증거 목록)를 더하고, `Package.gate_results`의 G1b가 `skipped`에서 `pass`/`fail`로 바뀝니다.
+- 증거 목록의 칸은 "호증 번호, 증거 이름, 작성일, 내용"이며 "내용"에는 사용자가 확인한 사실만 씁니다(법적 평가 문구 없음).
+
 ## 7. 재생 모드와 가짜 서버
 
 - `META_MODE=replay`(기본)에서 샘플 사건은 기록된 fixture만으로 `CHECKPOINT_2`까지 갑니다. 화면 수정 장면(문장에 "500만 원"을 넣으면 G1a가 막음)은 규칙만 쓰므로 재생에서도 됩니다.
