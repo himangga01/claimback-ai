@@ -769,16 +769,21 @@ def run_case(case_id: str) -> CaseState:
             except Exception:
                 pass
             # INT-3 B6: a failed call's spend still lands on its step.
+            # fix-cost review: on top of what the step saved for this run
+            # (earlier drafter rounds, the organizer's first call), never
+            # instead of it.
             part = _partial_spend(exc)
-            if part.get("cost_usd") or part.get("latency_ms"):
-                running = next((entry for entry in state.steps
-                                if entry.status == "running"), None)
-                if running is not None:
-                    _mark_hold(running,
-                               int(part.get("latency_ms", 0) or 0),
-                               cost=float(part.get("cost_usd", 0.0) or 0.0),
-                               calls=(None if running.key in _SUBSTEP_CALL_STEPS
-                                      else int(part.get("attempts", 0) or 0)))
+            running = next((entry for entry in state.steps
+                            if entry.status == "running"), None)
+            if running is not None:
+                saved_cost = _step_spent(running) - float(running.kept_usd or 0.0)
+                saved_calls = int(running.attempts or 0) - int(running.kept_calls or 0)
+                _mark_hold(running,
+                           int(part.get("latency_ms", 0) or 0),
+                           cost=saved_cost + float(part.get("cost_usd", 0.0) or 0.0),
+                           calls=(None if running.key in _SUBSTEP_CALL_STEPS
+                                  else saved_calls
+                                  + int(part.get("attempts", 0) or 0)))
             return _hold(state, step, "internal_error",
                          f"처리 중 오류가 생겨 멈췄습니다: {type(exc).__name__}")
     finally:
@@ -1167,6 +1172,11 @@ def _run_intake_flow(state: CaseState) -> CaseState:
                 "latency_ms": output.get("latency_ms", 0) or 0,
                 "attempts": output.get("attempts", 0) or 0,
             }
+            # fix-cost review: saved, so a raw error in the retry (run_case's
+            # general handler reloads the case) keeps the first call.
+            _set_spend(organizing_step, float(first_org["cost_usd"]))
+            _set_calls(organizing_step, int(first_org["attempts"]))
+            save_case(state)
             retry_out: Any = None
             try:
                 retry_out = organizer(
@@ -1498,6 +1508,14 @@ def _run_calc_flow(state: CaseState) -> CaseState:
                          + float(part.get("cost_usd", 0.0) or 0.0)),
                    calls=draft_attempts + int(part.get("attempts", 0) or 0))
 
+    def _keep_draft_progress() -> None:
+        # fix-cost review: save each round's spend, so a raw error in a
+        # later round (run_case's general handler reloads the case)
+        # keeps the rounds already billed.
+        _set_spend(drafting_step, draft_cost)
+        _set_calls(drafting_step, draft_attempts)
+        save_case(state)
+
     try:
         for attempt in range(3):
             try:
@@ -1522,6 +1540,7 @@ def _run_calc_flow(state: CaseState) -> CaseState:
                    int(output.get("tokens_in", 0) or 0),
                    int(output.get("tokens_out", 0) or 0),
                    float(output.get("cost_usd", 0.0) or 0.0))
+            _keep_draft_progress()
             try:
                 sentences = validate_draft_sentences(output.get("sentences"), ex_ids)
             except ValueError:
@@ -1560,6 +1579,8 @@ def _run_calc_flow(state: CaseState) -> CaseState:
                                calls=draft_attempts)
                     return _hold(state, "drafting", "schema_failed",
                                   f"문안 출력 형식이 맞지 않습니다: {exc}")
+            _set_spend(drafting_step, draft_cost)
+            _set_calls(drafting_step, draft_attempts)
             state.state = "VERIFYING"
             save_case(state)  # INT-3 B3: polling must see VERIFYING
             g1a = deps.check_g1a_case(sentences, allowed, parties, ex_ids)

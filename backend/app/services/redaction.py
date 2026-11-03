@@ -508,18 +508,27 @@ def refine_pii_box(
 # dense right-aligned receipt the reader's boxes sat 20-86px above the
 # real line; the snap then masked "SAMPLE Bank" and left the account
 # numbers visible while the strip checks passed. Fail closed instead:
-# a snap of half a line or more, or a line whose glyphs do not spell
+# a snap of a full line or more, or a line whose glyphs do not spell
 # the reading's digit pattern, is needs_review; the leak check also
 # looks for a still-visible line with the reading's pattern.
-LINE_SHIFT_MAX = 0.5
-LINE_SHIFT_REVIEW_REASON = "가림 상자가 판독 위치에서 반 줄 이상 옮겨져 확인 필요"
+# fix-cost-redaction review: 0.5 flagged correct snaps of 9.5-17px on
+# the demo receipts' 29px lines (live runs 3 and 4); every wrong-line
+# mask is still caught by the pattern check and the leak search.
+LINE_SHIFT_MAX = 1.0
+LINE_SHIFT_REVIEW_REASON = "가림 상자가 판독 위치에서 한 줄 이상 옮겨져 확인 필요"
 LINE_MATCH_REVIEW_REASON = "가린 줄이 판독한 번호와 맞는지 확인할 수 없어 확인 필요"
+SAME_LINE_REVIEW_REASON = "다른 번호와 같은 줄을 가려 확인 필요"
+INK_UNCHECKED_REVIEW_REASON = "글자 위치를 확인할 수 없어 확인 필요"
 UNMASKED_LINE_REASON = "판독한 번호와 같은 모양의 줄이 가려지지 않았을 수 있음"
+LEAK_UNCHECKED_REASON = "판독한 번호가 가려졌는지 확인할 수 없음"
 LINE_MIN_DIGITS = 4
+# A found line counts as masked when the masks hide at least this share
+# of the digits the kind is meant to hide (not just one touching pixel).
+LINE_HIDDEN_SHARE = 0.6
 
 
 def line_shift_too_far(box: List[int], refined: List[int]) -> bool:
-    """True when the snap moved a box half a text line or more."""
+    """True when the snap moved a box a full text line (LINE_SHIFT_MAX) or more."""
     try:
         bx1, by1, bx2, by2 = (int(v) for v in box)
         rx1, ry1, rx2, ry2 = (int(v) for v in refined)
@@ -546,14 +555,21 @@ def glyph_signature(ink_mask: Any, box: List[int]) -> str:
     other run is X (lowercase, descenders, brackets). X runs at either
     end are cell borders and are dropped.
     """
+    return "".join(token for _, _, token in _glyph_tokens(ink_mask, box))
+
+
+def _glyph_tokens(
+    ink_mask: Any, box: List[int]
+) -> List[Tuple[int, int, str]]:
+    """(x_start, x_end, token) per glyph run, edge X runs dropped."""
     try:
         x1, y1, x2, y2 = (int(v) for v in box)
         x1, y1 = max(0, x1), max(0, y1)
         x2, y2 = min(int(ink_mask.width), x2), min(int(ink_mask.height), y2)
     except (TypeError, ValueError, AttributeError):
-        return ""
+        return []
     if x2 - x1 < 2 or y2 - y1 < 2:
-        return ""
+        return []
     crop = ink_mask.crop((x1, y1, x2, y2))
     width, height = int(crop.width), int(crop.height)
     blob = bytes(crop.tobytes())
@@ -566,11 +582,11 @@ def glyph_signature(ink_mask: Any, box: List[int]) -> str:
         elif total == 0 and start is not None:
             rows = [row for row in range(height)
                     if 255 in blob[row * width + start:row * width + pos]]
-            runs.append((start, rows[0], rows[-1]))
+            runs.append((start, rows[0], rows[-1], pos))
             start = None
     if not runs:
-        return ""
-    heights = [bottom - top + 1 for _, top, bottom in runs]
+        return []
+    heights = [bottom - top + 1 for _, top, bottom, _ in runs]
     tall = [h for h in heights if h >= 0.5 * max(heights)]
 
     def _near(a: int, b: int) -> bool:
@@ -578,18 +594,67 @@ def glyph_signature(ink_mask: Any, box: List[int]) -> str:
 
     digit_h = max(tall, key=lambda h: (sum(1 for o in tall if _near(o, h)), h))
     tol = max(2, int(round(0.15 * digit_h)))
-    bottoms = sorted(bottom for (_, top, bottom), h in zip(runs, heights)
+    bottoms = sorted(bottom for (_, top, bottom, _), h in zip(runs, heights)
                      if abs(h - digit_h) <= tol)
     base = bottoms[len(bottoms) // 2]
-    tokens = []
-    for (_, top, bottom), h in zip(runs, heights):
+    tokens: List[Tuple[int, int, str]] = []
+    for (left, top, bottom, right), h in zip(runs, heights):
         if abs(h - digit_h) <= tol and abs(bottom - base) <= tol:
-            tokens.append("D")
+            token = "D"
         elif h <= 0.6 * digit_h:
-            tokens.append("S")
+            token = "S"
         else:
-            tokens.append("X")
-    return "".join(tokens).strip("X")
+            token = "X"
+        tokens.append((x1 + left, x1 + right, token))
+    while tokens and tokens[0][2] == "X":
+        tokens.pop(0)
+    while tokens and tokens[-1][2] == "X":
+        tokens.pop()
+    return tokens
+
+
+def digits_to_hide(kind: str, text: str) -> int:
+    """Digits a kind's mask hides (split_*_box rules; all when short)."""
+    digits = sum(1 for ch in str(text or "") if ch.isdigit())
+    if kind == "account_number":
+        return digits - 4 if digits > 4 else digits
+    if kind == "id_number":
+        return digits - 6 if digits > 7 else digits
+    if kind == "phone":
+        return 4 if digits > 4 else digits
+    return digits
+
+
+def line_is_masked(
+    ink_mask: Any, line: List[int], masks: List[List[int]],
+    kind: str, text: str,
+) -> bool:
+    """True when masks hide most digits a kind should hide on a line.
+
+    A digit glyph is hidden when its center sits inside a mask that
+    covers at least half of the line's height; a mask that only touches
+    the line (padding of the line above) hides nothing.
+    """
+    try:
+        ly1, ly2 = int(line[1]), int(line[3])
+    except (TypeError, ValueError, IndexError):
+        return False
+    line_h = max(1, ly2 - ly1)
+    covering = []
+    for mask in masks:
+        try:
+            mx1, my1, mx2, my2 = (int(v) for v in mask)
+        except (TypeError, ValueError):
+            continue
+        if min(my2, ly2) - max(my1, ly1) >= 0.5 * line_h:
+            covering.append((mx1, mx2))
+    hidden = 0
+    for left, right, token in _glyph_tokens(ink_mask, line):
+        center = (left + right) / 2.0
+        if token == "D" and any(mx1 <= center < mx2 for mx1, mx2 in covering):
+            hidden += 1
+    need = max(1, int(round(LINE_HIDDEN_SHARE * digits_to_hide(kind, text))))
+    return hidden >= need
 
 
 def signature_matches(observed: str, expected: str) -> bool:
@@ -1047,8 +1112,10 @@ def check_leak(
     likewise a warning (likely misaligned box), not a failure.
     fix-cost bug 2: ``pii_items`` ({ex_id, item_id, box, text} from the
     reading) are searched near their reading box; a line that spells the
-    reading's number and touches no mask is a warning (preview review,
-    the image stays out of the bundle until the user confirms).
+    reading's number and whose digits the masks do not mostly hide
+    (line_is_masked) is a warning (preview review, the image stays out
+    of the bundle until the user confirms). Without an ink mask every
+    item is a warning too (fail closed).
     """
     from PIL import Image
 
@@ -1128,15 +1195,21 @@ def check_leak(
             except (TypeError, ValueError, AttributeError):
                 continue
         for item in pii_items:
-            lines = (find_pii_lines(ink, list(item.get("box") or []),
-                                    str(item.get("text", "")))
-                     if ink is not None else [])
-            if any(not any(rects_overlap(line, mask) for mask in masks)
-                   for line in lines):
-                findings.append({
-                    "ex_id": str(item.get("ex_id", "")),
-                    "item_id": str(item.get("item_id", "")),
-                    "message": UNMASKED_LINE_REASON,
-                    "warning": True})
+            text = str(item.get("text", ""))
+            kind = str(item.get("kind", ""))
+            if ink is None:
+                # Fail closed: no ink mask, no proof the number is hidden.
+                message = LEAK_UNCHECKED_REASON
+            else:
+                lines = find_pii_lines(ink, list(item.get("box") or []), text)
+                if all(line_is_masked(ink, line, masks, kind, text)
+                       for line in lines):
+                    continue
+                message = UNMASKED_LINE_REASON
+            findings.append({
+                "ex_id": str(item.get("ex_id", "")),
+                "item_id": str(item.get("item_id", "")),
+                "message": message,
+                "warning": True})
     hard = [f for f in findings if not f.get("warning")]
     return {"status": "fail" if hard else "pass", "findings": findings}

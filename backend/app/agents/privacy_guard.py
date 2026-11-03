@@ -60,6 +60,48 @@ def _face_objects(
     return found
 
 
+def _same_line(first: Dict[str, Any], second: Dict[str, Any]) -> bool:
+    """Two mask boxes on one text line (half the shorter height shared)."""
+    try:
+        ax1, ay1, ax2, ay2 = (int(first[k]) for k in ("x1", "y1", "x2", "y2"))
+        bx1, by1, bx2, by2 = (int(second[k]) for k in ("x1", "y1", "x2", "y2"))
+    except (KeyError, TypeError, ValueError):
+        return False
+    shared_h = min(ay2, by2) - max(ay1, by1)
+    shorter = max(1, min(ay2 - ay1, by2 - by1))
+    return shared_h >= 0.5 * shorter and min(ax2, bx2) > max(ax1, bx1)
+
+
+def _flag_shared_lines(
+    plan: List[Dict[str, Any]], line_texts: List[Tuple[int, str]]
+) -> None:
+    """Two different PII readings masked on one line: review both.
+
+    fix-cost-redaction review: when the reader puts the sender account's
+    box on the receiver's line (further than the leak search reaches),
+    both masks land on that line, its pattern matches, and the sender's
+    number stays visible. One line cannot hold two different numbers.
+    """
+    def _digits(text: str) -> str:
+        return "".join(ch for ch in str(text or "") if ch.isdigit())
+
+    for pos, (first, first_text) in enumerate(line_texts):
+        for second, second_text in line_texts[pos + 1:]:
+            if _digits(first_text) == _digits(second_text):
+                continue
+            if not _same_line(plan[first]["mask_box"],
+                              plan[second]["mask_box"]):
+                continue
+            for index in (first, second):
+                entry = plan[index]
+                entry["needs_review"] = True
+                reason = str(entry.get("reason", "") or "")
+                if redact_mod.SAME_LINE_REVIEW_REASON not in reason:
+                    entry["reason"] = (
+                        f"{reason}; {redact_mod.SAME_LINE_REVIEW_REASON}"
+                        if reason else redact_mod.SAME_LINE_REVIEW_REASON)
+
+
 def build_plan(
     readings: List[Dict[str, Any]],
     segments: List[Dict[str, Any]],
@@ -95,6 +137,7 @@ def build_plan(
         ref_w, ref_h = int(size[0]), int(size[1])
         bubbles = _bubble_boxes(segments or [], ex_id)
         image = (preview_images or {}).get(ex_id)
+        line_texts: List[Tuple[int, str]] = []  # (plan index, reading text)
         for item in reading.get("items", []) or []:
             kind = str(item.get("kind", ""))
             if kind not in PII_KINDS:
@@ -147,13 +190,16 @@ def build_plan(
                             redact_mod.BAND_THRESHOLD:
                         reading_tripped = True
             # fix-cost bug 2: the mask must sit on the reading's own line;
-            # a snap of half a line or more, or a line that does not spell
-            # the reading's number, is needs_review (fail closed).
+            # a snap of a full line or more, or a line that does not spell
+            # the reading's number, is needs_review (fail closed). No ink
+            # mask means neither can be checked: review too.
             review_reasons: List[str] = []
             if reading_tripped:
                 review_reasons.append(redact_mod.READING_BAND_REVIEW_REASON)
             line_mask = (ink_masks.get(ex_id)
                          if not inline and image is not None else None)
+            if not inline and image is not None and line_mask is None:
+                review_reasons.append(redact_mod.INK_UNCHECKED_REVIEW_REASON)
             if line_mask is not None:
                 if coords != reader_coords and redact_mod.line_shift_too_far(
                         reader_coords, coords):
@@ -162,6 +208,7 @@ def build_plan(
                 elif not redact_mod.pii_line_matches(line_mask, coords, text):
                     review_reasons.append(
                         redact_mod.LINE_MATCH_REVIEW_REASON)
+            line_texts.append((len(plan), text))
             pad = redact_mod.compute_pad(coords[3] - coords[1])
             geom = None
             if image is not None and not inline:
@@ -232,6 +279,7 @@ def build_plan(
                     "needs_review": bool(review_reasons),
                     "reading_band_counts": reading_counts or {},
                 })
+        _flag_shared_lines(plan, line_texts)
     for reading in readings or []:
         ex_id = str(reading.get("ex_id", ""))
         size = preview_sizes.get(ex_id)
@@ -401,7 +449,7 @@ def run_privacy(
             if str(item.get("kind", "")) in PII_KINDS and coords:
                 pii_items.append({
                     "ex_id": ex_id, "item_id": str(item.get("item_id", "")),
-                    "box": coords,
+                    "kind": str(item.get("kind", "")), "box": coords,
                     "text": str(item.get("text_verbatim", "")
                                 or item.get("normalized", "") or "")})
         checked = redact_mod.check_leak(
@@ -412,19 +460,21 @@ def run_privacy(
                 checked.get("findings", [])) + [{
                     "ex_id": ex_id, "item_id": "",
                     "message": "원본 파일이 바뀌었습니다."}]}
+        item_reasons = (redact_mod.UNMASKED_LINE_REASON,
+                        redact_mod.LEAK_UNCHECKED_REASON)
         for finding in checked.get("findings", []) or []:
             leak_findings.append(finding)
-            if finding.get("message") != redact_mod.UNMASKED_LINE_REASON:
+            message = finding.get("message")
+            if message not in item_reasons:
                 continue
             for entry in entries:
                 if str(entry.get("item_id", "")) != finding.get("item_id"):
                     continue
                 entry["needs_review"] = True
                 reason = str(entry.get("reason", "") or "")
-                if redact_mod.UNMASKED_LINE_REASON not in reason:
-                    entry["reason"] = (
-                        f"{reason}; {redact_mod.UNMASKED_LINE_REASON}"
-                        if reason else redact_mod.UNMASKED_LINE_REASON)
+                if message not in reason:
+                    entry["reason"] = (f"{reason}; {message}"
+                                       if reason else message)
         if checked.get("status") == "fail":
             status = "fail"
         # L1 bands: glyph outside a mask flags the entry and its preview
@@ -446,11 +496,11 @@ def run_privacy(
                     entry["reason"] = (
                         f"{reason}; {redact_mod.LEAK_REVIEW_REASON}"
                         if reason else redact_mod.LEAK_REVIEW_REASON)
-        # The unmasked-line warning already rides on its entry's reason.
+        # Per-item leak warnings already ride on their entry's reason.
         warn_msgs = [
             str(f.get("message", "")) for f in checked.get("findings", [])
             if f.get("warning") and f.get("message")
-            and f.get("message") != redact_mod.UNMASKED_LINE_REASON]
+            and f.get("message") not in item_reasons]
         reason_parts = ([redact_mod.LEAK_REVIEW_REASON] if band_hit else [])
         reason_parts.extend(pre_reasons)
         reason_parts.extend(warn_msgs)

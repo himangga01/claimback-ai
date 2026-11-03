@@ -228,6 +228,67 @@ def test_failed_reading_calls_stay_on_board(fake_env, monkeypatch):
     assert reading["cost_usd"] == "0.0600"
 
 
+def test_raw_error_in_drafter_round_two_keeps_round_one(fake_env, monkeypatch):
+    """A network error after retries goes to run_case's general handler,
+    which reloads the saved case: round 1's billed call must survive."""
+    calls = []
+
+    def _flaky_drafter(case_id, draft_inputs, findings, meta_mode, run_id,
+                       **kwargs):
+        calls.append(1)
+        if len(calls) == 1:
+            return {"sentences": [{"sentence_id": "s1", "type": "fact",
+                                   "text_with_slots": "500만 원을 보냈습니다.",
+                                   "ex_refs": []}], "model": "fake-bad",
+                    "attempts": 1, "latency_ms": 1, "cost_usd": 0.01}
+        raise ConnectionError("network down after retries")
+
+    monkeypatch.setitem(coord.AGENTS, "drafter", _flaky_drafter)
+    client = fake_env
+    case_id = client.post("/api/cases/sample", json={"set": "kr"}).json()["case_id"]
+    view = client.post(f"/api/cases/{case_id}/run", json={}).json()
+    base_cost, base_calls = float(view["run_cost_usd"]), board_calls(view)
+    review = client.get(f"/api/cases/{case_id}/review").json()
+    client.put(f"/api/cases/{case_id}/facts",
+               json=demo_inputs.build_demo_confirmed_facts(review))
+    view = client.post(f"/api/cases/{case_id}/run", json={}).json()
+    assert view["state"] == "HOLD"
+    assert [r["code"] for r in view["hold_reasons"]] == ["internal_error"]
+    assert len(calls) == 2
+    drafting = _step(view, "drafting")
+    assert drafting["status"] == "hold"
+    assert drafting["cost_usd"] == "0.0100"
+    assert drafting["attempts"] == 1
+    assert float(view["run_cost_usd"]) == pytest.approx(base_cost + 0.01)
+    assert board_calls(view) == base_calls + 1
+
+
+def test_raw_error_in_organizer_retry_keeps_first_call(fake_env, monkeypatch):
+    calls = []
+
+    def _flaky_organizer(case_id, readings, meta_mode, run_id, **kwargs):
+        calls.append(1)
+        if len(calls) == 1:
+            return {"review": {"bogus": True}, "model": "fake-bad",
+                    "latency_ms": 1, "attempts": 1, "cost_usd": 0.01}
+        raise ConnectionError("network down after retries")
+
+    monkeypatch.setitem(coord.AGENTS, "organizer", _flaky_organizer)
+    client = fake_env
+    case_id = client.post("/api/cases/sample", json={"set": "kr"}).json()["case_id"]
+    view = client.post(f"/api/cases/{case_id}/run", json={}).json()
+    assert view["state"] == "HOLD"
+    assert [r["code"] for r in view["hold_reasons"]] == ["internal_error"]
+    assert len(calls) == 2
+    organizing = _step(view, "organizing")
+    assert organizing["status"] == "hold"
+    assert organizing["cost_usd"] == "0.0100"
+    assert organizing["attempts"] == 1
+    others = sum(float(s["cost_usd"]) for s in view["steps"]
+                 if s["key"] != "organizing")
+    assert float(view["run_cost_usd"]) == pytest.approx(others + 0.01, abs=1e-4)
+
+
 def test_step_rerun_folds_prior_substep_calls():
     step = case_state_mod.StepState(key="reading", model="m")
     step.substeps = [case_state_mod.SubStep(ex_id="EX1", status="hold", calls=2)]
@@ -350,19 +411,141 @@ def test_reader_box_one_line_down_is_needs_review(tmp_path):
     assert out["previews"][0]["needs_review"] is True
 
 
-@pytest.mark.parametrize("offset", [-PITCH // 2, -20])
-def test_snap_of_half_a_line_is_needs_review(tmp_path, offset):
+@pytest.mark.parametrize("offset", [-20, 20])
+def test_reader_jitter_snaps_onto_the_number_without_review(tmp_path, offset):
+    """fix-cost review: 9.5-17px jitter on 29px lines is normal reader
+    noise; a correct snap of 20px (0.6 line) must not be flagged."""
     path, _, boxes = _dense_receipt(tmp_path)
     out = _run_privacy(tmp_path, path, _account_readings(boxes, offset))
-    for entry in out["plan"]:
-        assert entry["needs_review"] is True
-        assert redact_mod.LINE_SHIFT_REVIEW_REASON in entry["reason"]
+    for entry, value in zip(out["plan"], ACCOUNTS):
+        mask = entry["mask_box"]
+        assert mask["y1"] <= boxes[value][1] and mask["y2"] >= boxes[value][3]
+        assert entry["needs_review"] is False, entry["reason"]
+    assert out["leak_check"] == {"status": "pass", "findings": []}
+    assert out["previews"][0]["needs_review"] is False
+
+
+def test_half_line_offset_flags_only_the_wrong_line(tmp_path):
+    """32px up: item1 snaps onto its number (no shift or pattern flag),
+    item2 lands on the name line above its number (pattern check). The
+    leak search near either box sees item2's number still visible."""
+    path, _, boxes = _dense_receipt(tmp_path)
+    out = _run_privacy(tmp_path, path, _account_readings(boxes, -PITCH // 2))
+    first, second = out["plan"]
+    mask = first["mask_box"]
+    value = ACCOUNTS[0]
+    assert mask["y1"] <= boxes[value][1] and mask["y2"] >= boxes[value][3]
+    assert redact_mod.LINE_SHIFT_REVIEW_REASON not in first["reason"]
+    assert redact_mod.LINE_MATCH_REVIEW_REASON not in first["reason"]
+    assert second["needs_review"] is True
+    assert redact_mod.LINE_MATCH_REVIEW_REASON in second["reason"]
+    assert second["mask_box"]["y2"] < boxes[ACCOUNTS[1]][1]
     assert out["previews"][0]["needs_review"] is True
 
 
 def test_line_shift_rule():
-    assert not redact_mod.line_shift_too_far([0, 100, 10, 132], [0, 105, 10, 129])
-    assert redact_mod.line_shift_too_far([0, 100, 10, 132], [0, 120, 10, 144])
+    assert redact_mod.LINE_SHIFT_MAX == 1.0
+    # 16px on a 32px line (half a line): reader noise, not flagged.
+    assert not redact_mod.line_shift_too_far([0, 100, 10, 132], [0, 120, 10, 144])
+    # A full line or more is flagged.
+    assert redact_mod.line_shift_too_far([0, 100, 10, 132], [0, 132, 10, 164])
+    assert redact_mod.line_shift_too_far([0, 100, 10, 132], [0, 164, 10, 196])
+
+
+WIRE = ROOT / "sample_evidence" / "en" / "wire_receipt.png"
+
+
+def test_two_numbers_masked_on_one_line_are_needs_review(tmp_path):
+    """Sender box on the receiver line, lines >150px apart (beyond the
+    leak search): both masks hit one line whose pattern matches."""
+    src = Image.open(WIRE).convert("RGB")
+    width, height = src.size
+    gap = 40
+    image = Image.new("RGB", (width, height + gap), (255, 255, 255))
+    image.paste(src.crop((0, 0, width, 260)), (0, 0))
+    image.paste(src.crop((0, 260, width, height)), (0, 260 + gap))
+    path = tmp_path / "wire_gap.png"
+    image.save(path)
+    receiver = [218, 346 + gap, 402, 376 + gap]
+    items = [{"item_id": f"item{number}", "kind": "account_number",
+              "text_verbatim": text,
+              "box": {"x1": receiver[0], "y1": receiver[1] - 3,
+                      "x2": receiver[2], "y2": receiver[3] + 3,
+                      "system": "pixel", "ref_w": width,
+                      "ref_h": height + gap}}
+             for number, text in ((1, "000-0000-2468"), (2, "000-0000-1357"))]
+    record = SimpleNamespace(ex_id="EX4", label="갑 제4호증", kind="image",
+                             status="ok", sha256="", stored_name="")
+    out = privacy_mod.run_privacy(
+        "case_000000000000", [record], [{"ex_id": "EX4", "items": items}],
+        [{"ex_id": "EX4", "objects": [], "status": "not_found"}],
+        {"EX4": path}, {"EX4": (width, height + gap)}, tmp_path)
+    for entry in out["plan"]:
+        assert entry["needs_review"] is True
+        assert redact_mod.SAME_LINE_REVIEW_REASON in entry["reason"]
+    assert out["previews"][0]["needs_review"] is True
+    # The same number read twice on its own line is not a conflict.
+    same = [dict(items[0], item_id="item1"), dict(items[0], item_id="item2")]
+    plan = privacy_mod.build_plan(
+        [{"ex_id": "EX4", "items": same}], [],
+        {"EX4": (width, height + gap)}, {"EX4": image})
+    assert all(redact_mod.SAME_LINE_REVIEW_REASON not in entry["reason"]
+               for entry in plan)
+
+
+def test_leak_check_needs_the_digits_hidden_not_a_touch(tmp_path):
+    """A mask from the line above that only grazes the number's line
+    does not make that line count as masked."""
+    path, image, boxes = _dense_receipt(tmp_path)
+    value = ACCOUNTS[0]
+    line = boxes[value]
+    above = boxes["SAMPLE Bank"]
+    graze = [above[0], above[1], 1024, line[1] + 3]  # 3px into the number
+    other = boxes[ACCOUNTS[1]]
+    red = image.copy()
+    plan = []
+    for number, box in enumerate((graze, other), start=1):
+        ImageDraw.Draw(red).rectangle(
+            [box[0], box[1], box[2] - 1, box[3] - 1], fill=(0, 0, 0))
+        plan.append({"ex_id": "EX4", "item_id": f"item{number}",
+                     "kind": "account_number",
+                     "mask_box": {"x1": box[0], "y1": box[1],
+                                  "x2": box[2], "y2": box[3]}})
+    red_path = tmp_path / "red.png"
+    red.save(red_path)
+    item = {"ex_id": "EX4", "item_id": "item1", "kind": "account_number",
+            "box": line, "text": value}
+    checked = redact_mod.check_leak(path, red_path, plan, pii_items=[item])
+    assert any(f["message"] == redact_mod.UNMASKED_LINE_REASON
+               for f in checked["findings"])
+    ink = redact_mod.build_ink_mask(image)
+    assert not redact_mod.line_is_masked(ink, line, [graze], "account_number", value)
+    # The designed masks (front digits for accounts, middle 4 for
+    # phones) do count as masked.
+    front = [line[0] - 5, line[1] - 5, line[0] + int((line[2] - line[0]) * 0.7),
+             line[3] + 5]
+    assert redact_mod.line_is_masked(ink, line, [front], "account_number", value)
+    assert redact_mod.digits_to_hide("account_number", value) == 8
+    assert redact_mod.digits_to_hide("phone", "010-0000-0001") == 4
+    assert redact_mod.digits_to_hide("id_number", "000000-0000000") == 7
+
+
+def test_ink_mask_failure_fails_closed(tmp_path, monkeypatch):
+    path, _, boxes = _dense_receipt(tmp_path)
+
+    def _broken(image):
+        raise OSError("cannot build the ink mask")
+
+    monkeypatch.setattr(redact_mod, "build_ink_mask", _broken)
+    out = _run_privacy(tmp_path, path, _account_readings(boxes, 0))
+    for entry in out["plan"]:
+        assert entry["needs_review"] is True
+        assert redact_mod.INK_UNCHECKED_REVIEW_REASON in entry["reason"]
+        assert redact_mod.LEAK_UNCHECKED_REASON in entry["reason"]
+    assert {f["message"] for f in out["leak_check"]["findings"]} == {
+        redact_mod.LEAK_UNCHECKED_REASON}
+    assert out["leak_check"]["status"] == "pass"  # warnings, not a HOLD
+    assert out["previews"][0]["needs_review"] is True
 
 
 def test_leak_check_finds_visible_number_off_the_mask(tmp_path):
