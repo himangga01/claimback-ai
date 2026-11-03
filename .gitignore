@@ -12,3 +12,4 @@ dist/
 *.DS_Store
 .local/
 backend/data/
+*.lock
