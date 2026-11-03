@@ -31,7 +31,7 @@ from app.services.pdf_compiler import (
 def sample_korean_loan_fact():
     return LoanFactSchema(
         creditor=PartyInfo(
-            name="홍길동(SAMPLE)",
+            name="서가온(SAMPLE)",
             phone="010-0000-0000",
             address="서울특별시 샘플구 데모로 0",
             city="서울",
@@ -39,7 +39,7 @@ def sample_korean_loan_fact():
             zip_code="00000",
         ),
         debtor=PartyInfo(
-            name="김채무(SAMPLE)",
+            name="탁나루(SAMPLE)",
             phone="010-0000-0000",
             address="경기도 샘플시 데모동 0",
             city="샘플시",
@@ -77,7 +77,7 @@ def sample_korean_loan_fact():
 def sample_us_loan_fact():
     return LoanFactSchema(
         creditor=PartyInfo(
-            name="SAMPLE Creditor",
+            name="Avery Linden (SAMPLE)",
             phone="010-0000-0000",
             address="0 Sample Street, Sample City",
             city="Sample City",
@@ -85,7 +85,7 @@ def sample_us_loan_fact():
             zip_code="00000",
         ),
         debtor=PartyInfo(
-            name="Michael Scott",
+            name="Rowan Hale (SAMPLE)",
             phone="213-555-0144",
             address="1725 Slough Avenue",
             city="Los Angeles",
@@ -109,7 +109,7 @@ def sample_us_loan_fact():
             ),
             EvidenceItem(
                 id="Exhibit B",
-                title="SampleTalk Promissory Admission",
+                title="Repayment promise message",
                 evidence_type=EvidenceTypeEnum.MESSENGER_CHAT,
                 sha256_hash="2222222222222222222222222222222222222222222222222222222222222222",
                 source_filename="sampletalk_chat.png",
@@ -160,7 +160,7 @@ def test_agreed_interest_rate_capped_at_20_percent():
 
 
 def test_verification_tampering_reconciliation(sample_korean_loan_fact):
-    # LLM이 1,200만 원으로 수치 할루시네이션(위변조)을 일으킨 경우
+    # 초안 금액이 계산값과 다르면 보류한다 (R4)
     draft = GeneratedClaimDraft(
         jurisdiction="KR",
         claim_amount_claimed=Decimal("12000000"),
@@ -173,10 +173,11 @@ def test_verification_tampering_reconciliation(sample_korean_loan_fact):
         claim_draft=draft,
         target_date=date(2026, 6, 30),
     )
-    assert result.status == VerificationStatusEnum.RECONCILED
-    assert result.is_valid is True
+    assert result.status == VerificationStatusEnum.HUMAN_CHECK_REQUIRED
+    assert result.is_valid is False
     assert result.reconciled_amount == Decimal("10000000")
     assert len(result.tampering_reconciliations) == 1
+    assert any("초안의 금액이 계산값과 다릅니다" in m for m in result.missing_requirements)
 
 
 def test_transfer_amount_mismatch_requires_human_check(sample_korean_loan_fact):
@@ -219,7 +220,7 @@ def test_korean_civil_interest_segments_pre_and_post_service(sample_korean_loan_
 
 
 def test_korean_civil_interest_without_service_date_uses_5_percent_only(sample_korean_loan_fact):
-    # 소장 송달 전에는 과다 청구를 방지하기 위해 전 구간 연 5% 적용
+    # 소장 송달 전에는 전 구간 연 5% 적용
     sample_korean_loan_fact.service_date = None
     calc_date = date(2026, 10, 31)
 
@@ -233,7 +234,7 @@ def test_korean_civil_interest_without_service_date_uses_5_percent_only(sample_k
 
 
 # ---------------------------------------------------------------------------
-# 2. Overpayment & Pure Function Tests (🛡️-1)
+# 2. Overpayment & Pure Function Tests
 # ---------------------------------------------------------------------------
 
 def test_overpayment_preserved_and_flagged(sample_korean_loan_fact):
@@ -281,7 +282,7 @@ def test_zero_citation_draft_blocked_as_invalid(sample_korean_loan_fact):
 # ---------------------------------------------------------------------------
 
 def test_sc100_amount_limit_validation(sample_us_loan_fact):
-    # $12,500 초과 시 소액재판 불가 차단
+    # $12,500 초과 시 SC-100 작성 범위 안내와 함께 보류
     sample_us_loan_fact.principal_amount = Decimal("20000.00")
     draft = GeneratedClaimDraft(
         jurisdiction="US",
@@ -296,11 +297,12 @@ def test_sc100_amount_limit_validation(sample_us_loan_fact):
         target_date=date(2026, 4, 10),
     )
     assert result.is_valid is False
-    assert any("$12,500.00" in m for m in result.missing_requirements)
+    assert any("$12,500" in m for m in result.missing_requirements)
+    assert any("서류를 만들지 않습니다" in m for m in result.missing_requirements)
 
 
 def test_sc100_two_claims_limit_validation(sample_us_loan_fact):
-    # $2,500 초과 소송을 이미 2회 제기한 경우 차단
+    # $2,500 초과 소송을 이미 2회 제기한 경우 연간 건수 항목 확인 안내
     sample_us_loan_fact.prior_claims_over_2500_this_year = 2
     draft = GeneratedClaimDraft(
         jurisdiction="US",
@@ -315,7 +317,7 @@ def test_sc100_two_claims_limit_validation(sample_us_loan_fact):
         target_date=date(2026, 4, 10),
     )
     assert result.is_valid is False
-    assert any("연간 $2,500 초과 소액소송은 2회까지만" in m for m in result.missing_requirements)
+    assert any("연간 청구 건수" in m for m in result.missing_requirements)
 
 
 def test_california_sc100_pdf_checkboxes_and_fields_verified(sample_us_loan_fact, tmp_path):
@@ -341,10 +343,10 @@ def test_california_sc100_pdf_checkboxes_and_fields_verified(sample_us_loan_fact
     fields = reader.get_fields()
 
     # 텍스트 필드 검증
-    assert fields["SC-100[0].Page2[0].List1[0].Item1[0].PlaintiffName1[0]"].get("/V") == "SAMPLE Creditor"
+    assert fields["SC-100[0].Page2[0].List1[0].Item1[0].PlaintiffName1[0]"].get("/V") == "Avery Linden (SAMPLE)"
     assert fields["SC-100[0].Page2[0].List3[0].PlaintiffClaimAmount1[0]"].get("/V") == "5,000.00"
 
-    # 필수 체크박스 검증 (Item 4 Demand=Yes, Item 5 Venue=a(1), Item 7=No, Item 8=No, Item 9=No, Item 10 >2500=Yes)
+    # 체크박스 검증 (Item 4 Demand=Yes, Item 5 Venue=a(1), Item 7=No, Item 8=No, Item 9=No, Item 10 >2500=Yes)
     assert fields["SC-100[0].Page3[0].List4[0].Item4[0].Checkbox50[0]"].get("/V") == "/1"
     assert fields["SC-100[0].Page3[0].List5[0].Lia[0].Checkbox5cb[0]"].get("/V") == "/1"
     assert fields["SC-100[0].Page3[0].List7[0].item7[0].Checkbox60[1]"].get("/V") == "/2"
@@ -354,7 +356,7 @@ def test_california_sc100_pdf_checkboxes_and_fields_verified(sample_us_loan_fact
 
 
 # ---------------------------------------------------------------------------
-# 5. Korean Content Proof Hangul Font & e-Court Packet Tests (QA-2, 🛡️-2)
+# 5. Korean Content Proof Hangul Font & e-Court Packet Tests (QA-2)
 # ---------------------------------------------------------------------------
 
 def test_korean_content_proof_hangul_font_extracted_cleanly(sample_korean_loan_fact, tmp_path):
@@ -379,11 +381,11 @@ def test_korean_content_proof_hangul_font_extracted_cleanly(sample_korean_loan_f
     reader = PdfReader(out_pdf)
     text = reader.pages[0].extract_text()
 
-    # 한글 글리프가 '■'이 아니라 실제 온전한 한글 텍스트로 추출되는지 검증!
+    # 한글 글리프가 '■'이 아니라 실제 온전한 한글 텍스트로 추출되는지 검증
     assert "■" not in text
     assert "내 용 증 명 서" in text
-    assert "홍길동(SAMPLE)" in text
-    assert "김채무(SAMPLE)" in text
+    assert "서가온(SAMPLE)" in text
+    assert "탁나루(SAMPLE)" in text
     assert "대여금 반환 청구" in text
 
 
@@ -406,19 +408,18 @@ def test_korean_ecourt_packet_splits_payment_order_and_lawsuit(sample_korean_loa
     )
     # 지급명령용 문안에는 호증 표시가 없어야 함
     assert "갑 제1호증" not in packet["claim_cause_payment_order"]
-    # 소액소장용 문안에는 입증방법과 호증이 포함되어야 함
+    # 소장용 문안에는 입증방법과 호증이 포함되어야 함
     assert "[입증 방법]" in packet["claim_cause_lawsuit"]
     assert "갑 제1호증" in packet["claim_cause_lawsuit"]
 
 
 # ---------------------------------------------------------------------------
-# 6. Real File SHA-256 Byte Verification Utility Test (🛡️-3)
+# 6. Real File SHA-256 Byte Verification Utility Test
 # ---------------------------------------------------------------------------
 
 def test_verify_file_bytes_sha256(tmp_path):
     f = tmp_path / "sample.txt"
     f.write_text("Hello Meta Hackathon ClaimBack-AI", encoding="utf-8")
-    expected_hash = "f3408a0d0a794cbdb7e9ea8d867c00e12d45c5896016629ecff86e7a2dfb4200"  # echo -n ... | sha256sum
     import hashlib
     actual_hash = hashlib.sha256("Hello Meta Hackathon ClaimBack-AI".encode("utf-8")).hexdigest()
     assert verify_file_bytes_sha256(str(f), actual_hash) is True
@@ -426,7 +427,7 @@ def test_verify_file_bytes_sha256(tmp_path):
     assert verify_file_bytes_sha256("/non_existent_path.txt", actual_hash) is False
 
 def test_multi_year_interest_leap_year_crossing():
-    # 2024년(윤년 366일) ~ 2026년(평년 365일) 다년도 일할 이자 연도 경계 일수 누락 0일 검증
+    # 미국 트랙 호환용 일할 계산: 2024년(윤년 366일) ~ 2026년(평년 365일) 경계 확인
     principal = Decimal("36500.00")
     start = date(2024, 1, 1)
     end = date(2026, 1, 1) # 2년 (366 + 365 = 731일)
@@ -435,22 +436,22 @@ def test_multi_year_interest_leap_year_crossing():
     )
     # 2024년 36500 * 1.0 * (366/366) = 36500
     # 2025년 36500 * 1.0 * (365/365) = 36500
-    # 총 합계 = 73000.00 (연도 경계에서 1일도 누락되지 않아야 함)
+    # 총 합계 = 73000.00
     assert interest == Decimal("73000.00")
 
 
 def test_service_date_post_next_day_statutory_rate():
-    # 소촉법 제3조 제1항: 송달 당일은 종전 이율, 송달 '다음날'부터 12% 적용
+    # 송달 당일은 종전 이율, 송달 다음날부터 12% 적용
     fact = LoanFactSchema(
-        creditor=PartyInfo(name="홍길동(SAMPLE)"),
-        debtor=PartyInfo(name="김채무(SAMPLE)"),
+        creditor=PartyInfo(name="서가온(SAMPLE)"),
+        debtor=PartyInfo(name="탁나루(SAMPLE)"),
         currency=CurrencyEnum.KRW,
         principal_amount=Decimal("10000000"),
         loan_date=date(2026, 1, 1),
         due_date=date(2026, 6, 30),
         service_date=date(2026, 8, 31),
     )
-    # 송달 당일(8/31)까지의 계산: 7/1 ~ 8/31 (62일간 민법 5%만 발생해야 함)
+    # 송달 당일(8/31)까지의 계산: 7/1 ~ 8/31 (62일간 연 5%만)
     rem_p, acc_i, overp, log, breakdown = DeterministicLegalCalculator.apply_repayments_and_calculate_balance(
         fact, calculation_date=date(2026, 8, 31)
     )
@@ -459,10 +460,10 @@ def test_service_date_post_next_day_statutory_rate():
 
 
 def test_debt_fully_satisfied_blocks_claim():
-    # 원리금이 전액 변제된 경우 소액소송 청구 부적격 차단
+    # 입력한 변제 합계가 원리금 이상이면 보류
     fact = LoanFactSchema(
-        creditor=PartyInfo(name="홍길동(SAMPLE)"),
-        debtor=PartyInfo(name="김채무(SAMPLE)"),
+        creditor=PartyInfo(name="서가온(SAMPLE)"),
+        debtor=PartyInfo(name="탁나루(SAMPLE)"),
         currency=CurrencyEnum.KRW,
         principal_amount=Decimal("1000000"),
         loan_date=date(2026, 1, 1),
@@ -485,4 +486,4 @@ def test_debt_fully_satisfied_blocks_claim():
     res = VerificationGateService.verify_and_reconcile(fact, draft, target_date=date(2026, 3, 1))
     assert res.is_valid is False
     assert res.is_debt_fully_satisfied is True
-    assert any("이미 전액 변제 완료" in m for m in res.missing_requirements)
+    assert any("원리금 이상" in m for m in res.missing_requirements)

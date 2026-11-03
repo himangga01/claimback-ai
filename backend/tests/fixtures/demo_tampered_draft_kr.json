@@ -1,0 +1,54 @@
+{
+  "normal_draft": {
+    "lang": "ko",
+    "sentences": [
+      {
+        "sentence_id": "s1",
+        "type": "fact",
+        "text_with_slots": "채권자 {{creditor_name}}이 채무자 {{debtor_name}}에게 돈을 빌려주었다. [[EX:1]]",
+        "ex_refs": ["1"]
+      },
+      {
+        "sentence_id": "s2",
+        "type": "fact",
+        "text_with_slots": "변제기는 {{due_date}}이다. [[EX:2]]",
+        "ex_refs": ["2"]
+      },
+      {
+        "sentence_id": "s3",
+        "type": "user",
+        "text_with_slots": "아직 돈을 받지 못했다. [[USER]]",
+        "ex_refs": []
+      }
+    ]
+  },
+  "tampered_draft": {
+    "lang": "ko",
+    "sentences": [
+      {
+        "sentence_id": "s1",
+        "type": "fact",
+        "text_with_slots": "채권자 {{creditor_name}}이 채무자 {{debtor_name}}에게 돈을 빌려주었다. [[EX:1]]",
+        "ex_refs": ["1"]
+      },
+      {
+        "sentence_id": "s2",
+        "type": "fact",
+        "text_with_slots": "변제기는 {{due_date}}이다. [[EX:2]]",
+        "ex_refs": ["2"]
+      },
+      {
+        "sentence_id": "s3",
+        "type": "user",
+        "text_with_slots": "아직 돈을 받지 못했다. [[USER]]",
+        "ex_refs": []
+      },
+      {
+        "sentence_id": "t1",
+        "type": "fact",
+        "text_with_slots": "5000000원을 빌려주었다. [[EX:1]]",
+        "ex_refs": ["1"]
+      }
+    ]
+  }
+}
