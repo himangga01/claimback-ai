@@ -33,6 +33,7 @@ from app.agents.case_state import (
     StepState,
     SubStep,
     delete_case,
+    files_dir,
     load_case,
     save_case,
     utc_now_iso,
@@ -474,6 +475,10 @@ def remove_case(case_id: str) -> None:
 def _resume_step_for_hold(state: CaseState) -> Optional[str]:
     if state.state != "HOLD" or not state.hold_reasons:
         return None
+    # L3: a privacy_leak HOLD re-executes from the redaction stage.
+    if all(r.step == "privacy" and r.code == "privacy_leak"
+           for r in state.hold_reasons):
+        return "privacy"
     if not all(r.code == "internal_error" for r in state.hold_reasons):
         return None
     steps = {r.step for r in state.hold_reasons}
@@ -484,6 +489,98 @@ def _resume_step_for_hold(state: CaseState) -> Optional[str]:
     if steps <= {"packaging"}:
         return "package"
     return None
+
+
+
+# --- M4a vision/privacy helpers (6a) --------------------------------------------
+def _segments_path(case_id: str) -> Any:
+    from pathlib import Path as _Path
+
+    return _Path(files_dir(case_id)) / "segments.json"
+
+
+def _redactions_path(case_id: str) -> Any:
+    from pathlib import Path as _Path
+
+    return _Path(files_dir(case_id)) / "redactions.json"
+
+
+def load_segments(case_id: str) -> List[Dict[str, Any]]:
+    path = _segments_path(case_id)
+    try:
+        if not path.exists():
+            return []
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, list) else []
+    except (OSError, ValueError):
+        return []
+
+
+def load_redactions(case_id: str) -> Dict[str, Any]:
+    path = _redactions_path(case_id)
+    empty: Dict[str, Any] = {
+        "plan": [], "previews": [],
+        "leak_check": {"status": "pass", "findings": []},
+    }
+    try:
+        if not path.exists():
+            return empty
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            return empty
+        data.setdefault("plan", [])
+        data.setdefault("previews", [])
+        data.setdefault("leak_check", {"status": "pass", "findings": []})
+        return data
+    except (OSError, ValueError):
+        return empty
+
+
+def _vision_one(
+    case_id: str,
+    record: Any,
+    preview_bytes: Optional[bytes],
+    preview_size: Optional[tuple],
+    filename: str,
+    meta_mode: str,
+) -> Dict[str, Any]:
+    """Vision-1 noun calls for one evidence (parallel worker, no saves)."""
+    from app.agents import vision as vision_mod
+
+    ex_id = str(record.ex_id)
+    if str(getattr(record, "kind", "")) == "video":
+        return {"ex_id": ex_id, "skipped": True}
+    if preview_bytes is None or preview_size is None:
+        return {"ex_id": ex_id, "objects": [], "status": "not_found",
+                "cost": 0.0, "latency_ms": 0, "calls": 0,
+                "note": "preview missing"}
+    started = time.perf_counter()
+    try:
+        objects, info = vision_mod.run_vision_nouns(
+            case_id, ex_id, bytes(preview_bytes), filename,
+            int(preview_size[0]), int(preview_size[1]),
+            meta_mode, case_id, files_dir(case_id),
+        )
+    except (deps.FixtureNotFound, deps.BudgetError,
+            vision_mod.VisionParseError) as exc:
+        partial = getattr(exc, "_vision_partial", None) or {}
+        return {"ex_id": ex_id, "error": exc,
+                "latency_ms": int((time.perf_counter() - started) * 1000),
+                "cost": float(partial.get("cost_usd", 0.0) or 0.0),
+                "calls": int(partial.get("calls", 0) or 0)}
+    except Exception as exc:
+        partial = getattr(exc, "_vision_partial", None) or {}
+        wrapped = vision_mod.VisionParseError(
+            f"vision error: {type(exc).__name__}")
+        return {"ex_id": ex_id, "error": wrapped,
+                "latency_ms": int((time.perf_counter() - started) * 1000),
+                "cost": float(partial.get("cost_usd", 0.0) or 0.0),
+                "calls": int(partial.get("calls", 0) or 0)}
+    latency_ms = int((time.perf_counter() - started) * 1000)
+    status = "ok" if objects else "not_found"
+    return {"ex_id": ex_id, "objects": objects, "status": status,
+            "cost": float(info.get("cost_usd", 0.0) or 0.0),
+            "latency_ms": latency_ms, "calls": int(info.get("calls", 0) or 0)}
 
 
 # --- POST /run ----------------------------------------------------------------------------
@@ -515,6 +612,10 @@ def run_case(case_id: str) -> CaseState:
                 if resume == "package":
                     state.hold_reasons = []
                     return _run_package_flow(state)
+                if resume == "privacy":
+                    state.hold_reasons = []
+                    _reset_from(state, "privacy")
+                    return _run_privacy_flow(state)
             raise WrongState("wrong_state", f"지금 상태({state.state})에서는 실행할 수 없습니다.")
         except (CaseNotFound, WrongState, ConcurrentRun):
             raise
@@ -702,8 +803,137 @@ def _run_intake_flow(state: CaseState) -> CaseState:
     _mark_done(reading_step, latency_ms, reading_attempts, reading_cost, note)
     save_case(state)
 
-    _mark_skipped(state.step("vision"), "이 버전에서는 사용하지 않음")
+    # M4a vision: noun calls per evidence (parallel) + signature box retry.
+    from app.agents import vision as vision_mod
+
+    vision_step = state.step("vision")
+    _mark_running(vision_step)
     save_case(state)
+    vision_started = time.perf_counter()
+    vision_ordered = sorted(state.evidence, key=lambda r: deps.ex_num(r.ex_id))
+    vision_previews: dict = {}
+    for _record in vision_ordered:
+        try:
+            _ppath = intake_mod.preview_path(state, _record)
+            _psize = intake_mod.preview_size(state, _record)
+            _pbytes = _ppath.read_bytes() if _ppath and _ppath.exists() else None
+        except OSError:
+            _pbytes, _psize = None, None
+        vision_previews[_record.ex_id] = (_pbytes, _psize, _record.filename)
+
+    def _vision_one_local(_record: Any) -> Dict[str, Any]:
+        _pbytes, _psize, _fname = vision_previews.get(
+            _record.ex_id, (None, None, _record.filename))
+        return _vision_one(
+            state.case_id, _record, _pbytes, _psize, _fname, deps.meta_mode())
+
+    _v_workers = deps.reader_concurrency()
+    if len(vision_ordered) <= 1 or _v_workers <= 1:
+        _vision_results = [_vision_one_local(_r) for _r in vision_ordered]
+    else:
+        with ThreadPoolExecutor(
+                max_workers=min(_v_workers, len(vision_ordered))) as _v_pool:
+            _vision_results = list(_v_pool.map(_vision_one_local, vision_ordered))
+    _vision_results.sort(key=lambda r: deps.ex_num(r["ex_id"]))
+    _segments: List[Dict[str, Any]] = []
+    _vision_substeps: List[SubStep] = []
+    _vision_cost = 0.0
+    _readings_by_ex = {str(r.get("ex_id", "")): r for r in readings}
+    for _result in _vision_results:
+        _ex_id = str(_result["ex_id"])
+        if _result.get("skipped"):
+            _segments.append({"ex_id": _ex_id, "model": vision_mod.MODEL,
+                              "objects": [], "status": "skipped"})
+            _vision_substeps.append(SubStep(ex_id=_ex_id, status="skipped",
+                                            latency_ms=0))
+            continue
+        if "error" in _result:
+            _partial = float(_result.get("cost", 0.0) or 0.0)
+            _segments.append({"ex_id": _ex_id, "model": vision_mod.MODEL,
+                              "objects": [], "status": "hold",
+                              "error": str(_result["error"])[:200]})
+            _vision_substeps.append(SubStep(
+                ex_id=_ex_id, status="hold",
+                latency_ms=int(_result.get("latency_ms", 0) or 0)))
+            # L7: calls already spent stay on the step cost + audit log.
+            _vision_cost += _partial
+            _audit(state, "vision", _ex_id, vision_mod.MODEL,
+                   vision_mod.PROMPT_VERSION, _ex_id,
+                   int(_result.get("latency_ms", 0) or 0), 0, 0, _partial)
+            continue
+        _objects = list(_result.get("objects", []) or [])
+        _cost = float(_result.get("cost", 0.0) or 0.0)
+        _lat = int(_result.get("latency_ms", 0) or 0)
+        _retry_error: Optional[BaseException] = None
+        _has_signature = any(str(o.get("target", "")) == "signature"
+                             for o in _objects)
+        if not _has_signature:
+            _reading = _readings_by_ex.get(_ex_id, {})
+            _items = list(_reading.get("items", []) or [])
+            _pbytes, _psize, _fname = vision_previews.get(
+                _ex_id, (None, None, "evidence"))
+            if _pbytes is not None and _psize is not None and _items:
+                try:
+                    _retry_objects, _retry_info = (
+                        vision_mod.run_vision_signature_retry(
+                            state.case_id, _ex_id, bytes(_pbytes),
+                            str(_fname), int(_psize[0]), int(_psize[1]),
+                            _items, deps.meta_mode(), state.case_id,
+                            files_dir(state.case_id),
+                            start_index=len(_objects)))
+                    _objects.extend(_retry_objects)
+                    _cost += float(_retry_info.get("cost_usd", 0.0) or 0.0)
+                    _lat += int(_retry_info.get("latency_ms", 0) or 0)
+                except (deps.FixtureNotFound, deps.BudgetError,
+                        vision_mod.VisionParseError) as exc:
+                    _retry_error = exc
+                    _spent = getattr(exc, "_vision_partial", None) or {}
+                    _cost += float(_spent.get("cost_usd", 0.0) or 0.0)
+                    _lat += int(_spent.get("latency_ms", 0) or 0)
+                except Exception as exc:
+                    _retry_error = vision_mod.VisionParseError(
+                        f"vision error: {type(exc).__name__}")
+        if _retry_error is not None:
+            # L7: a failed signature retry is a hold with its message,
+            # never a silent not_found; noun objects are still kept.
+            _segments.append({"ex_id": _ex_id, "model": vision_mod.MODEL,
+                              "objects": _objects, "status": "hold",
+                              "error": str(_retry_error)[:200]})
+            _vision_cost += _cost
+            _vision_substeps.append(SubStep(ex_id=_ex_id, status="hold",
+                                            latency_ms=_lat))
+            _audit(state, "vision", _ex_id, vision_mod.MODEL,
+                   vision_mod.PROMPT_VERSION, _ex_id, _lat, 0, 0, _cost)
+            continue
+        _status = "ok" if _objects else "not_found"
+        _segments.append({"ex_id": _ex_id, "model": vision_mod.MODEL,
+                          "objects": _objects, "status": _status})
+        _vision_cost += _cost
+        _vision_substeps.append(SubStep(ex_id=_ex_id, status="done",
+                                        latency_ms=_lat))
+        _audit(state, "vision", _ex_id, vision_mod.MODEL,
+               vision_mod.PROMPT_VERSION, _ex_id, _lat, 0, 0, _cost)
+    try:
+        _segments_path(state.case_id).write_text(
+            json.dumps(_segments, ensure_ascii=False), encoding="utf-8")
+    except OSError:
+        pass
+    vision_step.substeps = _vision_substeps
+    _vision_latency = int((time.perf_counter() - vision_started) * 1000)
+    _vision_ok = sum(1 for s in _segments if s.get("status") == "ok")
+    _vision_none = sum(1 for s in _segments if s.get("status") == "not_found")
+    _vision_skip = sum(1 for s in _segments if s.get("status") == "skipped")
+    _vision_hold = sum(1 for s in _segments if s.get("status") == "hold")
+    _vision_note = f"{_vision_ok}개 검출"
+    if _vision_none:
+        _vision_note += f", {_vision_none}개 미검출"
+    if _vision_skip:
+        _vision_note += f", {_vision_skip}개 건너뜀(영상)"
+    if _vision_hold:
+        _vision_note += f", {_vision_hold}개 오류"
+    _mark_done(vision_step, _vision_latency, 1, _vision_cost, _vision_note)
+    save_case(state)
+
 
     # organizing
     state.state = "ORGANIZING"
@@ -749,7 +979,60 @@ def _run_intake_flow(state: CaseState) -> CaseState:
            int(output.get("tokens_out", 0) or 0), cost)
     save_case(state)
 
-    _mark_skipped(state.step("privacy"), "이 버전에서는 사용하지 않음")
+    return _run_privacy_flow(state)
+
+
+def _run_privacy_flow(state: CaseState) -> CaseState:
+    """M4a privacy: redaction plan + pixel copies + leak check (rule).
+
+    Also the resume target of a ``privacy_leak`` HOLD (L3): ``POST /run``
+    re-executes from the redaction stage with the saved readings/segments.
+    """
+    from app.agents import privacy_guard as privacy_mod
+
+    state.meta_mode = deps.meta_mode()
+    privacy_step = state.step("privacy")
+    _mark_running(privacy_step)
+    save_case(state)
+    _privacy_started = time.perf_counter()
+    _preview_paths: dict = {}
+    _preview_sizes: dict = {}
+    for _record in state.evidence:
+        try:
+            _ppath = intake_mod.preview_path(state, _record)
+            _psize = intake_mod.preview_size(state, _record)
+        except OSError:
+            _ppath, _psize = None, None
+        if _ppath is not None and _psize is not None:
+            _preview_paths[str(_record.ex_id)] = _ppath
+            _preview_sizes[str(_record.ex_id)] = (int(_psize[0]), int(_psize[1]))
+    _segments_for_privacy = load_segments(state.case_id)
+    _privacy_out = privacy_mod.run_privacy(
+        state.case_id, list(state.evidence), list(state.readings),
+        _segments_for_privacy, _preview_paths, _preview_sizes,
+        files_dir(state.case_id))
+    try:
+        _redactions_path(state.case_id).write_text(
+            json.dumps(_privacy_out, ensure_ascii=False), encoding="utf-8")
+    except OSError:
+        pass
+    _privacy_latency = int((time.perf_counter() - _privacy_started) * 1000)
+    _plan_count = len(_privacy_out.get("plan", []) or [])
+    _leak = _privacy_out.get("leak_check", {}) or {}
+    _audit(state, "privacy", None, None, None,
+           sha_short(json.dumps(_privacy_out.get("plan", []),
+                                ensure_ascii=False, sort_keys=True)),
+           _privacy_latency, 0, 0, 0.0)
+    if str(_leak.get("status", "pass")) == "fail":
+        _mark_hold(privacy_step, _privacy_latency,
+                   note=f"가림 {_plan_count}개, 누출 검사 실패")
+        _recompute_run_cost(state)
+        save_case(state)
+        return _hold(state, "privacy", "privacy_leak",
+                      "가린 사본에서 누출 검사가 실패했습니다.")
+    _mark_done(privacy_step, _privacy_latency, 1, 0.0,
+               f"가림 {_plan_count}개, 누출 검사 통과")
+    save_case(state)
     checkpoint = state.step("checkpoint_1")
     checkpoint.status = "running"
     checkpoint.started_at = utc_now_iso()
@@ -1231,11 +1514,18 @@ def _validate_facts_body(
         cleaned_fields["repayments"] = repayments
     full_roles = {record.ex_id: "other" for record in state.evidence}
     full_roles.update({str(key): str(value) for key, value in roles.items()})
+    # M4a 6a: optional redaction confirmation (default False).
+    redaction_confirmed = body.get("redaction_confirmed", False)
+    if redaction_confirmed is None:
+        redaction_confirmed = False
+    if not isinstance(redaction_confirmed, bool):
+        raise BadRequest("bad_request", "redaction_confirmed는 true|false여야 합니다.")
     return {
         "fields": cleaned_fields,
         "evidence_roles": full_roles,
         "highlight": [str(ref) for ref in highlight],
         "as_of": str(as_of).strip(),
+        "redaction_confirmed": bool(redaction_confirmed),
     }
 
 

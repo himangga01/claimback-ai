@@ -1,0 +1,102 @@
+{
+  "latency_ms": 1029,
+  "request": {
+    "endpoint": "responses",
+    "model": "sam-3.1",
+    "params": {
+      "store": false
+    },
+    "payload": [
+      {
+        "content": [
+          {
+            "text": "<0f>1<|box;x1=48;y1=44;x2=309;y2=92;w=480;h=130|>",
+            "type": "input_text"
+          },
+          {
+            "image_url": "sha256:6d9f33f5dc9ea7f357d9485ea6c6b0377ff07ab49997e8daf0abd6027b6db2df:image/png",
+            "type": "input_image"
+          }
+        ],
+        "role": "user"
+      }
+    ]
+  },
+  "response": {
+    "access_programs": null,
+    "background": false,
+    "completed_at": 1793686033.0,
+    "conversation": null,
+    "created_at": 1793686033.0,
+    "error": null,
+    "id": "resp_6ae97a1110233f1c0ff44c35",
+    "incomplete_details": null,
+    "instructions": null,
+    "max_output_tokens": null,
+    "max_tool_calls": null,
+    "metadata": null,
+    "model": "sam-3.1",
+    "moderation": null,
+    "object": "response",
+    "output": [
+      {
+        "content": [
+          {
+            "annotations": [],
+            "logprobs": [],
+            "text": "<0f>1<|box;x1=48;y1=44;x2=310;y2=93;w=480;h=130|><|mask;x=0;y=0;data=50,263,~!!!Gl!kClXARXPe0pcT[y0L06=3KTNQ9E&/A/6V1FOB837PL(Udw+d(h:3:?qPZt%'6DDkcb#'?[#cJ%VetwKKY3OX43ibkP_Mk4W`(%rbheKrGUW]O.p]2KimjePVnfv:A?(eO37`zz`X=r&dHih{:ey0_xL32[J(&h^k^#I^cB/VYX%=.L:`0s&GSYM6=ib['1t#+$Mn*Fzdlv@A!=FCVV7sV(@.FY.0kru'&CQac0f5N8`9Vk5XC'AKQdr86O%!`EhX`.0n%8[+8_H:Y*S?Ni@Kt:s:bWt?P+C[OlYDEn#I&S$E9q{9XA&d`Th5jCh8QGg&H-{W+.s^^&cFJ55ajmB/fJz5N/g#P3WSX_U%Mvk#&-u^h0ENOa6?Q&6P0ctouYEU3=/XteVKkNs8{l4nw6B0nXgH)!fw8Xe.=t5Gwv=oBl!nr53DP#0@&i!j]QI..6W+9DoPXVOIJzu'9S0r^X$G4R[8?I$&F9W+LnZxuhBBEdZsq78&4IsYnV!2Duv@-H9)897'S`aW=J^xn_HVeiiu0d?2SCuX]wedUR)'U:lui-C_XlBp_o@zH)[:`3HlNjdsd]mj]o5xpspc`I.*[S^b0q1!C]]IE88^!O!Bd7CDgKrYn0M.s#1P9.1Sh:/ciNw4DED@Y9%VMPx(s.$fd`c[P&0yqTM$Vcto9zbBf`sew*Fat55]e]l4(A#hgx2'.l_fd/u!Jt$_.=2Iq@&0n9cFv=ry#?=f(xuCA6Zk*@/E80HM?dqs6[4{ACjc'SJrkP{8Ofkk[yUsU$ZDC7:odIm`EK%Q*bHF)WS9-!0PrZs]P0xR=m^:&=jGlC0nXZaYO5OQ/X(9C&EmF`2LX]+ZFnNfY5+RKmYc'h!`rm?5&KWmJ9ZY-#jC?UNoi]B'C&1B'sY%fSL5G%IdVZRwqx=.-C_`V.G'!Ow/T&j%g*klw=s/F[!JCBT[-$2qO*3o[UsM%]y60U9hJq`pf/*G!d=]IcXS`UPRVmN]$oya$m0QIjB]6WImt8bC66qsN2[po.#U-VE^'3GMauaueh!xSLC=4WT{99m@VII84mM*xF.mEIby@nQ/3Nt15W7%sV1YI7JV2)mS'SHY=p4Az*L]UiUTPeVmWC{5Wce`iZAY9Q/mR?o-9Bw`2t1b!SOJzojq1ChM.61$TUFFfPkr5I-_d.PGFHmzjN9j{+J+L:WaH]7%W3Oj)cF9OVE12]!^27Wp[t2pbs[9YJ3LONjZ$So+PY@:CkO-)pJf[f(aeop3RuXJRh+$4p]Hbh)_dSAMSHTt(1$*N!e901'Jq2@uKJcq/U1!As1?tN8wn2Kf@:-cAokYFp%(ulLq+nGwGE'@lZKVgBgnDdcu_4c93*u6*QiMk:xjSdNHnl3e0O)#){9+U]B#JXTY@-)PklW.fGY./ah4sp(!%kv(B3$.y%TNXZu:uSP%/tOV&v^7?F.3w%u#(fPe=Vqpuja@jw0ZPvrmhp$A3H6gkioDL#QOX22ZgPvuZi{m*#hYtLY3xzH+&o8NE!Zojx{&Mj/W`_7a7%KP_HE/QWhI2&(eX9nG32oqhnNvwQ`$I/Qmu]9vYrfv60$GQ=Hzl+Qq!''*L&(LQ'iZpsN5j'=A[*dfA0od3Qs*XbVqDD(6cV#2T$DWnRRAQ0U(G`34syKXE`s!g8QPl2RrSQND508-c/_K.7FMD]V$b+2PwLp(dry_Rd'=M/vXpqkucUJbZe9sxBD2yd=s3]&@V$4L6Ar'R7CSn4pvx[5KZLN[2g7[5Itv!a@&7aj`etlU#b2:)Gruh`Mn%0v-kv@0qtYzIRBR/6#-R**M(-$AkK0/VFU3=mR-n%ZYcWn_)3nGe9l1:M!'(8`*OpM81Xv!ZyIJHbqFJ=/PD9`S4k3iDon4v^[ulIXKxch5s!$JnGt?aF1o*dweRH##a.3t7ghz8s2ZohP.T2u:a'4a@7^wfFD08Ze](H)M+!c!rl636M[:L1=#-W$b^`7XgU8aB?`l.IqUJ@g0:)h^%7u^j+sOYZwm-Li9EVb=g{lyHovD!:IaHg/khwD]Vclcx3NwS[OgvCf#gr&Z`KO%M_xK=$QXRQmbP-8tDd4o??a0)ltNiHN'm1iPY!um_a!J)r948+U1-{faVzHRdqdUmH*0gf.?sV%GCY$on$k&9qfv!{s3DrI`).JTwCCPzQ&]=()vhe&_Al+5KlZdVK3/SG/S_JC2QSaRi&C%%:qh%gX+#_%[-eXN?3v[P'j-/BB4^KhU.f%sxX/bi-[S)r=w5($t&sI$7Pr?8#*]+^@j?0FT[G1qbwjv*2_@lE0frMP1!)Ys41NKZn4/?.5m#S:li&C%7B-nu+4VF]#.z_/M:At`q3EcQub_.I/D'JCixr_4`fQ.daHyAmiow#2u/*s5P0*n*8iHXAx0Ty_v-Xu(-uMLzaED@T6'jZwEi`xTwNt.ro(XplBQHA@$r1^MsQ)_-93jPpI+/@$6Kml``A8my)G?TupvNKii8uV8vP](evqxr4Vn=-_QhLW6hR&!z7lsaEO+=8b{C@@K'bNSN/xy[l%^ohJ%kqlz?O[(Wlsqd5?2m[jwxl)hlYdziDK9l{VKiWJPmh1/XQV7pPdw-qZ3mSCje+Pn@228-(da]elb{c%Vq7w^c!jpukn?&(e)$y^tK'+XL'$v=SY19-w/^G+nV{'v4+p4sG7nDs5OJJM4T8FSC9vyAq2JiT6[81U(1eSt'dH&0^f4vRsXJW6?I[@1U_E]NejrU-NK3!Qb_`oiMLZ+22LgD14b1{QF^n%E#bcKBNtiLA:JO]7Bg*YorIxbQIA-1bfrXjMkX82=4v:s&Ny8JVi?]eXWZAzBk)7g?B3E*L'gYb^]!rr/v6ky4#@ui1^=^KcuwMTr1q$q21[XyGMJ[9z$ime]rp!5Mj*GB:Yol&*R$zk&2Wu#jpk1V7z$5v@35R=D*IT-y5:.n-3E'D3v(*C?0P{L`0Z3vO$JreFX=INVhQHN_@Rx#jUPhobwX]qcDb%H6sg.#eU@rTJx3Nr9RJ7/[x1=*s5w&YUVQrf60[CIUR?urJ'uVJ#GZ?Bg6$9i4Vq=B=&!Cz&4_GY.pTCRI)HeVtI?CAt3)n?KgUI8Be(_w*^k#f2%W(1`=D(%yUF&iWJW#bRTgBX@FC){xOi#pg@1JH)@MB]Ia@b[U[`vgd$C00%cG70$j[I2+UF:KFTtjP#gy((uiq]='^6M-Zk&FBZ[#rk{QWctPirtvY3ETOCmF-TCg'ynXW(vgh(Zc`lRinKWuw?`U&gtTU/$VI=j:gHYFAqlHz8nvj+]lh5..6g9K&w1DR]$`?virWiexk%VZm7V6rBZO)6aA8^pKapAzg2t?lV3hnjL_+3l]K_)kPGy'59f3LquZ[by-Jz**ssyMUs+pJ$H6Ad!)%=dvPY`b/H?LkCG5$N3qF*&8r/?]bb3Q_BI4k9y=h!g]F#o9T-stt'mkx)bAy+AN7tzv!HM0_A3=w7Ka+&lK2oSEUgKdr/k&EGMt2)RG'$t(65D-Sag*bXMP1+KNUpd=tReej6fxNmhl6:O[38+.]Ih'PdgN1-Vt/[sgi%0p?8t-YrkZa4&L9sENe%^^o1NB_eHcP5UwKV:zj!CGdPOvz*bq2DeVSEj#!!!|>\n",
+            "type": "output_text"
+          }
+        ],
+        "id": "msg_b3cc2787-9af4-4bea-9410-f0575cb38ade",
+        "phase": null,
+        "role": "assistant",
+        "status": "completed",
+        "type": "message"
+      }
+    ],
+    "parallel_tool_calls": true,
+    "previous_response_id": null,
+    "prompt": null,
+    "prompt_cache_diagnostics": null,
+    "prompt_cache_key": null,
+    "prompt_cache_options": null,
+    "prompt_cache_retention": null,
+    "reasoning": null,
+    "safety_identifier": null,
+    "service_tier": "auto",
+    "status": "completed",
+    "store": false,
+    "temperature": 1.0,
+    "text": null,
+    "tool_choice": "auto",
+    "tool_usage": null,
+    "tools": [],
+    "top_logprobs": 0,
+    "top_p": 1.0,
+    "truncation": "disabled",
+    "usage": {
+      "images_processed": 1,
+      "input_tokens": 0,
+      "input_tokens_details": {
+        "cache_write_tokens": null,
+        "cached_tokens": 0
+      },
+      "output_tokens": 0,
+      "output_tokens_details": {
+        "reasoning_tokens": 0
+      },
+      "total_tokens": 0
+    },
+    "user": null
+  },
+  "usage": {
+    "cached_input_tokens": 0,
+    "images_processed": 1,
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "reasoning_tokens": 0,
+    "total_tokens": 0,
+    "video_frames_processed": 0
+  }
+}
