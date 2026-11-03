@@ -179,8 +179,8 @@ def get_demo_samples():
     """
     kr_sample = {
         "loan_fact": {
-            "creditor": {"name": "홍길동(SAMPLE)", "phone": "010-0000-0000", "address": "서울특별시 샘플구 데모로 0", "city": "서울", "state": "서울", "zip_code": "00000"},
-            "debtor": {"name": "김채무(SAMPLE)", "phone": "010-0000-0000", "address": "경기도 샘플시 데모동 0", "city": "샘플시", "state": "경기", "zip_code": "00000"},
+            "creditor": {"name": "서가온(SAMPLE)", "phone": "010-0000-0000", "address": "서울특별시 샘플구 데모로 0", "city": "서울", "state": "서울", "zip_code": "00000"},
+            "debtor": {"name": "탁나루(SAMPLE)", "phone": "010-0000-0000", "address": "경기도 샘플시 데모동 0", "city": "샘플시", "state": "경기", "zip_code": "00000"},
             "currency": "KRW",
             "transaction_kind": "civil",
             "principal_amount": "10000000",
@@ -188,8 +188,8 @@ def get_demo_samples():
             "due_date": "2026-06-30",
             "service_date": "2026-08-31",
             "evidences": [
-                {"id": "갑 제1호증", "title": "샘플은행 계좌이체확인증", "evidence_type": "transfer_receipt", "sha256_hash": "d70b3366d2832696e488d07b9b4ebcd4a12d94d833ec5dcc821ce39b8931568c", "source_filename": "kr_transfer_receipt.txt", "extracted_amount": "10000000", "extracted_date": "2026-01-01"},
-                {"id": "갑 제2호증", "title": "샘플톡 대화록", "evidence_type": "messenger_chat", "sha256_hash": "01ee74d4a1780b06715d6fe0261aa669e71d564c5c22c50843df44fd9e4ed6c8", "source_filename": "kr_chat_log.txt", "extracted_date": "2026-06-25"}
+                {"id": "갑 제1호증", "title": "샘플은행 계좌이체확인증", "evidence_type": "transfer_receipt", "sha256_hash": "8fe6d6d4617185b96cdbbbcac3b9cad0e39f003e4c99977c586a7a4e149d6728", "source_filename": "kr_transfer_receipt.txt", "extracted_amount": "10000000", "extracted_date": "2026-01-01"},
+                {"id": "갑 제2호증", "title": "샘플톡 대화록", "evidence_type": "messenger_chat", "sha256_hash": "63e31fe59bb5e7c25cd1ff528135e12488318d579c3ec9219e6b4d85dac42e25", "source_filename": "kr_chat_log.txt", "extracted_date": "2026-06-25"}
             ]
         },
         "claim_draft": {
@@ -203,16 +203,16 @@ def get_demo_samples():
 
     us_sample = {
         "loan_fact": {
-            "creditor": {"name": "SAMPLE Creditor", "phone": "010-0000-0000", "address": "0 Sample Street, Sample City", "city": "Sample City", "state": "CA", "zip_code": "00000"},
-            "debtor": {"name": "Michael Scott", "phone": "213-555-0144", "address": "1725 Slough Avenue", "city": "Los Angeles", "state": "CA", "zip_code": "90012"},
+            "creditor": {"name": "Avery Linden (SAMPLE)", "phone": "010-0000-0000", "address": "0 Sample Street, Sample City", "city": "Sample City", "state": "CA", "zip_code": "00000"},
+            "debtor": {"name": "Rowan Hale (SAMPLE)", "phone": "213-555-0144", "address": "0 Sample St, Sample City, CA 90000", "city": "Sample City", "state": "CA", "zip_code": "90000"},
             "currency": "USD",
             "contract_form": "written",
             "principal_amount": "5000.00",
             "loan_date": "2026-01-10",
             "due_date": "2026-04-10",
             "evidences": [
-                {"id": "Exhibit A", "title": "Sample Bank Wire Transfer Receipt", "evidence_type": "transfer_receipt", "sha256_hash": "5dbb5c03b372ec55f35e217bf7a2f0813dbeeddf6b33b3b6f8b6284710f3a69d", "source_filename": "us_wire_receipt.txt", "extracted_amount": "5000.00", "extracted_date": "2026-01-10"},
-                {"id": "Exhibit B", "title": "Promissory Admission", "evidence_type": "messenger_chat", "sha256_hash": "01ee74d4a1780b06715d6fe0261aa669e71d564c5c22c50843df44fd9e4ed6c8", "source_filename": "kr_chat_log.txt", "extracted_date": "2026-04-01"}
+                {"id": "Exhibit A", "title": "Sample Bank Wire Transfer Receipt", "evidence_type": "transfer_receipt", "sha256_hash": "1bea6080d6dbd79e562e66a81fed0a7efa51081ee9cc8c8c4784cf87f66ea7c4", "source_filename": "us_wire_receipt.txt", "extracted_amount": "5000.00", "extracted_date": "2026-01-10"},
+                {"id": "Exhibit B", "title": "Repayment promise message", "evidence_type": "messenger_chat", "sha256_hash": "63e31fe59bb5e7c25cd1ff528135e12488318d579c3ec9219e6b4d85dac42e25", "source_filename": "kr_chat_log.txt", "extracted_date": "2026-04-01"}
             ]
         },
         "claim_draft": {
