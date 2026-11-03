@@ -28,7 +28,8 @@ models (`muse-spark-1.3`, `sam-3.1`, `muse-image-1.0`). Not legal advice.
 | `reports/` | Muse Code milestone reports and Claude reviews |
 | `docs/analysis/plan-review.md` | Review of the specs (2026-11-02), findings A1–F3 and their status; section 9: repo baseline and billing screen (2026-11-03); section 10: official hackathon rules, judging, deadline, and billing dashboard (2026-11-03) |
 | `docs/code-analysis.md` | Code review and implementation status of the repo (2026-11-03, commit 76d9cce), findings F1–F20 |
-| `specs/multi_agent_architecture.md` | The four user-facing agents (Forensic Visual, Fact-Timeline Chronology, Financial Auditor, Judicial Filer) mapped to the agent design |
+| `specs/multi_agent_architecture.md` | The four user-facing agents (Forensic Visual, Fact-Timeline Chronology, Financial Auditor, Judicial Form Filler) mapped to the agent design |
+| `reports/M<N>-review.md` | Claude reviews with subagent cross-review; `reports/M0-review.md` holds the M0 spike decisions (coordinates, video keyframes, reader model pending) |
 
 Workflow:
 - Before any task, read the task brief, the spec sections it cites, and this file.
@@ -71,7 +72,8 @@ Workflow:
   The app caps do not cover Muse Code. Stop at the end of the current milestone once the remaining
   credit reaches $10, which is kept for the demo recording (plan section 4-7).
 - Use only Standard-tier model IDs. Never use `-contributor` IDs.
-- Never read, print, log, or commit `.env` or any key. Use `.env.example` with empty values.
+- Never read, print, log, or commit `.env` or any key. Use `.env.example` with empty values for
+  keys; non-secret settings (`META_MODE`, cap defaults) may have default values.
   Run the secret scan before every commit.
 - Golden-set answer files are for tests only; never pass them to runtime agents.
 - Keep each task within its brief. If the brief and the specs disagree, stop and report.
