@@ -41,6 +41,7 @@ verbatim in the disclaimers (`DISCLAIMER_KO`, `DISCLAIMER_EN`). The screen follo
 | `reports/fix-cost-redaction.md` | Case cost vs. ledger (reservation rows offset; reruns keep spend), wrong-line PII masks made needs_review with a stronger leak check, duplicated citations (2026-11-04) |
 | `reports/redaction-confirm.md` | Per-exhibit confirmation of flagged redacted copies on the fact-check sheet (`redaction_confirmed` ex_id list, contract 6d), honest leak-check status (`review`) and privacy step note (2026-11-04) |
 | `reports/portal-review.md` | Portal redesign and English screen (2026-11-03): what changed, how the KO/EN switch works, tests, cross-review |
+| `submission/demo-video-plan.md`, `submission/demo-video-production.md`, `submission/demo-evidence/` | English demo video (2026-11-04): plan (scenes, narration, captions), how it was produced (Remotion, Voicebox Ryan, synthesized music and effects, live take), and the English SAMPLE evidence with its generator |
 | `submission/` | Demo script (`demo-script.md`), recording runbook (`runbook.md`), submission notes and form drafts (`submission-notes.md`) |
 
 Workflow:
