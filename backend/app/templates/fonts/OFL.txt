@@ -1,21 +1,11 @@
-NanumGothic - copyright notice and license
-=============================================
-Files: NanumGothic-Regular.ttf, NanumGothic-Bold.ttf
-(in backend/app/templates/fonts/)
-
-Copyright (c) 2011, NHN Corporation (http://www.nhncorp.com).
-Font designed by Sandoll Communications Inc.
-
-The notice above is quoted from the name table embedded in the bundled
-font files (verified by parsing NanumGothic-Regular.ttf; designers listed
-there as Bruce Kwon, Nicolas Noh, Sung-woo Choi). Distributor pages
-checked: https://github.com/naver/nanumfont (states that Nanum fonts are
-published under the OFL). No Reserved Font Name is declared here because
-none is stated in the embedded metadata.
+Copyright (c) 2010, NHN Corporation (http://www.nhncorp.com),
+with Reserved Font Name Nanum, Naver Nanum, NanumGothic, Naver 
+NanumGothic, NanumMyeongjo, Naver NanumMyeongjo, NanumBrush, Naver
+NanumBrush, NanumPen, Naver NanumPen.
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:
-https://openfontlicense.org
+http://scripts.sil.org/OFL
 
 
 -----------------------------------------------------------
@@ -31,7 +21,7 @@ with others.
 
 The OFL allows the licensed fonts to be used, studied, modified and
 redistributed freely as long as they are not sold by themselves. The
-fonts, including any derivative works, can be bundled, embedded,
+fonts, including any derivative works, can be bundled, embedded, 
 redistributed and/or sold with any software provided that any reserved
 names are not used by derivative works. The fonts and derivatives,
 however, cannot be released under any other type of license. The
