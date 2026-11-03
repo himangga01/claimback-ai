@@ -1,0 +1,296 @@
+{
+  "latency_ms": 5139,
+  "request": {
+    "endpoint": "responses",
+    "model": "muse-spark-1.2",
+    "params": {
+      "max_output_tokens": 4000,
+      "reasoning": {
+        "effort": "low"
+      },
+      "store": false,
+      "text_format": {
+        "name": "reading",
+        "schema": {
+          "additionalProperties": false,
+          "properties": {
+            "items": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "box": {
+                    "items": {
+                      "type": "number"
+                    },
+                    "maxItems": 4,
+                    "minItems": 4,
+                    "type": "array"
+                  },
+                  "confidence": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "kind": {
+                    "enum": [
+                      "utterance",
+                      "amount",
+                      "date",
+                      "party_name",
+                      "account_number",
+                      "id_number",
+                      "address",
+                      "phone",
+                      "label",
+                      "header"
+                    ],
+                    "type": "string"
+                  },
+                  "normalized": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "side": {
+                    "enum": [
+                      "left",
+                      "right",
+                      null
+                    ],
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "speaker": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "text_verbatim": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "text_verbatim",
+                  "normalized",
+                  "box",
+                  "speaker",
+                  "side",
+                  "confidence"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "items"
+          ],
+          "type": "object"
+        },
+        "strict": true,
+        "type": "json_schema"
+      }
+    },
+    "payload": [
+      {
+        "content": [
+          {
+            "text": "# 판독 담당 프롬프트 v2\n\n버전: reader.v2 (M4b 비교에서 드러난 한글 금액 누락을 고침)\n\n너는 ClaimBack-AI의 판독 담당이다. 보이는 것만 그대로 옮겨 적는 기록원이다.\n\n## 할 일\n\n- 입력 이미지(또는 PDF)의 모든 글 항목을 빠짐없이 읽는다.\n- 항목마다 `kind`, `text_verbatim`, `normalized`, `box`, `speaker`,\n  `side`, `confidence`를 낸다.\n- `kind`는 다음 중 하나: `utterance`(대화 말풍선, 말풍선 단위),\n  `amount`(금액), `date`(날짜), `party_name`(사람·상호 이름),\n  `account_number`(계좌번호), `id_number`(주민번호 등 식별번호),\n  `address`(주소), `phone`(전화번호), `label`(칸 제목), `header`(머리말).\n- 문장 안에 들어 있는 금액·날짜도 말풍선·칸 항목과 별개의 항목으로 낸다.\n- `text_verbatim`은 원문 그대로(띄어쓰기·기호 포함) 옮긴다.\n- `normalized`는 금액·날짜·전화·계좌에만 쓴다. 금액은 쉼표·단위 없는 숫자만,\n  날짜는 연도가 보일 때만 `YYYY-MM-DD` 형식, 전화·계좌는 숫자·하이픈만.\n  금액이 한글로만 쓰였으면 아라비아 숫자로 환산하여 쓴다.\n  연도가 보이지 않는 날짜는 `null`로 둔다(연도를 지어내지 않는다).\n  그 밖의 항목은 `null`로 둔다.\n- 빈 값은 진짜 `null`로 낸다. 문자열 `\"null\"`을 쓰지 않는다.\n- `box`는 항목을 둘러싸는 가장 작은 박스를 축별 0~1000 정규화 좌표\n  `[x1, y1, x2, y2]`로 낸다.\n- `speaker`는 말풍선을 보낸 사람의 표시 그대로, 없으면 `null`.\n- `side`는 말풍선의 화면 위치가 왼쪽이면 `left`, 오른쪽이면 `right`.\n  말풍선이 아니면 `null`.\n- `confidence`는 0~1 사이의 확신도.\n\n## 하지 않을 일\n\n- 의미를 해석하거나 보이지 않는 값을 추측하지 않는다. 안 보이면 항목을 만들지 않는다.\n- 사건의 결론이나 전망을 단정하는 말을 쓰지 않는다.\n- 발화에 법적 성격을 붙이지 않는다. 갚겠다는 말도 원문 그대로 옮길 뿐이다.\n- 자격이나 공직을 내세우는 말을 출력에 쓰지 않는다.\n- 법률 상담을 하지 않는다.\n\n## 출력\n\n- Reading JSON 스키마만 따른다.\n  `{\"items\": [{\"kind\", \"text_verbatim\", \"normalized\", \"box\", \"speaker\", \"side\", \"confidence\"}]}`\n- JSON 외의 글자를 출력하지 않는다.\n",
+            "type": "input_text"
+          },
+          {
+            "image_url": "sha256:b2a515e5479a00e4f27d68997304aaf60aa1cf79b9bb10ef85c0b34af79aa314:image/png",
+            "type": "input_image"
+          }
+        ],
+        "role": "user"
+      }
+    ]
+  },
+  "response": {
+    "access_programs": null,
+    "background": false,
+    "completed_at": 1793690413.0,
+    "conversation": null,
+    "created_at": 1793690413.0,
+    "error": null,
+    "id": "resp_6ae98b2d13e11c9830924f08",
+    "incomplete_details": null,
+    "instructions": null,
+    "max_output_tokens": 4000,
+    "max_tool_calls": null,
+    "metadata": null,
+    "model": "muse-spark-1.2",
+    "moderation": null,
+    "object": "response",
+    "output": [
+      {
+        "content": null,
+        "encrypted_content": "<redacted>",
+        "id": "rs_6ae98b2d13e11c9830924f08:rs_df73ee85-27ed-4102-ae59-99a2bb8b95d1",
+        "status": "completed",
+        "summary": [],
+        "type": "reasoning"
+      },
+      {
+        "content": [
+          {
+            "annotations": [],
+            "logprobs": [],
+            "text": "{\"items\":[{\"box\":[30,5,550,125],\"confidence\":0.99,\"kind\":\"utterance\",\"normalized\":null,\"side\":\"left\",\"speaker\":null,\"text_verbatim\":\"네, 병원비로 500만 원이 필요해요. 4월 10일까지 갚을게요.\"},{\"box\":[220,12,380,50],\"confidence\":0.99,\"kind\":\"amount\",\"normalized\":\"5000000\",\"side\":null,\"speaker\":null,\"text_verbatim\":\"500만 원\"},{\"box\":[55,65,220,105],\"confidence\":0.98,\"kind\":\"date\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"4월 10일\"},{\"box\":[480,185,730,220],\"confidence\":0.99,\"kind\":\"date\",\"normalized\":\"2026-03-10\",\"side\":null,\"speaker\":null,\"text_verbatim\":\"2026년 3월 10일\"},{\"box\":[395,280,970,350],\"confidence\":0.99,\"kind\":\"utterance\",\"normalized\":null,\"side\":\"right\",\"speaker\":null,\"text_verbatim\":\"알겠어요. 오늘 5,000,000원 보낼게요.\"},{\"box\":[585,292,785,335],\"confidence\":0.99,\"kind\":\"amount\",\"normalized\":\"5000000\",\"side\":null,\"speaker\":null,\"text_verbatim\":\"5,000,000원\"},{\"box\":[30,400,200,425],\"confidence\":0.98,\"kind\":\"party_name\",\"normalized\":null,\"side\":null,\"speaker\":null,\"text_verbatim\":\"탁나루(SAMPLE)\"},{\"box\":[30,440,355,510],\"confidence\":0.99,\"kind\":\"utterance\",\"normalized\":null,\"side\":\"left\",\"speaker\":\"탁나루(SAMPLE)\",\"text_verbatim\":\"정말 감사합니다!\"}]}",
+            "type": "output_text"
+          }
+        ],
+        "id": "msg_c9833933-6969-43e5-8c8f-346f8a298a6b",
+        "phase": null,
+        "role": "assistant",
+        "status": "completed",
+        "type": "message"
+      }
+    ],
+    "parallel_tool_calls": true,
+    "previous_response_id": null,
+    "prompt": null,
+    "prompt_cache_diagnostics": null,
+    "prompt_cache_key": null,
+    "prompt_cache_options": null,
+    "prompt_cache_retention": null,
+    "reasoning": {
+      "context": null,
+      "effort": "low",
+      "generate_summary": null,
+      "mode": null,
+      "summary": null
+    },
+    "safety_identifier": null,
+    "service_tier": "auto",
+    "status": "completed",
+    "store": false,
+    "temperature": 1.0,
+    "text": {
+      "format": {
+        "description": null,
+        "name": "reading",
+        "schema_": {
+          "additionalProperties": false,
+          "properties": {
+            "items": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "box": {
+                    "items": {
+                      "type": "number"
+                    },
+                    "maxItems": 4,
+                    "minItems": 4,
+                    "type": "array"
+                  },
+                  "confidence": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "kind": {
+                    "enum": [
+                      "utterance",
+                      "amount",
+                      "date",
+                      "party_name",
+                      "account_number",
+                      "id_number",
+                      "address",
+                      "phone",
+                      "label",
+                      "header"
+                    ],
+                    "type": "string"
+                  },
+                  "normalized": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "side": {
+                    "enum": [
+                      "left",
+                      "right",
+                      null
+                    ],
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "speaker": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "text_verbatim": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "text_verbatim",
+                  "normalized",
+                  "box",
+                  "speaker",
+                  "side",
+                  "confidence"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "items"
+          ],
+          "type": "object"
+        },
+        "strict": true,
+        "type": "json_schema"
+      },
+      "verbosity": null
+    },
+    "tool_choice": "auto",
+    "tool_usage": null,
+    "tools": [],
+    "top_logprobs": 0,
+    "top_p": 1.0,
+    "truncation": "disabled",
+    "usage": {
+      "input_tokens": 1172,
+      "input_tokens_details": {
+        "cache_write_tokens": null,
+        "cached_tokens": 1123
+      },
+      "output_tokens": 1222,
+      "output_tokens_details": {
+        "reasoning_tokens": 819
+      },
+      "total_tokens": 2394
+    },
+    "user": null
+  },
+  "usage": {
+    "cached_input_tokens": 1123,
+    "images_processed": 0,
+    "input_tokens": 1172,
+    "output_tokens": 1222,
+    "reasoning_tokens": 819,
+    "total_tokens": 2394,
+    "video_frames_processed": 0
+  }
+}
