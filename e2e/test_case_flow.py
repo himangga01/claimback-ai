@@ -158,16 +158,23 @@ class Steps:
 
 
 def expected_model_calls(case_view: dict) -> int:
-    """M6-fix1 rule: reading/vision count done substeps, other model
-    steps sum attempts (held readings excluded). Stub-run cross-check
-    only; real-backend runs assert literal counts."""
+    """Reading/vision sum the per-evidence ``calls`` (tiles, SAM nouns +
+    retry) or count one per done substep when absent; other model steps
+    sum attempts. Stub-run cross-check only; real-backend runs assert
+    literal counts."""
     total = 0
     for s in case_view.get("steps", []):
         if not s.get("model"):
             continue
         subs = s.get("substeps") or []
         if s["key"] in ("reading", "vision") and subs:
-            total += sum(1 for x in subs if (x or {}).get("status") == "done")
+            for x in subs:
+                x = x or {}
+                calls = int(x.get("calls") or 0)
+                if calls > 0:
+                    total += calls
+                elif x.get("status") == "done":
+                    total += 1
         else:
             total += int(s.get("attempts") or 0)
     return total
@@ -229,8 +236,10 @@ def test_case_flow(page, base_url, case_cleanup):
             f"board shows {_m.group(1)} calls, case view gives {_want_calls}"
         )
     else:
-        assert int(_m.group(1)) == 11, (
-            f"real backend CHECKPOINT_1 calls should be 11, board: {_summary!r}"
+        # Recorded sample flow (INT-3b): 11 reader calls (tiles) + 21 SAM
+        # calls + 1 organizer = 33. Update with the fixtures on re-record.
+        assert int(_m.group(1)) == 33, (
+            f"real backend CHECKPOINT_1 calls should be 33, board: {_summary!r}"
         )
     assert "(재생)" in _summary, f"replay marker missing: {_summary!r}"
     steps.shot("board")
@@ -330,10 +339,10 @@ def test_case_flow(page, base_url, case_cleanup):
     if not expect_stub:
         _d_summary = page.get_by_test_id("board-summary").inner_text()
         _dm = re.search(r"Meta 모델 호출 (\d+)회", _d_summary)
-        # Recorded sample flow (INT-3b): 5 reads + 5 vision + 1 organizer
-        # + 1 drafter, no revision. Update with the fixtures on re-record.
-        assert _dm and int(_dm.group(1)) == 12, (
-            f"real backend DRAFT_APPROVAL calls should be 12, board: {_d_summary!r}"
+        # Recorded sample flow (INT-3b): 33 above + 1 drafter, no revision
+        # (matches the 34 calls in the cost ledger for that record run).
+        assert _dm and int(_dm.group(1)) == 34, (
+            f"real backend DRAFT_APPROVAL calls should be 34, board: {_d_summary!r}"
         )
     steps.shot("calculation")
 

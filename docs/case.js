@@ -395,7 +395,14 @@ function countModelCalls(v) {
     if (!s.model) continue;
     if ((s.key === "reading" || s.key === "vision")
       && Array.isArray(s.substeps) && s.substeps.length > 0) {
-      calls += s.substeps.filter((x) => x && x.status === "done").length;
+      // Real calls per evidence (reading tiles, SAM nouns + retry) when the
+      // backend reports them; otherwise one per finished evidence.
+      for (const x of s.substeps) {
+        if (!x) continue;
+        const n = Number(x.calls || 0);
+        if (n > 0) calls += n;
+        else if (x.status === "done") calls += 1;
+      }
     } else {
       calls += Number(s.attempts || 0);
     }

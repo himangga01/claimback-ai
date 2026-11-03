@@ -266,6 +266,9 @@ def render_sentence(
     # INT-3c F6: a chat bubble's line breaks become spaces in the sentence
     # (render time only, so the drafter's request and replay stay the same).
     rendered = re.sub(r"\s*\n\s*", " ", rendered)
+    # A citation is a separate token: "있습니다 [갑 제4호증]." (polish).
+    rendered = re.sub(r"(?<=\S)\[갑 제", " [갑 제", rendered)
+    rendered = re.sub(r"(?<=\S)\(사용자 진술\)", " (사용자 진술)", rendered)
     match = re.search(r"\.\s*((?:\[갑 제\d+호증\]\s*)+)$", rendered)
     if match:
         cites = " ".join(re.findall(r"\[갑 제\d+호증\]", match.group(1)))

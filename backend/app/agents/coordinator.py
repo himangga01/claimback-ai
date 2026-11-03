@@ -897,7 +897,8 @@ def _run_intake_flow(state: CaseState) -> CaseState:
         })
         record.status = "ok"
         substeps.append(SubStep(ex_id=ex_id, status="done",
-                                latency_ms=result["latency_ms"]))
+                                latency_ms=result["latency_ms"],
+                                calls=max(1, attempts)))
         try:
             file_hash = intake_mod.sha256_bytes(
                 intake_mod.evidence_path(state, record).read_bytes()
@@ -991,7 +992,8 @@ def _run_intake_flow(state: CaseState) -> CaseState:
                               "error": str(_result["error"])[:200]})
             _vision_substeps.append(SubStep(
                 ex_id=_ex_id, status="hold",
-                latency_ms=int(_result.get("latency_ms", 0) or 0)))
+                latency_ms=int(_result.get("latency_ms", 0) or 0),
+                calls=int(_result.get("calls", 0) or 0)))
             # L7: calls already spent stay on the step cost + audit log.
             _vision_cost += _partial
             _audit(state, "vision", _ex_id, vision_mod.MODEL,
@@ -1001,6 +1003,7 @@ def _run_intake_flow(state: CaseState) -> CaseState:
         _objects = list(_result.get("objects", []) or [])
         _cost = float(_result.get("cost", 0.0) or 0.0)
         _lat = int(_result.get("latency_ms", 0) or 0)
+        _calls = int(_result.get("calls", 0) or 0)
         _retry_error: Optional[BaseException] = None
         _has_signature = any(str(o.get("target", "")) == "signature"
                              for o in _objects)
@@ -1021,12 +1024,14 @@ def _run_intake_flow(state: CaseState) -> CaseState:
                     _objects.extend(_retry_objects)
                     _cost += float(_retry_info.get("cost_usd", 0.0) or 0.0)
                     _lat += int(_retry_info.get("latency_ms", 0) or 0)
+                    _calls += int(_retry_info.get("calls", 0) or 0)
                 except (deps.FixtureNotFound, deps.BudgetError,
                         vision_mod.VisionParseError) as exc:
                     _retry_error = exc
                     _spent = getattr(exc, "_vision_partial", None) or {}
                     _cost += float(_spent.get("cost_usd", 0.0) or 0.0)
                     _lat += int(_spent.get("latency_ms", 0) or 0)
+                    _calls += int(_spent.get("calls", 0) or 0)
                 except Exception as exc:
                     _retry_error = vision_mod.VisionParseError(
                         f"vision error: {type(exc).__name__}")
@@ -1042,7 +1047,7 @@ def _run_intake_flow(state: CaseState) -> CaseState:
                               "error": str(_retry_error)[:200]})
             _vision_cost += _cost
             _vision_substeps.append(SubStep(ex_id=_ex_id, status="hold",
-                                            latency_ms=_lat))
+                                            latency_ms=_lat, calls=_calls))
             _audit(state, "vision", _ex_id, vision_mod.MODEL,
                    vision_mod.PROMPT_VERSION, _ex_id, _lat, 0, 0, _cost)
             continue
@@ -1051,7 +1056,7 @@ def _run_intake_flow(state: CaseState) -> CaseState:
                           "objects": _objects, "status": _status})
         _vision_cost += _cost
         _vision_substeps.append(SubStep(ex_id=_ex_id, status="done",
-                                        latency_ms=_lat))
+                                        latency_ms=_lat, calls=_calls))
         _audit(state, "vision", _ex_id, vision_mod.MODEL,
                vision_mod.PROMPT_VERSION, _ex_id, _lat, 0, 0, _cost)
     try:
