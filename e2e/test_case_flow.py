@@ -618,6 +618,150 @@ def test_m6_redaction_segments_show(page, base_url, case_cleanup):
     expect(page.get_by_test_id("board-section")).to_be_hidden(timeout=15000)
 
 
+def _fill_demo_facts(page, base_url, case_id) -> dict:
+    """Fill the empty fact cells with the contract section 5 demo input."""
+    resp = page.request.get(f"{base_url}/api/cases/{case_id}/review")
+    assert resp.ok
+    review = resp.json()
+    fallback = json.loads(CONFIRMED_EXAMPLE.read_text(encoding="utf-8"))[
+        "fallback_fields"
+    ]
+    expected = expected_confirmed_facts(review, fallback)
+    for f in review["fields"]:
+        name = f["field"]
+        if name in ("repayments", "transaction_kind"):
+            continue
+        if _is_empty(f["value"]) and not _is_empty(expected["fields"][name]):
+            page.get_by_test_id(f"field-{name}").fill(str(expected["fields"][name]))
+    if isinstance(expected["fields"].get("repayments"), list):
+        for i, row in enumerate(expected["fields"]["repayments"]):
+            date_el = page.get_by_test_id(f"field-repayments-{i}-date")
+            amount_el = page.get_by_test_id(f"field-repayments-{i}-amount")
+            if date_el.count() and not (date_el.input_value() or "").strip():
+                date_el.fill(row["date"])
+            if amount_el.count() and not (amount_el.input_value() or "").strip():
+                amount_el.fill(row["amount"])
+    for h in expected["highlight"]:
+        ex, item = h.split(":")
+        box = page.get_by_test_id(f"highlight-{ex}-{item}")
+        if not box.is_checked():
+            box.check()
+    return expected
+
+
+def test_redaction_confirm_flow(page, base_url, case_cleanup):
+    """redaction-confirm: flagged copies show a notice with the backend's
+    reason and are marked in the evidence list; Confirm redaction clears
+    the flag for that one exhibit, Leave it out keeps the other out, and
+    PUT /facts lists exactly the confirmed exhibit. Stub scenario only."""
+    if os.environ.get("E2E_BASE_URL"):
+        pytest.skip("stub scenario only")
+    res = page.request.put(f"{base_url}/__stub/scenario",
+                           data={"redactions": "flagged"})
+    assert res.ok, res.status
+    try:
+        steps = Steps(page)
+        page.goto(base_url + "/", wait_until="networkidle")
+        page.get_by_test_id("load-sample").click()
+        expect(page.get_by_test_id("case-state")).to_have_attribute(
+            "data-state", "CHECKPOINT_1", timeout=30000
+        )
+        # Board: honest privacy note instead of "누출 검사 통과".
+        note = page.get_by_test_id("step-note-privacy")
+        expect(note).to_have_text("가림 7개, 확인 필요 증거 2개")
+        expect(note).to_have_class(re.compile(r"\bis-review\b"))
+        assert "누출 검사 통과" not in page.get_by_test_id("agent-board").inner_text()
+
+        # Evidence list marks both flagged exhibits, and only those.
+        for ex in ("EX4", "EX5"):
+            btn = page.get_by_test_id(f"evidence-{ex}")
+            expect(btn).to_have_attribute("data-redaction", "review")
+            expect(btn).to_contain_text("가림 확인 필요")
+        assert page.get_by_test_id("evidence-EX1").get_attribute("data-redaction") is None
+
+        # EX4: notice next to the "Redacted copy" legend with the reason.
+        page.get_by_test_id("evidence-EX4").click()
+        col = page.get_by_test_id("redaction-col")
+        expect(col).to_be_visible()
+        notice = col.get_by_test_id("redaction-notice")
+        expect(notice).to_be_visible()
+        expect(notice).to_have_attribute("data-state", "review")
+        expect(notice.get_by_test_id("redaction-notice-title")).to_have_text("가림 확인 필요")
+        expect(notice.get_by_test_id("redaction-reasons")).to_contain_text(
+            "계좌번호: 가림 상자가 판독 위치에서 한 줄 이상 옮겨져 확인 필요")
+        expect(notice.get_by_test_id("redaction-notice-body")).to_contain_text(
+            "갑호증 묶음(exhibits.pdf)에 들어가지 않습니다")
+        expect(page.get_by_test_id("redaction-img")).to_be_visible()
+        steps.shot("redaction-flagged")
+
+        # Confirm EX4 explicitly: its flag clears, EX5 stays flagged.
+        page.get_by_test_id("redaction-confirm").click()
+        expect(notice).to_have_attribute("data-state", "confirmed")
+        expect(notice.get_by_test_id("redaction-notice-title")).to_have_text("가림 확인함")
+        expect(page.get_by_test_id("redaction-confirm")).to_have_attribute("aria-pressed", "true")
+        expect(page.get_by_test_id("evidence-EX4")).to_have_attribute("data-redaction", "confirmed")
+        expect(page.get_by_test_id("evidence-EX4")).not_to_contain_text("가림 확인 필요")
+        expect(page.get_by_test_id("evidence-EX5")).to_have_attribute("data-redaction", "review")
+
+        # EX5: leave it out (the default outcome, now an explicit choice).
+        page.get_by_test_id("evidence-EX5").click()
+        expect(notice).to_have_attribute("data-state", "review")
+        expect(notice.get_by_test_id("redaction-reasons")).to_contain_text(
+            "판독한 번호와 같은 모양의 줄이 가려지지 않았을 수 있음")
+        page.get_by_test_id("redaction-leave-out").click()
+        expect(notice).to_have_attribute("data-state", "excluded")
+        expect(page.get_by_test_id("evidence-EX5")).to_have_attribute("data-redaction", "excluded")
+        steps.shot("redaction-chosen")
+
+        # English screen: same notice, translated reasons and board note.
+        page.locator("[data-lang='en']").click()
+        expect(page.get_by_test_id("step-note-privacy")).to_have_text(
+            "7 redactions, 2 exhibits to check")
+        expect(notice.get_by_test_id("redaction-notice-title")).to_have_text("Left out of the bundle")
+        expect(notice.get_by_test_id("redaction-reasons")).to_contain_text(
+            "Account number: Could not confirm that the masked line holds the number that was read")
+        page.get_by_test_id("evidence-EX4").click()
+        expect(notice.get_by_test_id("redaction-notice-title")).to_have_text("Redaction confirmed")
+        expect(page.get_by_test_id("redaction-confirm")).to_have_text("Confirm redaction")
+        expect(page.get_by_test_id("redaction-leave-out")).to_have_text("Leave it out")
+        expect(page.get_by_test_id("evidence-EX4")).to_contain_text("Redaction confirmed")
+        page.locator("[data-lang='ko']").click()
+        expect(notice.get_by_test_id("redaction-notice-title")).to_have_text("가림 확인함")
+
+        # The flagged notice fits a phone screen without sideways scroll.
+        page.set_viewport_size({"width": 375, "height": 812})
+        m = page.evaluate(_MEASURE_WIDTH)
+        assert m["sw"] <= m["iw"], f"scrollWidth {m['sw']} > {m['iw']}: {m['wide']}"
+        page.set_viewport_size({"width": 1920, "height": 1080})
+
+        # PUT /facts lists exactly the confirmed exhibit.
+        case_id = page.get_by_test_id("case-id").inner_text().strip()
+        expected = _fill_demo_facts(page, base_url, case_id)
+        with page.expect_response(
+            lambda r: r.request.method == "PUT" and r.url.endswith("/facts")
+        ) as put_info:
+            page.get_by_test_id("confirm-facts").click()
+        assert put_info.value.status == 200
+        put_body = json.loads(put_info.value.request.post_data)
+        assert put_body.get("redaction_confirmed") == ["EX4"], put_body
+        rest = {k: v for k, v in put_body.items() if k != "redaction_confirmed"}
+        assert rest == expected
+        expect(page.get_by_test_id("case-state")).to_have_attribute(
+            "data-state", "DRAFT_APPROVAL", timeout=30000
+        )
+        # Sent with the facts: the choice is locked now.
+        page.get_by_test_id("evidence-EX4").click()
+        expect(page.get_by_test_id("redaction-confirm")).to_be_disabled()
+        expect(page.get_by_test_id("redaction-leave-out")).to_be_disabled()
+        expect(notice.get_by_test_id("redaction-notice-body")).to_contain_text(
+            "이 가린 사본이 갑호증 묶음에 들어갑니다")
+        steps.shot("redaction-sent")
+        page.get_by_test_id("delete-case").click()
+        expect(page.get_by_test_id("board-section")).to_be_hidden(timeout=15000)
+    finally:
+        page.request.put(f"{base_url}/__stub/scenario", data={"redactions": "none"})
+
+
 def test_fix1_amount_rejected(page, base_url, case_cleanup):
     """M6-fix1 item 1: display-format amounts ("5,000,000원") convert to
     integers, but any other text ("500만 원", "1억 2천만원", "-1000") is

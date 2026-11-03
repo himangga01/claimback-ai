@@ -1116,6 +1116,8 @@ def check_leak(
     (line_is_masked) is a warning (preview review, the image stays out
     of the bundle until the user confirms). Without an ink mask every
     item is a warning too (fail closed).
+    redaction-confirm: warnings without a hard failure return status
+    ``review`` (never ``pass``), so the result says a person must look.
     """
     from PIL import Image
 
@@ -1212,4 +1214,6 @@ def check_leak(
                 "message": message,
                 "warning": True})
     hard = [f for f in findings if not f.get("warning")]
-    return {"status": "fail" if hard else "pass", "findings": findings}
+    if hard:
+        return {"status": "fail", "findings": findings}
+    return {"status": "review" if findings else "pass", "findings": findings}

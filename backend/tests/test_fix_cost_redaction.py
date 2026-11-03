@@ -402,6 +402,10 @@ def test_reader_box_one_line_up_is_needs_review(tmp_path):
                 if f["message"] == redact_mod.UNMASKED_LINE_REASON]
     assert {f["item_id"] for f in unmasked} == {"item1", "item2"}
     assert all(f.get("warning") for f in unmasked)
+    # redaction-confirm: the leak check no longer reads "pass" here, and
+    # the step note counts the exhibit to check.
+    assert out["leak_check"]["status"] == "review"
+    assert privacy_mod.privacy_note(out) == "가림 2개, 확인 필요 증거 1개"
 
 
 def test_reader_box_one_line_down_is_needs_review(tmp_path):
@@ -544,7 +548,8 @@ def test_ink_mask_failure_fails_closed(tmp_path, monkeypatch):
         assert redact_mod.LEAK_UNCHECKED_REASON in entry["reason"]
     assert {f["message"] for f in out["leak_check"]["findings"]} == {
         redact_mod.LEAK_UNCHECKED_REASON}
-    assert out["leak_check"]["status"] == "pass"  # warnings, not a HOLD
+    # redaction-confirm: warnings read "review" (not "pass"), not a HOLD.
+    assert out["leak_check"]["status"] == "review"
     assert out["previews"][0]["needs_review"] is True
 
 
@@ -572,7 +577,8 @@ def test_leak_check_finds_visible_number_off_the_mask(tmp_path):
         red.save(red_path)
         checked = redact_mod.check_leak(path, red_path, plan,
                                         pii_items=[item])
-        assert checked["status"] == "pass"
+        # redaction-confirm: a visible number is a review, never a pass.
+        assert checked["status"] == ("review" if flagged else "pass")
         hit = any(f["message"] == redact_mod.UNMASKED_LINE_REASON
                   for f in checked["findings"])
         assert hit is flagged

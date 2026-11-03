@@ -477,6 +477,9 @@ def run_privacy(
                                        if reason else message)
         if checked.get("status") == "fail":
             status = "fail"
+        elif checked.get("status") == "review" and status != "fail":
+            # redaction-confirm: warnings are a review, never a pass.
+            status = "review"
         # L1 bands: glyph outside a mask flags the entry and its preview
         # (never a HOLD; the case continues with "확인 필요").
         pre_reasons = [str(e.get("reason", "")) for e in entries
@@ -528,3 +531,30 @@ def run_privacy(
         "previews": previews,
         "leak_check": {"status": status, "findings": leak_findings},
     }
+
+
+def privacy_note(privacy_out: Dict[str, Any]) -> str:
+    """Board note for a finished (not failed) privacy step.
+
+    redaction-confirm: "누출 검사 통과" only when no copy is flagged and
+    no copy is missing. Otherwise the note counts the exhibits the user
+    must check (flagged copies, held out of exhibits.pdf until confirmed)
+    and the exhibits that have no redacted copy at all.
+    """
+    plan = privacy_out.get("plan", []) or []
+    previews = privacy_out.get("previews", []) or []
+    leak = privacy_out.get("leak_check", {}) or {}
+    flagged = [p for p in previews
+               if isinstance(p, dict) and p.get("needs_review") is True
+               and p.get("status") != "not_redacted"]
+    missing = [p for p in previews
+               if isinstance(p, dict) and p.get("status") == "not_redacted"]
+    parts = [f"가림 {len(plan)}개"]
+    if flagged:
+        parts.append(f"확인 필요 증거 {len(flagged)}개")
+    if missing:
+        parts.append(f"가린 사본 없는 증거 {len(missing)}개")
+    if not flagged and not missing:
+        parts.append("누출 검사 통과" if str(leak.get("status", "pass")) == "pass"
+                     else "누출 검사 확인 필요")
+    return ", ".join(parts)

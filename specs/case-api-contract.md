@@ -168,13 +168,24 @@ M4a·M4b·M5·M6과 그 수정 작업이 구현한 내용을 고정합니다. IN
 - 판독(`Readings.items[]`): 기본 모델 `muse-spark-1.2`, 프롬프트 `reader.v2`. 세로로 긴 이미지는 겹치는 조각으로 읽어 원본 픽셀 상자로 합침. 상자가 이미지 밖이면 자르지 않고 `box_warning: "out_of_range"`. 영상 증거는 이번 버전에서 `skipped`(2장 그대로, 16:46 결정: 핵심 프레임 판독은 중복·시각 오차·ffmpeg 의존 때문에 사건 흐름에 넣지 않음, `reports/M4b-review.md`).
 - 감식(`GET /segments`): `status`에 `hold`(호출·해석 오류, "못 찾음"과 구분)와 `error` 문구. 서명 객체는 SAM 칸 상자 `box`(`source: "box"`, SAM `score`)와 잉크 상자 `ink_box`(`ink_source: "pixel_rule"`)를 따로 둠. `mask_url`은 `image/png`.
 - 가림(`GET /redactions`): `previews[]`에 `status: "redacted"|"not_redacted"`, `needs_review`(가림 상자 바깥 띠에 글자가 남았을 수 있음 등), `reason`. `not_redacted`면 `url: null`이고 가린 사본 파일이 없어야 함. 가림 단계 전에는 `leak_check.status`가 `pending`. `plan[]`의 `needs_review`·`reason`.
-- `PUT /facts`의 `redaction_confirmed`: `true|false`만(그 밖은 400). `true`면 `needs_review` 사본도 서류에 씀. 데모 고정 입력은 `needs_review`가 있을 때 화면에서 사용자가 확인하는 장면으로 보여 주고 `true`를 보냄.
+- `PUT /facts`의 `redaction_confirmed`: `true|false`만(그 밖은 400). `true`면 `needs_review` 사본도 서류에 씀. 데모 고정 입력은 `needs_review`가 있을 때 화면에서 사용자가 확인하는 장면으로 보여 주고 `true`를 보냄. (6d에서 증거 번호 목록 형식 추가)
 - `hold_reasons[].code` 추가: `privacy_leak`(가린 영역이 검정이 아님·원본 해시 변경, `POST /run`으로 가림부터 재실행), `g1b_failed`(값 불일치·명칭·누출, `POST /run`으로 편철부터 재실행), `config_missing_key`.
 - `Package.files`: `content_proof.pdf`, `exhibits.pdf`(표지 1쪽 "법원에 낼 때는 이 쪽을 빼세요" + 증거별 쪽, 긴 이미지는 "갑 제N호증 (i/n)"로 나눔, 가린 사본만, 사본이 없거나 확인이 필요하면 그 쪽에 안내 한 줄), `evidence_list.pdf`(칸 "호증 번호, 증거 이름, 작성일, 내용", 증거 이름은 역할로). `Package.gate_results`의 G1b는 서류별 대조. 이미지를 뺀 것은 `fail`이 아니라 `notes`.
 - 서류 문구: 내용증명은 "본인"·"귀하", 전자소송 청구원인은 "채권자"·"채무자"로 슬롯에서 렌더링(인용 원문은 그대로), 인용 표기는 "(갑 제N호증)."(내용증명에는 없음), 충당 문구는 계산값(기간·이율 포함).
 - 화면: 게이트 한글 이름에 `DRAFT` "문안 규칙 검사", `G1b` "최종 서류 검사", 통과 줄 "✓ 통과", 건너뛴 G1b 숨김. 보드 머리 호출 수는 판독·감식 `substeps` 중 `done` + 나머지 모델 단계 `attempts`. 금액 입력은 "5,000,000원"처럼 쉼표·"원"만 붙은 정수만 변환.
 
+## 6d. 가림 확인 (redaction-confirm, 2026-11-04 02:15 KST, v2.3)
+
+6c의 `redaction_confirmed`에는 화면이 보내는 경로가 없어, 확인 필요 사본이 사용자 모르게 묶음에서 빠졌습니다. 아래를 더합니다. 기존 키와 `true|false`의 뜻은 그대로입니다.
+
+- `PUT /facts`의 `redaction_confirmed`: `true|false|null`에 더해 **증거 번호 목록**(`["EX4"]`)을 받습니다. 목록은 증거별 확인입니다. 목록에 든 증거의 `needs_review` 가린 사본만 `exhibits.pdf`에 들어가고, 목록에 없는 확인 필요 사본은 지금처럼 빠집니다(그 쪽에는 안내 한 줄, G1b `notes`). 모르는 증거 번호나 문자열이 아닌 항목은 400 `bad_request`. 중복은 하나로 줄이고 증거 번호 순으로 저장하며, 빈 목록은 `false`로 저장합니다. `true`(확인 필요 사본 전부)는 데모 고정 입력(`build_demo_confirmed_facts`)용으로 남깁니다. 화면은 `true`를 보내지 않습니다.
+- `status: "not_redacted"`(사본 없음)는 목록에 있어도 들어가지 않습니다(넣을 사본이 없음).
+- 화면: 선택한 증거의 미리보기가 확인 필요이면 사실 확인 장의 "가린 사본" 범례 바로 아래에 미리보기 `reason`(항목별 한 줄)과 "이미지는 확인 전까지 갑호증 묶음에 들어가지 않음" 안내, "가림 확인"·"묶음에서 빼기" 단추를 보여 주고, 증거 목록에도 "가림 확인 필요"를 붙입니다. 사용자가 그 증거에서 "가림 확인"을 눌러야만 그 번호가 목록에 들어갑니다(자동 확인 없음, 한꺼번에 확인하는 단추 없음). 확인한 증거가 없으면 키를 보내지 않으므로, 확인 필요가 없는 한국어 재생 샘플의 본문은 바뀌지 않습니다. 사실값을 보낸 뒤에는 단추가 잠깁니다. 사본이 없는 증거는 단추 없이 사유만 보여 줍니다.
+- `leak_check.status`: `pass|review|fail|pending`. `review`는 하드 실패는 없지만 경고(판독한 번호와 같은 모양의 줄이 가려지지 않음, 가려졌는지 확인할 수 없음, 남긴 영역이 원본과 다름, 원본 가림 영역이 비어 있음)가 있다는 뜻입니다. HOLD(`privacy_leak`)는 지금처럼 `fail`만입니다.
+- `privacy` 단계 `note`: 확인 필요 사본도 사본 없는 증거도 없을 때만 "가림 N개, 누출 검사 통과"입니다. 아니면 "가림 N개" 뒤에 "확인 필요 증거 M개"(`needs_review` 가린 사본 수), "가린 사본 없는 증거 K개"(`not_redacted` 수)를 ", "로 잇습니다. 화면 영어 표기는 "N redactions, M exhibits to check, K exhibits without a redacted copy".
+
 ## 7. 재생 모드와 가짜 서버
 
 - `META_MODE=replay`(기본)에서 샘플 사건은 기록된 fixture만으로 `CHECKPOINT_2`까지 갑니다. 화면 수정 장면(문장에 "500만 원"을 넣으면 G1a가 막음)은 규칙만 쓰므로 재생에서도 됩니다.
 - M2b 가짜 서버는 `specs/case-api-examples/`의 JSON만 돌려주고 `stub: true`를 붙입니다. 화면은 `stub`이면 빨간 "STUB DATA" 띠를 보여 줍니다. 데모 녹화는 가짜 서버로 하지 않습니다.
+- 가짜 서버 전용 `PUT /__stub/scenario` `{ "redactions": "none"|"flagged" }`(6d E2E용): 그 뒤에 만든 사건에 적용. `none`(기본)은 지금처럼 `GET /redactions` 404·`privacy` 건너뜀, `flagged`는 EX4·EX5가 확인 필요인 가림 응답과 그 `privacy` 단계 문구를 돌려줍니다. 실제 백엔드에는 없습니다.
