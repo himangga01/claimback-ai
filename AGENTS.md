@@ -10,6 +10,12 @@ personal loan and fills standard court documents (KR: 내용증명, 지급명령
 US/CA: SC-100, demand letter) with facts the user confirms. Runtime AI uses Meta Model API
 models (`muse-spark-1.3`, `sam-3.1`, `muse-image-1.0`). Not legal advice.
 
+Service name on screen (user decision, 2026-11-03 before 23:00 KST): 클레임백 마이 머니 /
+ClaimBack My Money (logo `claimback my money.`). "ClaimBack-AI" stays the project name and stays
+verbatim in the disclaimers (`DISCLAIMER_KO`, `DISCLAIMER_EN`). The screen follows the user's
+경매노트 portal design (Paperlogy font, paper sheets, blue cabinet) and has a KO/EN switch
+(`?lang=en`); case content and the court documents stay Korean.
+
 ## Roles
 
 | Agent | Does | Does not |
@@ -32,6 +38,7 @@ models (`muse-spark-1.3`, `sam-3.1`, `muse-image-1.0`). Not legal advice.
 | `specs/case-api-contract.md`, `specs/case-api-examples/` | Case-flow API contract (v2) shared by the backend (M2a) and the UI/E2E (M2b); example responses served by the stub and checked by backend tests |
 | `reports/M<N>-review.md` | Claude reviews with subagent cross-review; `reports/M0-review.md` holds the M0 spike decisions (coordinates, video keyframes, reader model pending); `reports/M4b-review.md` holds the reader model decision (muse-spark-1.2) and why video reading is deferred; `reports/INT-3-review.md` is the latest integration review |
 | `reports/M7-live-check.md` | End-to-end run of the sample case on the live Meta API (2026-11-03 18:25 KST) |
+| `reports/portal-review.md` | Portal redesign and English screen (2026-11-03): what changed, how the KO/EN switch works, tests, cross-review |
 | `submission/` | Demo script (`demo-script.md`), recording runbook (`runbook.md`), submission notes and form drafts (`submission-notes.md`) |
 
 Workflow:
