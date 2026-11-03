@@ -72,6 +72,7 @@ import re as _re
 
 
 _BRACKET_CITE_RE = _re.compile(r"\[갑 제(\d+)호증\]")
+_PAREN_CITE_RE = _re.compile(r"\(갑 제(\d+)호증\)")
 _NUMBERED_RE = _re.compile(r"^((?:[가-하]\.|\(\d+\))\s+)")
 
 
@@ -89,26 +90,44 @@ def _clean_spaces(text: str) -> str:
 
 
 def format_letter_fact(text: str, creditor_name: str = "", debtor_name: str = "") -> str:
-    """Letter-style fact: strip cites/user marks, 본인/귀하 (K8)."""
+    """Letter-style fact: strip cites/user marks (M5-fix2: no char replace).
+
+    Name voice (본인/귀하) comes from slot re-rendering in the packager;
+    ``creditor_name``/``debtor_name`` are kept for backward compatibility
+    and ignored so quotes keep their original wording.
+    """
+    _ = (creditor_name, debtor_name)
     prefix, body = _split_number_prefix(text)
     body = _BRACKET_CITE_RE.sub("", body)
+    body = _PAREN_CITE_RE.sub("", body)
     body = body.replace("[[USER]]", "").replace("(사용자 진술)", "")
-    if creditor_name:
-        body = body.replace(creditor_name, "본인")
-    if debtor_name:
-        body = body.replace(debtor_name, "귀하")
-    return f"{prefix}{_clean_spaces(body)}".strip()
+    body = _clean_spaces(body).strip()
+    if body and not body.endswith((".", "?", "!")):
+        body = f"{body}."
+    return f"{prefix}{body}".strip()
 
 
 def format_ecourt_fact(text: str) -> str:
-    """Ecourt-style fact: (갑 제N호증) before period, no user marks (K8)."""
+    """Ecourt-style fact: (갑 제N호증) before period, no user marks (K8).
+
+    M5-fix2: multiple cites merge into one tail
+    (``(갑 제1호증)(갑 제6호증).``) so no ``.(`` is left behind.
+    """
     prefix, body = _split_number_prefix(text)
     body = body.replace("[[USER]]", "").replace("(사용자 진술)", "")
-    body = _re.sub(r"\.\s*\[갑 제(\d+)호증\]", r"(갑 제\1호증).", body)
-    body = _re.sub(r"\s*\[갑 제(\d+)호증\]\s*\.", r"(갑 제\1호증).", body)
-    body = _re.sub(r"\s*\[갑 제(\d+)호증\]\s*$", r"(갑 제\1호증).", body)
-    body = _re.sub(r"\[갑 제(\d+)호증\]", r"(갑 제\1호증)", body)
-    return f"{prefix}{_clean_spaces(body)}".strip()
+    cites = _BRACKET_CITE_RE.findall(body)
+    if cites:
+        body = _BRACKET_CITE_RE.sub("", body)
+        body = _clean_spaces(body).strip()
+        if body.endswith("."):
+            body = body[:-1].rstrip()
+        cites_str = "".join(f"(갑 제{n}호증)" for n in cites)
+        body = f"{body}{cites_str}." if body else f"{cites_str}."
+        return f"{prefix}{body}".strip()
+    body = _clean_spaces(body).strip()
+    if body and not body.endswith((".", "?", "!")):
+        body = f"{body}."
+    return f"{prefix}{body}".strip()
 
 
 def ensure_numbered_facts(sentences) -> List[str]:
@@ -393,15 +412,24 @@ def build_repayment_sentence(first: Any, second: Any = None, style: str = "ecour
         return f"{subject} {when} {source} 받은 {pay_disp}을 원금에 충당"
 
     clauses = [_one(idx, entry) for idx, entry in enumerate(allocations)]
+    # M5-fix2: later clauses drop the repeated subject ("…충당하고, 2026. …").
+    stripped = [clauses[0]]
+    for clause in clauses[1:]:
+        if clause.startswith(f"{subject} "):
+            stripped.append(clause[len(subject) + 1:])
+        else:
+            stripped.append(clause)
+    over_tail = (
+        f"하여 받은 돈이 원금과 지연손해금을 넘어 "
+        f"{over_disp}이 더 들어왔습니다"
+    )
     if remaining <= 0 and overpayment > 0:
         if len(clauses) == 1:
-            return f"{clauses[0]}하여 원금을 모두 갚고 {over_disp}이 남습니다"
-        joined = "하고, ".join(clauses)
-        return f"{joined}하여 원금을 모두 갚고 {over_disp}이 남습니다"
+            return f"{clauses[0]}{over_tail}"
+        return f"{'하고, '.join(stripped)}{over_tail}"
     if len(clauses) == 1:
         return f"{clauses[0]}하여 남은 원금은 {remaining_disp}입니다"
-    joined = "하고, ".join(clauses)
-    return f"{joined}하여 남은 원금은 {remaining_disp}입니다"
+    return f"{'하고, '.join(stripped)}하여 남은 원금은 {remaining_disp}입니다"
 
 
 class CaliforniaSC100Compiler:
@@ -681,8 +709,10 @@ class KoreanLegalDocumentCompiler:
             )
 
         item3 = "3. 본인은 변제기 이후 현재까지 남은 돈을 받지 못했습니다."
+        # M5-fix2: letter voice comes from slot re-rendering (packager);
+        # format_letter_fact only strips cites/marks (no char replacement).
         letter_facts = [
-            format_letter_fact(s, p.name, d.name)
+            format_letter_fact(s)
             for s in ensure_numbered_facts(fact_sentences or [])
         ]
         middle_parts: List[str] = []
