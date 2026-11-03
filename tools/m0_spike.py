@@ -236,8 +236,9 @@ def sam_build_box_prompt(width: int, height: int, box, obj_id: int = 1,
 
 
 def run_id_for(probe: str) -> str:
-    stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%d%H%M%S")
-    return f"M0-{probe}-{stamp}"
+    # Fixed per probe so the per-run cap cannot be bypassed with a fresh
+    # timestamp on every attempt (M0-fix1 C6).
+    return f"M0-{probe}"
 
 
 # -- probes ----------------------------------------------------------------

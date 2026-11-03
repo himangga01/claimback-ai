@@ -2,6 +2,8 @@ backend/tests/output/
 __pycache__/
 *.pyc
 .env
+.env.*
+!.env.example
 .venv/
 venv/
 node_modules/
