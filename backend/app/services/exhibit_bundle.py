@@ -179,8 +179,11 @@ def _doc_template(output_path: Union[str, Path]) -> SimpleDocTemplate:
 # INT-3c F3: document-shaped images (A4 is 1.41) stay on one page so a
 # signature box or stamp is never cut; only long screenshots are sliced.
 DOCUMENT_MAX_ASPECT = 1.6
-INK_THRESHOLD = 160          # gray level below which a pixel counts as ink
-BLANK_SLICE_INK_RATIO = 0.0005
+# Any pixel darker than near-white counts (light-gray timestamps and chat
+# bubbles too), so cuts fall on plain background rows and only truly empty
+# slices are dropped.
+INK_THRESHOLD = 235
+BLANK_SLICE_MIN_INK = 20     # a slice with fewer marked pixels is empty paper
 CUT_SEARCH_FRACTION = 0.3    # look for a blank row in the last 30% of a slice
 
 
@@ -245,8 +248,7 @@ def _slice_tall_image(path: Path, max_w: float, max_h: float) -> List[Path]:
             mode = image.mode
             row_ink = _row_ink(image.convert("L"), width, height)
             bounds = [(top, bottom) for top, bottom in _cut_rows(row_ink, max_slice_h)
-                      if sum(row_ink[top:bottom])
-                      > BLANK_SLICE_INK_RATIO * width * (bottom - top)]
+                      if sum(row_ink[top:bottom]) >= BLANK_SLICE_MIN_INK]
             if not bounds or bounds == [(0, height)]:
                 return [path]
             total = len(bounds)

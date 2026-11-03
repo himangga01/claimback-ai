@@ -106,6 +106,26 @@ def test_document_and_period_wording_pass():
     assert _status("{{debtor_name}}은 {{principal}}을 갚기로 했습니다 [[EX:1]]") == "fail"
 
 
+def test_review_follow_ups_on_exceptions():
+    # "주기로" is "every" only after a duration
+    assert _status("{{debtor_name}}은 내일 주기로 했습니다 [[EX:1]]") == "fail"
+    assert _status("{{debtor_name}}은 다음 달 주기로 했습니다 [[EX:1]]") == "fail"
+    assert _status("{{creditor_name}}은 한 달 주기로 연락했습니다 [[EX:2]]") == "pass"
+    # the document exemption needs a document and no reported speech
+    assert _status("대화에는 {{due_date}}까지 갚기로 했다고 적혀 있습니다 [[EX:2]]") == "fail"
+    assert _status("차용증에 적힌 대로 {{principal}}을 갚기로 했으나 갚지 않았습니다 [[EX:6]]") == "pass"
+    # receiving a message is reported speech too
+    assert _status("{{creditor_name}}은 준다는 문자를 받았습니다 [[EX:2]]") == "fail"
+
+
+def test_short_message_slice_is_kept(tmp_path):
+    # One tiny reply alone in the middle third must not vanish.
+    tall = _png(tmp_path / "chat.png", 640, 2400, [(50, 700), (1150, 1158), (1700, 2300)])
+    slices = exhibit_bundle_mod._slice_tall_image(tall, MAX_W, MAX_H)
+    heights = sum(PILImage.open(part).size[1] for part in slices)
+    assert heights == 2400
+
+
 def test_user_sentence_slot_allowed_only_without_evidence():
     text = "{{due_date}}이 지난 뒤에도 남은 돈을 받지 못했습니다 [[USER]]"
     assert _status(text, "user", ["due_date"]) == "fail"

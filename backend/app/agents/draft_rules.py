@@ -161,18 +161,22 @@ FACT_REQUEST_MATRIX = ("요청했", "요청하였", "요청합", "부탁했", "�
 # ("... 달라고 문자를 보냈습니다") is reported speech (M2c-fix1 D1).
 # These never trigger on their own: "보냈습니다" and "연락" pass.
 MESSAGE_NOUNS = ("문자", "메시지", "연락", "답장")
-SEND_VERBS = ("보내", "보냈", "보낸", "보냄")
+SEND_VERBS = ("보내", "보냈", "보낸", "보냄", "받았", "받은", "받음")
 
 # INT-3c F5: adnominal quotatives ("… 보겠다는 답장을 보냈습니다") count
 # only with a message noun + send verb, never alone ("… 라는 내용").
 ADNOMINAL_QUOTATIVES = ("다는", "라는")
 
 # INT-3c F5: a sentence that describes what a document says
-# ("차용증에는 … 갚기로 적혀 있습니다") is not a promise in speech.
-DOCUMENT_PHRASES = ("적혀", "기재", "쓰여")
+# ("차용증에는 … 갚기로 적혀 있습니다") is not a promise in speech. It
+# must name a document, and a quotative before the phrase ("갚기로
+# 했다고 적혀") still counts as speech.
+DOCUMENT_PHRASES = ("적혀", "적힌", "기재", "쓰여", "쓰인")
+DOCUMENT_NOUNS = ("차용증", "확인증", "영수증", "계약서", "각서", "증서", "내역서")
 
-# INT-3c F5: "주기로" after a time word means "every …" (일주일 주기로).
-PERIOD_WORD_ENDINGS = ("일", "주", "달", "개월", "년", "시간", "분")
+# INT-3c F5: "주기로" means "every …" only after a duration
+# (일주일 주기로, 한 달 주기로, 3일 주기로), not after 내일/다음 달.
+_DURATION_RE = re.compile(r"^(?:일주일|보름|한달|\d+(?:일|주|주일|개월|달|년|시간|분))$")
 
 _SLOT_RE = re.compile(r"\{\{\s*([^}]*?)\s*\}\}")
 _QUOTE_RE = re.compile(r"\{\{\s*quote:[A-Za-z0-9_]+:[A-Za-z0-9_]+\s*\}\}")
@@ -227,9 +231,25 @@ def _message_sent(words: List[str], index: int) -> bool:
 
 
 def _is_period_juki(words: List[str], index: int) -> bool:
-    """"주기로" right after a time word means "every …", not a promise."""
-    return (words[index].startswith("주기로") and index > 0
-            and words[index - 1].endswith(PERIOD_WORD_ENDINGS))
+    """"주기로" right after a duration means "every …", not a promise."""
+    if not words[index].startswith("주기로") or index == 0:
+        return False
+    prev = words[index - 1]
+    if _DURATION_RE.match(prev):
+        return True
+    return prev == "달" and index > 1 and words[index - 2] == "한"
+
+
+def _describes_document(words: List[str]) -> bool:
+    """Names a document and says what it states, without reported speech."""
+    if not any(noun in word for word in words for noun in DOCUMENT_NOUNS):
+        return False
+    for index, word in enumerate(words):
+        if any(phrase in word for phrase in DOCUMENT_PHRASES):
+            before = words[max(0, index - 1):index]
+            return not any(quot in prev for prev in before
+                           for quot in SPEECH_QUOTATIVES)
+    return False
 
 
 def has_speech(text: str, stype: str = "") -> Optional[str]:
@@ -240,8 +260,7 @@ def has_speech(text: str, stype: str = "") -> Optional[str]:
     the M2c-fix1 behavior.
     """
     words = [word for word in _eojeols(text) if word]
-    describes_document = any(phrase in word for word in words
-                             for phrase in DOCUMENT_PHRASES)
+    describes_document = _describes_document(words)
     for index, word in enumerate(words):
         for verb in SPEECH_VERBS:
             if verb in word:

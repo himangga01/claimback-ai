@@ -135,10 +135,10 @@ def format_parties_text(creditor, debtor) -> str:
     return (
         f"채권자: {creditor.name}\n"
         f"주소: {creditor.address or '주소 불명'}\n"
-        f"연락처: {creditor.phone or '연락처 불명'}\n\n"
+        f"연락처: {creditor.phone or '불명'}\n\n"
         f"채무자: {debtor.name}\n"
         f"주소: {debtor.address or '주소 불명'}\n"
-        f"연락처: {debtor.phone or '연락처 불명'}"
+        f"연락처: {debtor.phone or '불명'}"
     )
 
 
