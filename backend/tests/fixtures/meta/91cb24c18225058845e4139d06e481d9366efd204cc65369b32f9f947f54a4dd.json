@@ -1,0 +1,224 @@
+{
+  "latency_ms": 17854,
+  "request": {
+    "endpoint": "responses",
+    "model": "muse-spark-1.3",
+    "params": {
+      "max_output_tokens": 4000,
+      "reasoning": {
+        "effort": "low"
+      },
+      "store": false,
+      "text_format": {
+        "name": "reading",
+        "schema": {
+          "additionalProperties": false,
+          "properties": {
+            "items": {
+              "items": {
+                "additionalProperties": true,
+                "properties": {
+                  "box": {
+                    "items": {
+                      "type": "number"
+                    },
+                    "maxItems": 4,
+                    "minItems": 4,
+                    "type": "array"
+                  },
+                  "confidence": {
+                    "type": "number"
+                  },
+                  "kind": {
+                    "type": "string"
+                  },
+                  "normalized": {
+                    "type": "string"
+                  },
+                  "speaker": {
+                    "type": "string"
+                  },
+                  "text_verbatim": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "text_verbatim",
+                  "box"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "items"
+          ],
+          "type": "object"
+        },
+        "strict": false,
+        "type": "json_schema"
+      }
+    },
+    "payload": [
+      {
+        "content": [
+          {
+            "text": "# 판독 담당 프롬프트 v1\n\n버전: reader.v1 (M2a 최초 작성)\n\n너는 ClaimBack-AI의 판독 담당이다. 보이는 것만 그대로 옮겨 적는 기록원이다.\n\n## 할 일\n\n- 입력 이미지(또는 PDF)의 모든 글 항목을 빠짐없이 읽는다.\n- 항목마다 `kind`, `text_verbatim`, `normalized`, `box`, `speaker`, `confidence`를 낸다.\n- `kind`는 다음 중 하나: `utterance`(대화 말풍선, 말풍선 단위),\n  `amount`(금액), `date`(날짜), `party_name`(사람·상호 이름),\n  `account_number`(계좌번호), `id_number`(주민번호 등 식별번호),\n  `address`(주소), `phone`(전화번호), `label`(칸 제목), `header`(머리말).\n- `text_verbatim`은 원문 그대로(띄어쓰기·기호 포함) 옮긴다.\n- `normalized`는 기계가 읽기 좋은 형식: 금액은 쉼표·단위 없는 숫자만,\n  날짜는 `YYYY-MM-DD` 형식, 나머지는 원문과 같거나 `null`.\n- `box`는 항목을 둘러싸는 가장 작은 박스를 축별 0~1000 정규화 좌표\n  `[x1, y1, x2, y2]`로 낸다.\n- `speaker`는 말풍선을 보낸 사람의 표시 그대로, 없으면 `null`.\n- `confidence`는 0~1 사이의 확신도.\n\n## 하지 않을 일\n\n- 의미를 해석하거나 보이지 않는 값을 추측하지 않는다. 안 보이면 항목을 만들지 않는다.\n- 사건의 결론이나 전망을 단정하는 말을 쓰지 않는다.\n- 발화에 법적 성격을 붙이지 않는다. 갚겠다는 말도 원문 그대로 옮길 뿐이다.\n- 자격이나 공직을 내세우는 말을 출력에 쓰지 않는다.\n- 법률 상담을 하지 않는다.\n\n## 출력\n\n- Reading JSON 스키마만 따른다.\n  `{\"items\": [{\"kind\", \"text_verbatim\", \"normalized\", \"box\", \"speaker\", \"confidence\"}]}`\n- JSON 외의 글자를 출력하지 않는다.\n",
+            "type": "input_text"
+          },
+          {
+            "file_data": "sha256:68928a19cb65468df4084524d5a80a9682febd13464080d876a8fcabc06d8e14:application/pdf",
+            "filename": "iou.pdf",
+            "type": "input_file"
+          }
+        ],
+        "role": "user"
+      }
+    ]
+  },
+  "response": {
+    "access_programs": null,
+    "background": false,
+    "completed_at": 1793681550.0,
+    "conversation": null,
+    "created_at": 1793681550.0,
+    "error": null,
+    "id": "resp_6ae9688e7d1875e091114288",
+    "incomplete_details": null,
+    "instructions": null,
+    "max_output_tokens": 4000,
+    "max_tool_calls": null,
+    "metadata": null,
+    "model": "muse-spark-1.3",
+    "moderation": null,
+    "object": "response",
+    "output": [
+      {
+        "content": null,
+        "encrypted_content": "<redacted>",
+        "id": "rs_6ae9688e7d1875e091114288:rs_3a3d75a9-5b86-4dde-bb61-4e7d9e86b450",
+        "status": "completed",
+        "summary": [],
+        "type": "reasoning"
+      },
+      {
+        "content": [
+          {
+            "annotations": [],
+            "logprobs": [],
+            "text": "{\"items\": [{\"box\": [471, 8, 578, 20], \"confidence\": 0.99, \"kind\": \"header\", \"normalized\": \"SAMPLE / \\ub370\\ubaa8\\uc6a9\", \"speaker\": \"null\", \"text_verbatim\": \"SAMPLE / \\ub370\\ubaa8\\uc6a9\"}, {\"box\": [430, 47, 570, 83], \"confidence\": 0.99, \"kind\": \"header\", \"normalized\": \"\\ucc28\\uc6a9\\uc99d\", \"speaker\": \"null\", \"text_verbatim\": \"\\ucc28 \\uc6a9 \\uc99d\"}, {\"box\": [95, 114, 165, 134], \"confidence\": 0.99, \"kind\": \"label\", \"normalized\": \"null\", \"speaker\": \"null\", \"text_verbatim\": \"\\ucc44\\uad8c\\uc790\"}, {\"box\": [355, 113, 560, 136], \"confidence\": 0.99, \"kind\": \"party_name\", \"normalized\": \"null\", \"speaker\": \"null\", \"text_verbatim\": \"\\uc11c\\uac00\\uc628(SAMPLE)\"}, {\"box\": [95, 169, 220, 190], \"confidence\": 0.99, \"kind\": \"label\", \"normalized\": \"null\", \"speaker\": \"null\", \"text_verbatim\": \"\\ucc44\\uad8c\\uc790 \\uc8fc\\uc18c\"}, {\"box\": [355, 168, 680, 190], \"confidence\": 0.99, \"kind\": \"address\", \"normalized\": \"null\", \"speaker\": \"null\", \"text_verbatim\": \"\\uc11c\\uc6b8\\ud2b9\\ubcc4\\uc2dc \\uc0d8\\ud50c\\uad6c \\ub370\\ubaa8\\ub85c 0\"}, {\"box\": [95, 218, 240, 241], \"confidence\": 0.99, \"kind\": \"label\", \"normalized\": \"null\", \"speaker\": \"null\", \"text_verbatim\": \"\\ucc44\\uad8c\\uc790 \\uc5f0\\ub77d\\ucc98\"}, {\"box\": [355, 217, 558, 239], \"confidence\": 0.99, \"kind\": \"phone\", \"normalized\": \"null\", \"speaker\": \"null\", \"text_verbatim\": \"010-0000-0001\"}, {\"box\": [95, 271, 165, 291], \"confidence\": 0.99, \"kind\": \"label\", \"normalized\": \"null\", \"speaker\": \"null\", \"text_verbatim\": \"\\ucc44\\ubb34\\uc790\"}, {\"box\": [355, 268, 560, 292], \"confidence\": 0.99, \"kind\": \"party_name\", \"normalized\": \"null\", \"speaker\": \"null\", \"text_verbatim\": \"\\ud0c1\\ub098\\ub8e8(SAMPLE)\"}, {\"box\": [95, 323, 220, 344], \"confidence\": 0.99, \"kind\": \"label\", \"normalized\": \"null\", \"speaker\": \"null\", \"text_verbatim\": \"\\ucc44\\ubb34\\uc790 \\uc8fc\\uc18c\"}, {\"box\": [355, 321, 655, 345], \"confidence\": 0.99, \"kind\": \"address\", \"normalized\": \"null\", \"speaker\": \"null\", \"text_verbatim\": \"\\uacbd\\uae30\\ub3c4 \\uc0d8\\ud50c\\uc2dc \\ub370\\ubaa8\\ub3d9 0\"}, {\"box\": [95, 375, 240, 397], \"confidence\": 0.99, \"kind\": \"label\", \"normalized\": \"null\", \"speaker\": \"null\", \"text_verbatim\": \"\\ucc44\\ubb34\\uc790 \\uc5f0\\ub77d\\ucc98\"}, {\"box\": [355, 374, 560, 396], \"confidence\": 0.99, \"kind\": \"phone\", \"normalized\": \"null\", \"speaker\": \"null\", \"text_verbatim\": \"010-0000-0002\"}, {\"box\": [95, 428, 145, 449], \"confidence\": 0.99, \"kind\": \"label\", \"normalized\": \"null\", \"speaker\": \"null\", \"text_verbatim\": \"\\uae08\\uc561\"}, {\"box\": [355, 426, 540, 449], \"confidence\": 0.99, \"kind\": \"amount\", \"normalized\": \"5000000\", \"speaker\": \"null\", \"text_verbatim\": \"5,000,000\\uc6d0\"}, {\"box\": [95, 479, 205, 503], \"confidence\": 0.99, \"kind\": \"label\", \"normalized\": \"null\", \"speaker\": \"null\", \"text_verbatim\": \"\\uae08\\uc561(\\ud55c\\uae00)\"}, {\"box\": [355, 478, 500, 501], \"confidence\": 0.98, \"kind\": \"amount\", \"normalized\": \"5000000\", \"speaker\": \"null\", \"text_verbatim\": \"\\uae08 \\uc624\\ubc31\\ub9cc \\uc6d0\"}, {\"box\": [95, 532, 165, 554], \"confidence\": 0.99, \"kind\": \"label\", \"normalized\": \"null\", \"speaker\": \"null\", \"text_verbatim\": \"\\ub300\\uc5ec\\uc77c\"}, {\"box\": [355, 530, 510, 552], \"confidence\": 0.99, \"kind\": \"date\", \"normalized\": \"2026-03-10\", \"speaker\": \"null\", \"text_verbatim\": \"2026-03-10\"}, {\"box\": [95, 584, 165, 605], \"confidence\": 0.99, \"kind\": \"label\", \"normalized\": \"null\", \"speaker\": \"null\", \"text_verbatim\": \"\\ubcc0\\uc81c\\uae30\"}, {\"box\": [355, 581, 510, 604], \"confidence\": 0.99, \"kind\": \"date\", \"normalized\": \"2026-04-10\", \"speaker\": \"null\", \"text_verbatim\": \"2026-04-10\"}, {\"box\": [95, 631, 270, 655], \"confidence\": 0.98, \"kind\": \"label\", \"normalized\": \"null\", \"speaker\": \"null\", \"text_verbatim\": \"\\uc774\\uc790 \\uc57d\\uc815 \\uc5c6\\uc74c\"}, {\"box\": [95, 683, 235, 705], \"confidence\": 0.99, \"kind\": \"label\", \"normalized\": \"null\", \"speaker\": \"null\", \"text_verbatim\": \"\\uc8fc\\ubbfc\\ub4f1\\ub85d\\ubc88\\ud638\"}, {\"box\": [370, 680, 615, 706], \"confidence\": 0.99, \"kind\": \"id_number\", \"normalized\": \"null\", \"speaker\": \"null\", \"text_verbatim\": \"000000-0000000\"}, {\"box\": [95, 730, 312, 754], \"confidence\": 0.99, \"kind\": \"label\", \"normalized\": \"null\", \"speaker\": \"null\", \"text_verbatim\": \"\\uc11c\\uac00\\uc628(SAMPLE) \\uc11c\\uba85\"}, {\"box\": [95, 807, 312, 831], \"confidence\": 0.99, \"kind\": \"label\", \"normalized\": \"null\", \"speaker\": \"null\", \"text_verbatim\": \"\\ud0c1\\ub098\\ub8e8(SAMPLE) \\uc11c\\uba85\"}, {\"box\": [820, 862, 926, 892], \"confidence\": 0.97, \"kind\": \"party_name\", \"normalized\": \"null\", \"speaker\": \"null\", \"text_verbatim\": \"\\ud0c1\\ub098\\ub8e8\"}]}",
+            "type": "output_text"
+          }
+        ],
+        "id": "msg_9a93e1e7-bcbd-4740-b10f-07acff85163d",
+        "phase": null,
+        "role": "assistant",
+        "status": "completed",
+        "type": "message"
+      }
+    ],
+    "parallel_tool_calls": true,
+    "previous_response_id": null,
+    "prompt": null,
+    "prompt_cache_diagnostics": null,
+    "prompt_cache_key": null,
+    "prompt_cache_options": null,
+    "prompt_cache_retention": null,
+    "reasoning": {
+      "context": null,
+      "effort": "low",
+      "generate_summary": null,
+      "mode": null,
+      "summary": null
+    },
+    "safety_identifier": null,
+    "service_tier": "auto",
+    "status": "completed",
+    "store": false,
+    "temperature": 1.0,
+    "text": {
+      "format": {
+        "description": null,
+        "name": "reading",
+        "schema_": {
+          "additionalProperties": false,
+          "properties": {
+            "items": {
+              "items": {
+                "additionalProperties": true,
+                "properties": {
+                  "box": {
+                    "items": {
+                      "type": "number"
+                    },
+                    "maxItems": 4,
+                    "minItems": 4,
+                    "type": "array"
+                  },
+                  "confidence": {
+                    "type": "number"
+                  },
+                  "kind": {
+                    "type": "string"
+                  },
+                  "normalized": {
+                    "type": "string"
+                  },
+                  "speaker": {
+                    "type": "string"
+                  },
+                  "text_verbatim": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "text_verbatim",
+                  "box"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "items"
+          ],
+          "type": "object"
+        },
+        "strict": false,
+        "type": "json_schema"
+      },
+      "verbosity": null
+    },
+    "tool_choice": "auto",
+    "tool_usage": null,
+    "tools": [],
+    "top_logprobs": 0,
+    "top_p": 1.0,
+    "truncation": "disabled",
+    "usage": {
+      "input_tokens": 3108,
+      "input_tokens_details": {
+        "cache_write_tokens": null,
+        "cached_tokens": 0
+      },
+      "output_tokens": 2486,
+      "output_tokens_details": {
+        "reasoning_tokens": 657
+      },
+      "total_tokens": 5594
+    },
+    "user": null
+  },
+  "usage": {
+    "cached_input_tokens": 0,
+    "input_tokens": 3108,
+    "output_tokens": 2486,
+    "reasoning_tokens": 657,
+    "total_tokens": 5594,
+    "video_frames_processed": 0
+  }
+}
