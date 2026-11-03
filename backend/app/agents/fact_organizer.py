@@ -14,8 +14,8 @@ from app.agents import deps
 from app.agents.base import AgentSchemaError
 from app.agents.spark import field_summary, load_prompt, run_spark_json
 
-PROMPT_VERSION = "fact_organizer.v1"
-PROMPT_FILE = "fact_organizer.v1.md"
+PROMPT_VERSION = "fact_organizer.v2"
+PROMPT_FILE = "fact_organizer.v2.md"
 MODEL = "muse-spark-1.3"
 MAX_OUTPUT_TOKENS = 8000
 REASONING_EFFORT = "low"
@@ -209,6 +209,14 @@ class ModelReview(BaseModel):
 
 
 _DATE_RE = re.compile(r"(\d{4})\D{0,3}(\d{1,2})\D{0,3}(\d{1,2})")
+_MD_RE = re.compile(r"(\d{1,2})\s*월\s*(\d{1,2})\s*일")
+_PAREN_RE = re.compile(r"\([^)]*\)")
+_WS_RE = re.compile(r"\s+")
+_EX_NUM_RE = re.compile(r"(?i)^EX(\d+)$")
+
+# Fields compared against cited readings' verbatim text, not normalized.
+NAME_FIELDS = ("creditor_name", "debtor_name", "creditor_address",
+               "debtor_address", "creditor_phone")
 
 
 class _ValueError(ValueError):
@@ -328,11 +336,72 @@ def _readings_by_ref(
     return by_ref
 
 
+def _ex_label(ex_id: str) -> str:
+    """'EX2' -> '갑 제2호증' (unknown ids pass through)."""
+    match = _EX_NUM_RE.match(str(ex_id or "").strip())
+    if match:
+        return f"갑 제{int(match.group(1))}호증"
+    return str(ex_id)
+
+
+def _verbatim_month_day(item: Dict[str, Any]) -> Optional[tuple]:
+    """Month/day from a cited item's verbatim ('4월 25일' -> (4, 25))."""
+    text = item.get("text_verbatim") if isinstance(item, dict) else None
+    if not isinstance(text, str):
+        return None
+    match = _MD_RE.search(text)
+    if not match:
+        return None
+    return (int(match.group(1)), int(match.group(2)))
+
+
+def _iso_month_day(iso: Any) -> Optional[tuple]:
+    try:
+        parts = str(iso).strip().split("-")
+        return (int(parts[1]), int(parts[2]))
+    except (ValueError, IndexError, AttributeError):
+        return None
+
+
+def _canon_text(raw: Any) -> str:
+    """Compare form: parens and whitespace removed."""
+    return _WS_RE.sub("", _PAREN_RE.sub("", str(raw or "")))
+
+
+def _canon_phone(raw: Any) -> str:
+    return "".join(ch for ch in str(raw or "") if ch.isdigit())
+
+
+def _date_conflict_note(
+    value: str,
+    agree: Optional[Dict[str, str]],
+    differ: List[tuple],
+) -> str:
+    """Fact-only note: observed dates with exhibit labels (M2c task 5)."""
+    parts = []
+    if agree is not None:
+        parts.append(f"{deps.fmt_kr_date(value)}({_ex_label(agree['ex_id'])})")
+    else:
+        parts.append(deps.fmt_kr_date(value))
+    for display, source, item in differ:
+        label = _ex_label(source["ex_id"])
+        if isinstance(item, dict) and item.get("kind") == "utterance":
+            label += " 대화"
+        parts.append(f"{display}({label})")
+    return "증거에 나온 날짜가 서로 다릅니다: " + ", ".join(parts)
+
+
 def _cross_check_value(
     name: str, value: Any, sources: List[Dict[str, str]],
     by_ref: Dict[str, Dict[str, Any]],
 ) -> Optional[str]:
-    """Compare a fact value with its cited readings' normalized (P5)."""
+    """Compare a fact value with its cited readings (P5, M2c-hardened).
+
+    Amounts/dates are compared with the cited items' machine values
+    (``normalized``); date items without one fall back to the
+    verbatim month/day. Names/addresses/phones are compared with the
+    cited verbatim text (whitespace/paren differences ignored).
+    """
     if value is None or value == [] or not sources:
         return None
     if name == "principal":
@@ -350,38 +419,55 @@ def _cross_check_value(
                 return (f"원금 {value}와 인용한 판독값 {cited}가 다릅니다.")
         return None
     if name in ("loan_date", "due_date"):
+        agree: Optional[Dict[str, str]] = None
+        differ: List[tuple] = []
         for source in sources:
             item = by_ref.get(f"{source['ex_id']}:{source['item_id']}", {})
             normalized = item.get("normalized")
-            if normalized is None or (isinstance(normalized, str)
-                                      and not normalized.strip()):
+            cited_full: Optional[str] = None
+            if normalized is not None and str(normalized).strip():
+                try:
+                    cited_full = _iso_date(normalized, name)
+                except _ValueError:
+                    cited_full = None
+            if cited_full is not None:
+                if cited_full == value:
+                    agree = agree or source
+                else:
+                    differ.append((deps.fmt_kr_date(cited_full), source, item))
                 continue
-            try:
-                cited = _iso_date(normalized, name)
-            except _ValueError:
+            month_day = _verbatim_month_day(item)
+            if month_day is None:
                 continue
-            if cited != value:
-                return (f"{FIELD_LABELS[name]} {value}와 인용한 판독값 "
-                        f"{cited}가 다릅니다.")
+            if month_day == _iso_month_day(value):
+                agree = agree or source
+            else:
+                differ.append((f"{month_day[0]}월 {month_day[1]}일",
+                               source, item))
+        if differ:
+            return _date_conflict_note(str(value), agree, differ)
         return None
     if name == "repayments":
         cited_amounts: set = set()
         cited_dates: set = set()
+        cited_md: set = set()
         for source in sources:
             item = by_ref.get(f"{source['ex_id']}:{source['item_id']}", {})
             normalized = item.get("normalized")
-            if normalized is None or (isinstance(normalized, str)
-                                      and not normalized.strip()):
-                continue
-            try:
-                cited_amounts.add(_digits_only(normalized, name))
-                continue
-            except _ValueError:
-                pass
-            try:
-                cited_dates.add(_iso_date(normalized, name))
-            except _ValueError:
-                continue
+            if normalized is not None and str(normalized).strip():
+                try:
+                    cited_amounts.add(_digits_only(normalized, name))
+                    continue
+                except _ValueError:
+                    pass
+                try:
+                    cited_dates.add(_iso_date(normalized, name))
+                    continue
+                except _ValueError:
+                    pass
+            month_day = _verbatim_month_day(item)
+            if month_day is not None:
+                cited_md.add(month_day)
         for entry in value or []:
             if not isinstance(entry, dict):
                 continue
@@ -391,6 +477,28 @@ def _cross_check_value(
             if cited_dates and entry.get("date") not in cited_dates:
                 return (f"변제일 {entry.get('date')}가 인용한 판독값과 "
                         "다릅니다.")
+            if not cited_dates and cited_md:
+                if _iso_month_day(entry.get("date")) not in cited_md:
+                    return (f"변제일 {entry.get('date')}가 인용한 판독 "
+                            "원문과 다릅니다.")
+        return None
+    if name in NAME_FIELDS:
+        canon = _canon_phone if name == "creditor_phone" else _canon_text
+        wanted = canon(value)
+        if not wanted:
+            return None
+        seen_verbatim = False
+        for source in sources:
+            item = by_ref.get(f"{source['ex_id']}:{source['item_id']}", {})
+            verbatim = item.get("text_verbatim")
+            if not isinstance(verbatim, str) or not verbatim.strip():
+                continue
+            seen_verbatim = True
+            if canon(verbatim) == wanted:
+                return None
+        if seen_verbatim:
+            return (f"{FIELD_LABELS[name]} 값이 인용한 판독 원문과 "
+                    "다릅니다.")
         return None
     return None
 
@@ -416,6 +524,8 @@ def normalize_review(
         if entry.field in KNOWN_FIELDS and entry.field not in by_name:
             by_name[entry.field] = entry
     fields = []
+    # Code-found conflicts (M2c task 4): field -> (note, question).
+    code_found: Dict[str, tuple] = {}
     for name in KNOWN_FIELDS:
         entry = by_name.get(name)
         raw = entry.value if entry else None
@@ -423,13 +533,13 @@ def normalize_review(
             value = normalize_field_value(name, raw)
         except _ValueError as exc:
             raise AgentSchemaError(f"사실 정리 값 형식 오류: {name}") from exc
+        raw_sources = list(entry.sources) if entry else []
         sources = []
-        if entry:
-            for source in entry.sources:
-                ref = f"{source.ex_id}:{source.item_id}"
-                if ref in known_refs:
-                    sources.append({"ex_id": source.ex_id,
-                                    "item_id": source.item_id})
+        for source in raw_sources:
+            ref = f"{source.ex_id}:{source.item_id}"
+            if ref in known_refs:
+                sources.append({"ex_id": source.ex_id,
+                                "item_id": source.item_id})
         empty = value is None or value == []
         model_reason = (entry.null_reason if entry else None)
         if isinstance(model_reason, str):
@@ -440,6 +550,20 @@ def normalize_review(
         if empty and null_reason is None:
             null_reason = "판독에서 찾지 못함"
         conflict = bool(entry.conflict) if entry else False
+        if not empty:
+            if not raw_sources:
+                note = f"{FIELD_LABELS[name]} 값의 근거가 없습니다."
+                code_found[name] = (
+                    note, f"{note} 올바른 값을 입력해 주세요.")
+                conflict = True
+            elif not sources:
+                refs = ", ".join(f"{s.ex_id}:{s.item_id}"
+                                 for s in raw_sources)
+                note = (f"{FIELD_LABELS[name]} 값의 근거가 판독에 "
+                        f"없습니다: {refs}.")
+                code_found[name] = (
+                    note, f"{note} 올바른 값을 입력해 주세요.")
+                conflict = True
         fields.append({
             "field": name, "label": FIELD_LABELS[name], "value": value,
             "display": display_for(name, value), "sources": sources,
@@ -450,19 +574,23 @@ def normalize_review(
             entry["field"], entry["value"], entry["sources"], by_ref)
         if note is not None:
             entry["conflict"] = True
+            code_found.setdefault(
+                entry["field"],
+                (note, f"{note} 올바른 값을 입력해 주세요."))
     conflicts = [
         {"fields": [name for name in item.fields if name in KNOWN_FIELDS],
          "note": item.note}
         for item in output.conflicts
     ]
-    for entry in fields:
-        note = _cross_check_value(
-            entry["field"], entry["value"], entry["sources"], by_ref)
-        if note is not None and not any(
-                entry["field"] in item.get("fields", [])
-                and note in item.get("note", "")
-                for item in conflicts):
-            conflicts.append({"fields": [entry["field"]], "note": note})
+    for name in KNOWN_FIELDS:
+        found = code_found.get(name)
+        if found is None:
+            continue
+        note = found[0]
+        if not any(name in item.get("fields", [])
+                   and note in item.get("note", "")
+                   for item in conflicts):
+            conflicts.append({"fields": [name], "note": note})
     flagged = {entry["field"] for entry in fields
                if entry["conflict"] or entry["value"] is None
                or entry["value"] == []}
@@ -471,6 +599,11 @@ def normalize_review(
         for item in output.questions
         if item.field in KNOWN_FIELDS and item.field in flagged
     ]
+    asked = {item["field"] for item in questions}
+    for name in KNOWN_FIELDS:
+        found = code_found.get(name)
+        if found is not None and name not in asked:
+            questions.append({"field": name, "question": found[1]})
     utterances = []
     for item in output.utterances:
         if f"{item.ex_id}:{item.item_id}" not in known_refs:

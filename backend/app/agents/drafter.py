@@ -11,8 +11,8 @@ from app.agents import deps
 from app.agents.base import AgentSchemaError
 from app.agents.spark import field_summary, load_prompt, run_spark_json
 
-PROMPT_VERSION = "drafter.v1"
-PROMPT_FILE = "drafter.v1.md"
+PROMPT_VERSION = "drafter.v2"
+PROMPT_FILE = "drafter.v2.md"
 MODEL = "muse-spark-1.3"
 MAX_OUTPUT_TOKENS = 6000
 REASONING_EFFORT = "medium"
