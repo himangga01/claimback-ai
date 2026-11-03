@@ -823,7 +823,8 @@ def main() -> int:
         print(f"  {probe}: success={entry['success']} "
               f"cost=${entry.get('cost_usd', 0.0):.4f} "
               f"{entry.get('rationale', '')[:220]}")
-    return 0
+    failed = [p for p in probes if results[p].get("success") is not True]
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":
