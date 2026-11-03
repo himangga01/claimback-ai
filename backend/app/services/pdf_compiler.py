@@ -55,6 +55,355 @@ def _fmt_rate(rate: Decimal) -> str:
     return format(rate.normalize(), "f")
 
 
+# --- M5-fix1 K6: shared wording (single source for content proof + ecourt) ---
+
+KANA_ORDER = ["가", "나", "다", "라", "마", "바", "사", "아", "자", "차",
+              "카", "타", "파", "하"]
+
+
+def kana_label(position: int) -> str:
+    """1-based approval-sentence label (가. 나. 다. …, then (n))."""
+    if 1 <= position <= len(KANA_ORDER):
+        return f"{KANA_ORDER[position - 1]}."
+    return f"({position})"
+
+
+import re as _re
+
+
+_BRACKET_CITE_RE = _re.compile(r"\[갑 제(\d+)호증\]")
+_NUMBERED_RE = _re.compile(r"^((?:[가-하]\.|\(\d+\))\s+)")
+
+
+def _split_number_prefix(text: str):
+    m = _NUMBERED_RE.match(text or "")
+    if m:
+        return m.group(1), (text or "")[m.end():]
+    return "", (text or "")
+
+
+def _clean_spaces(text: str) -> str:
+    out = _re.sub(r"[ \t]{2,}", " ", text or "")
+    out = _re.sub(r"\s+\.", ".", out)
+    return out.strip()
+
+
+def format_letter_fact(text: str, creditor_name: str = "", debtor_name: str = "") -> str:
+    """Letter-style fact: strip cites/user marks, 본인/귀하 (K8)."""
+    prefix, body = _split_number_prefix(text)
+    body = _BRACKET_CITE_RE.sub("", body)
+    body = body.replace("[[USER]]", "").replace("(사용자 진술)", "")
+    if creditor_name:
+        body = body.replace(creditor_name, "본인")
+    if debtor_name:
+        body = body.replace(debtor_name, "귀하")
+    return f"{prefix}{_clean_spaces(body)}".strip()
+
+
+def format_ecourt_fact(text: str) -> str:
+    """Ecourt-style fact: (갑 제N호증) before period, no user marks (K8)."""
+    prefix, body = _split_number_prefix(text)
+    body = body.replace("[[USER]]", "").replace("(사용자 진술)", "")
+    body = _re.sub(r"\.\s*\[갑 제(\d+)호증\]", r"(갑 제\1호증).", body)
+    body = _re.sub(r"\s*\[갑 제(\d+)호증\]\s*\.", r"(갑 제\1호증).", body)
+    body = _re.sub(r"\s*\[갑 제(\d+)호증\]\s*$", r"(갑 제\1호증).", body)
+    body = _re.sub(r"\[갑 제(\d+)호증\]", r"(갑 제\1호증)", body)
+    return f"{prefix}{_clean_spaces(body)}".strip()
+
+
+def ensure_numbered_facts(sentences) -> List[str]:
+    """Prefix kana labels when missing; keep existing labels (K6)."""
+    out: List[str] = []
+    for idx, raw in enumerate(list(sentences or []), start=1):
+        text = str(raw or "")
+        if _NUMBERED_RE.match(text):
+            out.append(text)
+        else:
+            out.append(f"{kana_label(idx)} {text}".strip())
+    return out
+
+
+def _alloc_value(entry: Any, name: str) -> Decimal:
+    from typing import Mapping as _Mapping
+
+    if isinstance(entry, _Mapping):
+        raw = entry.get(name, 0)
+    else:
+        raw = getattr(entry, name, 0)
+    if isinstance(raw, Decimal):
+        return raw
+    try:
+        return Decimal(str(raw))
+    except Exception:
+        return Decimal("0")
+
+
+def _alloc_date_iso(entry: Any) -> str:
+    from typing import Mapping as _Mapping
+
+    if isinstance(entry, _Mapping):
+        raw = entry.get("payment_date", "")
+    else:
+        raw = getattr(entry, "payment_date", "")
+    if hasattr(raw, "isoformat"):
+        try:
+            return str(raw.isoformat())
+        except Exception:
+            return str(raw)
+    return str(raw or "")
+
+
+def _calc_list(calculation: Any, name: str) -> list:
+    from typing import Mapping as _Mapping
+
+    if isinstance(calculation, _Mapping):
+        value = calculation.get(name, [])
+    else:
+        value = getattr(calculation, name, [])
+    return list(value or [])
+
+
+def _calc_field(calculation: Any, name: str, default: Any = None) -> Any:
+    from typing import Mapping as _Mapping
+
+    if isinstance(calculation, _Mapping):
+        return calculation.get(name, default)
+    return getattr(calculation, name, default)
+
+
+def _floored_totals(calculation: Any) -> List[Decimal]:
+    """'충당 시 이자 합계' floored totals in allocation order (less-than check)."""
+    totals: List[Decimal] = []
+    for step in _calc_list(calculation, "calculation_steps"):
+        from typing import Mapping as _Mapping
+
+        if isinstance(step, _Mapping):
+            label = str(step.get("label", ""))
+            amount = step.get("amount", 0)
+        else:
+            label = str(getattr(step, "label", ""))
+            amount = getattr(step, "amount", 0)
+        if label == "충당 시 이자 합계":
+            if isinstance(amount, Decimal):
+                totals.append(amount)
+            else:
+                try:
+                    totals.append(Decimal(str(amount)))
+                except Exception:
+                    totals.append(Decimal("0"))
+    return totals
+
+
+def _interest_parts(loan_fact: Any, calculation: Any, index: int):
+    """Agreed/delay interest periods for allocation ``index`` (K7)."""
+    allocations = _calc_list(calculation, "allocations")
+    if index < 0 or index >= len(allocations):
+        return []
+    entry = allocations[index]
+    pay_raw = _alloc_date_iso(entry)
+    try:
+        pay = date.fromisoformat(pay_raw)
+    except ValueError:
+        return []
+    loan_d = getattr(loan_fact, "loan_date", None)
+    due_d = getattr(loan_fact, "due_date", None)
+    if not isinstance(loan_d, date) or not isinstance(due_d, date):
+        return []
+    if index == 0:
+        prev = loan_d
+    else:
+        try:
+            prev = date.fromisoformat(_alloc_date_iso(allocations[index - 1]))
+        except ValueError:
+            prev = loan_d
+    agreed = getattr(loan_fact, "agreed_interest_rate", None)
+    capped = None
+    if agreed is not None:
+        try:
+            agreed_d = agreed if isinstance(agreed, Decimal) else Decimal(str(agreed))
+        except Exception:
+            agreed_d = None
+        if agreed_d is not None and agreed_d != 0:
+            capped = Decimal("20") if agreed_d > Decimal("20") else agreed_d
+    try:
+        from app.schemas.loan_fact import TransactionKindEnum as _Kind
+    except Exception:
+        _Kind = None  # type: ignore
+    kind = getattr(loan_fact, "transaction_kind", None)
+    statutory = Decimal("6") if (_Kind is not None and kind == _Kind.COMMERCIAL) else Decimal("5")
+    if capped is not None and capped > statutory:
+        pre_rate = capped
+    else:
+        pre_rate = statutory
+    parts = []
+    if capped is not None:
+        o_start = max(prev, loan_d)
+        o_end = min(pay, due_d)
+        if o_end > o_start:
+            parts.append(("약정이자", o_start + timedelta(days=1), o_end, capped))
+    d_start = max(prev, due_d)
+    if pay > d_start:
+        parts.append(("지연손해금", d_start + timedelta(days=1), pay, pre_rate))
+    return parts
+
+
+def _interest_phrase(parts) -> str:
+    """'지연손해금(기간, 연 5%)' style phrase from interest parts (K7)."""
+    cleaned = list(parts or [])
+    if not cleaned:
+        return "지연손해금"
+    rates = {_fmt_rate(rate) for _, _, _, rate in cleaned}
+    periods = ", ".join(
+        f"{_fmt_kr_date(start)}~{_fmt_kr_date(end)}" for _, start, end, _ in cleaned
+    )
+    if len(cleaned) == 1:
+        label = cleaned[0][0]
+        return f"{label}({periods}, 연 {next(iter(rates))}%)"
+    labels = [label for label, _, _, _ in cleaned]
+    if len(rates) == 1:
+        return f"{' 및 '.join(labels)}({periods}, 연 {next(iter(rates))}%)"
+    joined = " 및 ".join(
+        f"{label}({_fmt_kr_date(start)}~{_fmt_kr_date(end)}, 연 {_fmt_rate(rate)}%)"
+        for label, start, end, rate in cleaned
+    )
+    return joined
+
+
+def _simple_repayment_sentence(allocations: Any, remaining: Any) -> str:
+    """Legacy allocation wording (kept for old 2-arg callers)."""
+    items = list(allocations or [])
+    try:
+        rem_d = remaining if isinstance(remaining, Decimal) else Decimal(str(remaining))
+    except Exception:
+        rem_d = Decimal("0")
+    remaining_disp = f"{_fmt_won(rem_d)}원"
+
+    def _clause(entry: Any) -> str:
+        raw_d = _alloc_date_iso(entry)
+        try:
+            when = _fmt_kr_date(date.fromisoformat(raw_d))
+        except ValueError:
+            when = raw_d
+        amount = f"{_fmt_won(_alloc_value(entry, 'payment_amount'))}원"
+        cost = _alloc_value(entry, "applied_to_cost")
+        interest = _alloc_value(entry, "applied_to_interest")
+        principal_part = _alloc_value(entry, "applied_to_principal")
+        cost_disp = f"{_fmt_won(cost)}원"
+        interest_disp = f"{_fmt_won(interest)}원"
+        principal_disp = f"{_fmt_won(principal_part)}원"
+        if cost > 0 and interest > 0:
+            return (f"{when} 받은 {amount}은 비용 {cost_disp}, 그때까지의 "
+                    f"지연손해금 {interest_disp}에 먼저, 나머지 {principal_disp}은 "
+                    f"원금에 충당")
+        if cost > 0 and interest <= 0:
+            return (f"{when} 받은 {amount}은 비용 {cost_disp}에 먼저, 나머지 "
+                    f"{principal_disp}은 원금에 충당")
+        if interest > 0:
+            return (f"{when} 받은 {amount}은 그때까지의 지연손해금 {interest_disp}에 "
+                    f"먼저, 나머지 {principal_disp}은 원금에 충당")
+        return f"{when} 받은 {amount}은 원금에 충당"
+
+    if not items:
+        return ""
+    if len(items) == 1:
+        return f"{_clause(items[0])}하여 남은 원금은 {remaining_disp}입니다"
+    joined = "; ".join(_clause(entry) for entry in items)
+    return f"{joined}하여 남은 원금은 {remaining_disp}입니다"
+
+
+def build_repayment_sentence(first: Any, second: Any = None, style: str = "ecourt") -> str:
+    """Shared repayment wording (K6/K7).
+
+    New: ``build_repayment_sentence(loan_fact, calculation, style)`` with
+    periods/rates, multi-join, overpayment, less-than-interest, and
+    agreed-interest branches. Old 2-arg ``(allocations, remaining)`` callers
+    keep the legacy wording.
+    """
+    is_new = hasattr(first, "creditor") and hasattr(first, "debtor")
+    if not is_new:
+        return _simple_repayment_sentence(first, second)
+    loan_fact = first
+    calculation = second
+    use_letter = str(style or "ecourt").lower().startswith("letter")
+    subject = "본인은" if use_letter else "채권자는"
+    source = "귀하로부터" if use_letter else "채무자로부터"
+    allocations = _calc_list(calculation, "allocations")
+    if not allocations:
+        return ""
+    remaining_raw = _calc_field(calculation, "remaining_principal", Decimal("0"))
+    over_raw = _calc_field(calculation, "overpayment_amount", Decimal("0"))
+    try:
+        remaining = remaining_raw if isinstance(remaining_raw, Decimal) else Decimal(str(remaining_raw))
+    except Exception:
+        remaining = Decimal("0")
+    try:
+        overpayment = over_raw if isinstance(over_raw, Decimal) else Decimal(str(over_raw))
+    except Exception:
+        overpayment = Decimal("0")
+    remaining_disp = f"{_fmt_won(remaining)}원"
+    over_disp = f"{_fmt_won(overpayment)}원"
+    floored = _floored_totals(calculation)
+
+    def _one(index: int, entry: Any) -> str:
+        raw_d = _alloc_date_iso(entry)
+        try:
+            when = _fmt_kr_date(date.fromisoformat(raw_d))
+        except ValueError:
+            when = raw_d
+        pay_disp = f"{_fmt_won(_alloc_value(entry, 'payment_amount'))}원"
+        cost = _alloc_value(entry, "applied_to_cost")
+        interest = _alloc_value(entry, "applied_to_interest")
+        principal_part = _alloc_value(entry, "applied_to_principal")
+        interest_disp = f"{_fmt_won(interest)}원"
+        principal_disp = f"{_fmt_won(principal_part)}원"
+        parts = _interest_parts(loan_fact, calculation, index) if interest > 0 else []
+        phrase = _interest_phrase(parts) if parts else "지연손해금"
+        total_due = floored[index] if 0 <= index < len(floored) else interest
+        payment = _alloc_value(entry, "payment_amount")
+        if principal_part <= 0 and cost <= 0 and total_due > payment > 0:
+            total_disp = f"{_fmt_won(total_due)}원"
+            return (
+                f"{subject} {when} {source} 받은 {pay_disp}을 그때까지의 "
+                f"{phrase} {total_disp} 중 {interest_disp}에 충당"
+            )
+        if cost > 0 and interest > 0:
+            cost_disp = f"{_fmt_won(cost)}원"
+            return (
+                f"{subject} {when} {source} 받은 {pay_disp}을 비용 {cost_disp}, "
+                f"그때까지의 {phrase} {interest_disp}에 먼저 충당하고, "
+                f"나머지 {principal_disp}을 원금에 충당"
+            )
+        if cost > 0 and interest <= 0:
+            cost_disp = f"{_fmt_won(cost)}원"
+            return (
+                f"{subject} {when} {source} 받은 {pay_disp}을 비용 {cost_disp}에 "
+                f"먼저 충당하고, 나머지 {principal_disp}을 원금에 충당"
+            )
+        if interest > 0 and principal_part > 0:
+            return (
+                f"{subject} {when} {source} 받은 {pay_disp}을 그때까지의 "
+                f"{phrase} {interest_disp}에 먼저 충당하고, "
+                f"나머지 {principal_disp}을 원금에 충당"
+            )
+        if interest > 0:
+            return (
+                f"{subject} {when} {source} 받은 {pay_disp}을 그때까지의 "
+                f"{phrase} {interest_disp}에 충당"
+            )
+        return f"{subject} {when} {source} 받은 {pay_disp}을 원금에 충당"
+
+    clauses = [_one(idx, entry) for idx, entry in enumerate(allocations)]
+    if remaining <= 0 and overpayment > 0:
+        if len(clauses) == 1:
+            return f"{clauses[0]}하여 원금을 모두 갚고 {over_disp}이 남습니다"
+        joined = "하고, ".join(clauses)
+        return f"{joined}하여 원금을 모두 갚고 {over_disp}이 남습니다"
+    if len(clauses) == 1:
+        return f"{clauses[0]}하여 남은 원금은 {remaining_disp}입니다"
+    joined = "하고, ".join(clauses)
+    return f"{joined}하여 남은 원금은 {remaining_disp}입니다"
+
+
 class CaliforniaSC100Compiler:
     """
     미국 캘리포니아 소액재판소 공식 Form SC-100 AcroForm 자동 주입 컴파일러 (Rev. Jan 1, 2026)
@@ -244,19 +593,24 @@ class KoreanLegalDocumentCompiler:
         p = loan_fact.creditor
         d = loan_fact.debtor
         p_name = _xml_escape(p.name)
-        p_phone = _xml_escape(p.phone or "미기재")
-        p_addr = _xml_escape(p.address or "미기재")
         d_name = _xml_escape(d.name)
-        d_phone = _xml_escape(d.phone or "미기재")
-        d_addr = _xml_escape(d.address or "미기재")
+        # K8: missing contacts are omitted cell-wise (no "(연락처: 미기재)").
+        p_line = p_name if not (p.phone or "").strip() else f"{p_name} (연락처: {_xml_escape(p.phone)})"
+        d_line = d_name if not (d.phone or "").strip() else f"{d_name} (연락처: {_xml_escape(d.phone)})"
 
         info_data = [
-            [Paragraph("<b>발 신 인:</b>", bold_style), Paragraph(f"{p_name} (연락처: {p_phone})", body_style)],
-            ["", Paragraph(f"주소: {p_addr}", body_style)],
-            [Paragraph("<b>수 신 인:</b>", bold_style), Paragraph(f"{d_name} (연락처: {d_phone})", body_style)],
-            ["", Paragraph(f"주소: {d_addr}", body_style)],
-            [Paragraph("<b>제    목:</b>", bold_style), Paragraph("<b>대여금 반환 청구의 건</b>", bold_style)],
+            [Paragraph("<b>발 신 인:</b>", bold_style), Paragraph(p_line, body_style)],
         ]
+        if (p.address or "").strip():
+            info_data.append(["", Paragraph(f"주소: {_xml_escape(p.address)}", body_style)])
+        info_data.append(
+            [Paragraph("<b>수 신 인:</b>", bold_style), Paragraph(d_line, body_style)]
+        )
+        if (d.address or "").strip():
+            info_data.append(["", Paragraph(f"주소: {_xml_escape(d.address)}", body_style)])
+        info_data.append(
+            [Paragraph("<b>제    목:</b>", bold_style), Paragraph("<b>대여금 반환 청구의 건</b>", bold_style)]
+        )
         info_table = Table(info_data, colWidths=[65, 430])
         info_table.setStyle(TableStyle([
             ('VALIGN', (0,0), (-1,-1), 'TOP'),
@@ -283,11 +637,15 @@ class KoreanLegalDocumentCompiler:
 
         loan_d = _fmt_kr_date(loan_fact.loan_date)
         due_d = _fmt_kr_date(loan_fact.due_date)
+        # K8: letter voice (본인/귀하). K7: repayment wording moves after facts.
         item2 = (
-            f"2. 발신인은 귀하에게 <b>{loan_d}</b>에 금 <b>{principal_str}</b>을 대여하였으며, "
+            f"2. 본인은 귀하에게 <b>{loan_d}</b>에 금 <b>{principal_str}</b>을 대여하였으며, "
             f"귀하는 이를 <b>{due_d}</b>까지 전액 변제하기로 약정하였습니다."
         )
-        if loan_fact.repayments:
+        calc_obj = getattr(verification, "calculation", None)
+        if calc_obj is not None:
+            repay_sentence = build_repayment_sentence(loan_fact, calc_obj, style="letter")
+        elif loan_fact.repayments:
             if as_of is not None:
                 reps = sorted(
                     [r for r in loan_fact.repayments if r.payment_date <= as_of],
@@ -299,36 +657,45 @@ class KoreanLegalDocumentCompiler:
                 r = reps[0]
                 r_d = _fmt_kr_date(r.payment_date)
                 r_amt = _fmt_won(r.amount)
-                item2 += f"<br/>그중 {r_amt}원을 {r_d} 받았고 남은 원금은 {remaining_str}입니다."
+                repay_sentence = f"본인은 {r_d} 귀하로부터 받은 {r_amt}원을 원금에 충당하여 남은 원금은 {remaining_str}입니다."
             elif len(reps) > 1:
                 total_repaid = sum((r.amount for r in reps), Decimal("0"))
                 total_s = _fmt_won(total_repaid)
-                last_d = _fmt_kr_date(reps[-1].payment_date)
-                item2 += (
-                    f"<br/>그중 총 {total_s}원을 {len(reps)}회에 나누어 받았고 "
-                    f"남은 원금은 {remaining_str}입니다. (마지막 수령일 {last_d})"
-                )
+                repay_sentence = f"본인은 귀하로부터 총 {total_s}원을 {len(reps)}회에 나누어 받아 원금에 충당하여 남은 원금은 {remaining_str}입니다."
+            else:
+                repay_sentence = ""
+        else:
+            repay_sentence = ""
 
         if as_of is not None:
             deadline = as_of + timedelta(days=7)
             deadline_s = _fmt_kr_date(deadline)
             item4 = (
-                f"4. 이에 발신인은 본 내용증명을 통하여 귀하에게 "
+                f"4. 이에 본인은 본 내용증명을 통하여 귀하에게 "
                 f"<b>{deadline_s}</b>까지 위 원리금 합계액(금 {total_disp})을 보내 주시기 바랍니다."
             )
         else:
             item4 = (
-                f"4. 이에 발신인은 본 내용증명을 통하여 귀하에게 "
+                f"4. 이에 본인은 본 내용증명을 통하여 귀하에게 "
                 f"위 원리금 합계액(금 {total_str})을 보내 주시기 바랍니다."
             )
 
-        item3 = "3. 발신인은 변제기 이후 현재까지 남은 돈을 받지 못했습니다."
-        if fact_sentences:
-            fact_block = "<br/><br/>".join(_xml_escape(s) for s in fact_sentences)
+        item3 = "3. 본인은 변제기 이후 현재까지 남은 돈을 받지 못했습니다."
+        letter_facts = [
+            format_letter_fact(s, p.name, d.name)
+            for s in ensure_numbered_facts(fact_sentences or [])
+        ]
+        middle_parts: List[str] = []
+        if letter_facts:
+            middle_parts.append("<br/><br/>".join(_xml_escape(s) for s in letter_facts))
+        if repay_sentence:
+            middle_parts.append(_xml_escape(repay_sentence) + ".")
+        middle = "<br/><br/>".join(middle_parts)
+        if middle:
             body_text = (
                 f"1. 귀하의 무궁한 발전을 기원합니다.<br/><br/>"
                 f"{item2}<br/><br/>"
-                f"{fact_block}<br/><br/>"
+                f"{middle}<br/><br/>"
                 f"{item3}<br/><br/>"
                 f"{item4}"
             )
@@ -406,21 +773,28 @@ class KoreanLegalDocumentCompiler:
         else:
             claim_purpose = ""
 
+        # K11: drop approximate "경" (confirmed dates are exact).
         if loan_fact.demand_date:
             dem_s = _fmt_kr_date(loan_fact.demand_date)
-            demand_clause = f"채권자는 {dem_s}경 채무자에게 변제를 요청하였으나, 채무자는 현재까지 이를 지급하지 않고 있습니다."
+            demand_clause = f"채권자는 {dem_s} 채무자에게 변제를 요청하였으나, 채무자는 현재까지 이를 지급하지 않고 있습니다."
         else:
             demand_clause = "채무자는 현재까지 남은 돈을 지급하지 않고 있습니다."
 
         loan_s = _fmt_kr_date(loan_fact.loan_date)
         due_s = _fmt_kr_date(loan_fact.due_date)
         lend_part = (
-            f"채권자는 {loan_s}경 채무자에게 금 {principal_str}원을 대여하였고, "
+            f"채권자는 {loan_s} 채무자에게 금 {principal_str}원을 대여하였고, "
             f"채무자는 이를 {due_s}까지 변제하기로 약정하였습니다."
         )
         if loan_fact.agreed_interest_rate is not None:
             lend_part += f" 이자는 연 {_fmt_rate(loan_fact.agreed_interest_rate)}%로 정하였습니다."
-        if loan_fact.repayments:
+        # K6/K7: shared repayment wording after facts (no inline short lines).
+        calc_obj = getattr(verification, "calculation", None)
+        if calc_obj is not None:
+            repay_sentence = build_repayment_sentence(loan_fact, calc_obj, style="ecourt")
+            if repay_sentence and not repay_sentence.endswith("."):
+                repay_sentence = repay_sentence + "."
+        elif loan_fact.repayments:
             if base_date is not None:
                 reps = sorted(
                     [r for r in loan_fact.repayments if r.payment_date <= base_date],
@@ -432,39 +806,58 @@ class KoreanLegalDocumentCompiler:
                 r = reps[0]
                 r_d = _fmt_kr_date(r.payment_date)
                 r_amt = _fmt_won(r.amount)
-                lend_part += f" 그중 {r_amt}원을 {r_d} 받았고 남은 원금은 {remaining_str}원입니다."
+                repay_sentence = f"채권자는 {r_d} 채무자로부터 받은 {r_amt}원을 원금에 충당하여 남은 원금은 {remaining_str}원입니다."
             elif len(reps) > 1:
                 total_repaid = sum((r.amount for r in reps), Decimal("0"))
                 total_s = _fmt_won(total_repaid)
-                last_d = _fmt_kr_date(reps[-1].payment_date)
-                lend_part += (
-                    f" 그중 총 {total_s}원을 {len(reps)}회에 나누어 받았고 "
-                    f"남은 원금은 {remaining_str}원입니다. (마지막 수령일 {last_d})"
-                )
+                repay_sentence = f"채권자는 채무자로부터 총 {total_s}원을 {len(reps)}회에 나누어 받아 원금에 충당하여 남은 원금은 {remaining_str}원입니다."
+            else:
+                repay_sentence = ""
+        else:
+            repay_sentence = ""
 
-        if fact_sentences:
-            fact_block = "\n".join(fact_sentences)
-            claim_cause_payment_order = (
-                f"1. 당사자 관계\n"
-                f"채권자는 채무자에게 금전을 대여한 자이며, 채무자는 이를 차용한 자입니다.\n\n"
-                f"2. 대여사실 및 변제약정\n"
-                f"{lend_part}\n{fact_block}\n\n"
-                f"3. 변제기 이후 상황\n"
-                f"약정 변제기가 지났음에도 {demand_clause}\n\n"
-                f"4. 결론\n"
-                f"따라서 채권자는 위 대여원금 및 지연손해금을 지급받기 위하여 본 신청에 이르렀습니다."
+        # K11: conclusion names the remaining principal explicitly.
+        try:
+            _rem = verification.reconciled_amount
+            _rem_d = _rem if isinstance(_rem, Decimal) else Decimal(str(_rem))
+        except Exception:
+            _rem_d = Decimal("0")
+        if _rem_d > 0:
+            conclusion = (
+                f"따라서 채권자는 남은 원금 {_fmt_won(_rem_d)}원 및 지연손해금을 "
+                f"지급받기 위하여 본 신청에 이르렀습니다."
             )
         else:
-            claim_cause_payment_order = (
-                f"1. 당사자 관계\n"
-                f"채권자는 채무자에게 금전을 대여한 자이며, 채무자는 이를 차용한 자입니다.\n\n"
-                f"2. 대여사실 및 변제약정\n"
-                f"{lend_part}\n\n"
-                f"3. 변제기 이후 상황\n"
-                f"약정 변제기가 지났음에도 {demand_clause}\n\n"
-                f"4. 결론\n"
-                f"따라서 채권자는 위 대여원금 및 지연손해금을 지급받기 위하여 본 신청에 이르렀습니다."
-            )
+            over_raw = _calc_field(calc_obj, "overpayment_amount", Decimal("0")) if calc_obj is not None else Decimal("0")
+            try:
+                over_d = over_raw if isinstance(over_raw, Decimal) else Decimal(str(over_raw))
+            except Exception:
+                over_d = Decimal("0")
+            if over_d > 0:
+                conclusion = (
+                    f"따라서 채권자는 원금을 모두 변제받고 {_fmt_won(over_d)}원이 "
+                    f"남았음을 밝힙니다."
+                )
+            else:
+                conclusion = "따라서 채권자는 남은 원금 및 지연손해금을 지급받기 위하여 본 신청에 이르렀습니다."
+
+        ecourt_facts = [format_ecourt_fact(s) for s in ensure_numbered_facts(fact_sentences or [])]
+        section2_parts = [lend_part]
+        if ecourt_facts:
+            section2_parts.append("\n".join(ecourt_facts))
+        if repay_sentence:
+            section2_parts.append(repay_sentence)
+        section2 = "\n".join(section2_parts)
+        claim_cause_payment_order = (
+            f"1. 당사자 관계\n"
+            f"채권자는 채무자에게 금전을 대여한 자이며, 채무자는 이를 차용한 자입니다.\n\n"
+            f"2. 대여사실 및 변제약정\n"
+            f"{section2}\n\n"
+            f"3. 변제기 이후 상황\n"
+            f"약정 변제기가 지났음에도 {demand_clause}\n\n"
+            f"4. 결론\n"
+            f"{conclusion}"
+        )
 
         evidence_citations = ", ".join([f"[{e.id} {e.title}]" for e in loan_fact.evidences])
         claim_cause_lawsuit = (

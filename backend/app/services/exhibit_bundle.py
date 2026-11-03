@@ -38,6 +38,10 @@ _ISO_DATE_RE = re.compile(r"^(\d{4})-(\d{1,2})-(\d{1,2})$")
 PRE_REDACTION_MARK = "가림 처리 전 사본"
 VIDEO_PLACEHOLDER = "영상 증거, 파일 별도 제출"
 PDF_PLACEHOLDER = "PDF 증거, 파일 별도 제출"
+# K3: images/PDF previews without a redacted copy embed no picture.
+MISSING_REDACTED_LINE = "가림 사본이 없어 이 쪽에 이미지를 넣지 않았습니다. 원본 파일은 따로 제출하세요."
+# K11: cover guide (remove before filing).
+COVER_REMOVE_GUIDE = "법원에 낼 때는 이 쪽을 빼세요."
 
 EvidenceLike = Union[Mapping[str, Any], Any]
 
@@ -113,11 +117,12 @@ def resolve_evidence_source(
     redacted: Optional[Mapping[str, Union[str, Path]]] = None,
     stills: Optional[Mapping[str, Union[str, Path]]] = None,
 ) -> Tuple[Optional[Path], bool, Optional[str]]:
-    """Pick the file to embed for one evidence.
+    """Pick the file to embed for one evidence (K3: redacted copies only).
 
-    Returns ``(path, used_redacted, placeholder)``. ``path`` is None when a
-    text placeholder should be rendered instead (video without a still, PDF
-    without a preview).
+    Returns ``(path, used_redacted, placeholder)``. Images and PDF previews
+    without a redacted copy embed no picture (``MISSING_REDACTED_LINE``);
+    original bytes never enter the bundle. Video without a still keeps
+    ``VIDEO_PLACEHOLDER``.
     """
     base = Path(evidence_dir)
     ex_id = str(_field(record, "ex_id", ""))
@@ -128,6 +133,9 @@ def resolve_evidence_source(
             return None
         path = Path(str(candidate))
         if not path.is_absolute():
+            direct = Path(str(candidate))
+            if direct.exists() and direct.is_file():
+                return direct
             path = base / path.name if path.name else base / str(candidate)
             if not path.exists():
                 alt = Path(str(candidate))
@@ -139,23 +147,10 @@ def resolve_evidence_source(
         if still is not None:
             return (still, False, None)
         return (None, False, VIDEO_PLACEHOLDER)
-    if kind == "pdf":
-        red = _exists((redacted or {}).get(ex_id)) if redacted else None
-        if red is not None:
-            return (red, True, None)
-        preview = base / f"{ex_id}_preview.png"
-        if preview.exists() and preview.is_file():
-            return (preview, False, None)
-        return (None, False, PDF_PLACEHOLDER)
     red = _exists((redacted or {}).get(ex_id)) if redacted else None
     if red is not None:
         return (red, True, None)
-    stored = str(_field(record, "stored_name", "") or "")
-    if stored:
-        original = base / Path(stored).name
-        if original.exists() and original.is_file():
-            return (original, False, None)
-    return (None, False, PDF_PLACEHOLDER)
+    return (None, False, MISSING_REDACTED_LINE)
 
 
 def _doc_template(output_path: Union[str, Path]) -> SimpleDocTemplate:
@@ -171,6 +166,54 @@ def _doc_template(output_path: Union[str, Path]) -> SimpleDocTemplate:
     )
 
 
+def _slice_tall_image(path: Path, max_w: float, max_h: float) -> List[Path]:
+    """Split a tall image so each slice stays legible (K10).
+
+    Slices keep full width; each slice height fits ``max_h`` when scaled to
+    ``max_w``. Single-slice images return ``[path]`` (no temp files).
+    """
+    size = _image_size(path)
+    if not size or size[0] <= 0 or size[1] <= 0:
+        return [path]
+    width, height = size
+    if width <= 0:
+        return [path]
+    scale_w = max_w / float(width)
+    if scale_w <= 0:
+        return [path]
+    max_slice_h = int(max_h / scale_w)
+    if max_slice_h <= 0 or height <= max_slice_h:
+        return [path]
+    try:
+        from PIL import Image as _PILImage
+        import tempfile as _tempfile
+    except Exception:
+        return [path]
+    try:
+        tmpdir = Path(_tempfile.mkdtemp(prefix="exhibit_slice_"))
+    except Exception:
+        return [path]
+    try:
+        with _PILImage.open(path) as image:
+            mode = image.mode
+            total = (height + max_slice_h - 1) // max_slice_h
+            out: List[Path] = []
+            for idx in range(total):
+                top = idx * max_slice_h
+                bottom = min(height, top + max_slice_h)
+                crop = image.crop((0, top, width, bottom))
+                target = tmpdir / f"{path.stem}_p{idx + 1}of{total}.png"
+                save_mode = mode if mode in ("RGB", "RGBA", "L") else "RGB"
+                try:
+                    crop.convert(save_mode).save(target)
+                except Exception:
+                    crop.save(target)
+                out.append(target)
+            return out
+    except Exception:
+        return [path]
+
+
 def build_exhibits_pdf(
     evidence: Sequence[EvidenceLike],
     evidence_dir: Union[str, Path],
@@ -178,7 +221,7 @@ def build_exhibits_pdf(
     redacted: Optional[Mapping[str, Union[str, Path]]] = None,
     stills: Optional[Mapping[str, Union[str, Path]]] = None,
 ) -> str:
-    """Write the exhibit bundle (cover + one page per evidence)."""
+    """Write the exhibit bundle (cover + evidence pages, K3/K10/K11)."""
     ordered = _sorted_evidence(evidence)
     doc = _doc_template(output_path)
     usable_w = A4[0] - 100
@@ -202,9 +245,9 @@ def build_exhibits_pdf(
     body_style = ParagraphStyle(
         "ExBody", fontName=KO_FONT, fontSize=11, leading=17, spaceAfter=8,
     )
-    warn_style = ParagraphStyle(
-        "ExWarn", fontName=KO_FONT, fontSize=9, leading=13, alignment=1,
-        textColor=colors.HexColor("#777777"), spaceBefore=10,
+    guide_style = ParagraphStyle(
+        "ExGuide", fontName=KO_FONT_BOLD, fontSize=10, leading=14, alignment=1,
+        textColor=colors.HexColor("#333333"), spaceBefore=16,
     )
     notice_style = ParagraphStyle(
         "ExNotice", fontName=KO_FONT, fontSize=7, leading=10, alignment=1,
@@ -238,33 +281,55 @@ def build_exhibits_pdf(
         ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
     ]))
     elements.append(index)
+    elements.append(Paragraph(_xml_escape(COVER_REMOVE_GUIDE), guide_style))
     elements.append(Paragraph(_xml_escape(NOTICE_KO), notice_style))
     elements.append(Paragraph(_xml_escape(DISCLAIMER_KO), disclaimer_style))
 
-    for position, record in enumerate(ordered):
-        elements.append(PageBreak())
-        label = str(_field(record, "label", ""))
-        filename = str(_field(record, "filename", ""))
-        sha = _sha_short(str(_field(record, "sha256", "")))
-        header = _xml_escape(label)
-        sub = _xml_escape(f"{filename} · SHA-256 앞 8자리 {sha}" if sha else filename)
-        elements.append(Paragraph(header, head_style))
-        if sub:
-            elements.append(Paragraph(sub, meta_style))
-        source, used_redacted, placeholder = resolve_evidence_source(
-            record, evidence_dir, redacted=redacted, stills=stills,
-        )
-        if source is not None:
-            elements.append(_scaled_image(source, usable_w, usable_h - 120))
-            if not used_redacted and str(_field(record, "kind", "")) != "video":
-                elements.append(Paragraph(_xml_escape(PRE_REDACTION_MARK), warn_style))
-        else:
-            elements.append(Spacer(1, 40))
-            elements.append(Paragraph(
-                _xml_escape(placeholder or PDF_PLACEHOLDER), body_style,
-            ))
-        _ = position
-    doc.build(elements)
+    temp_dirs: set = set()
+    try:
+        for position, record in enumerate(ordered):
+            label = str(_field(record, "label", ""))
+            filename = str(_field(record, "filename", ""))
+            sha = _sha_short(str(_field(record, "sha256", "")))
+            sub = _xml_escape(f"{filename} · SHA-256 앞 8자리 {sha}" if sha else filename)
+            source, _used_redacted, placeholder = resolve_evidence_source(
+                record, evidence_dir, redacted=redacted, stills=stills,
+            )
+            if source is None:
+                elements.append(PageBreak())
+                elements.append(Paragraph(_xml_escape(label), head_style))
+                if sub:
+                    elements.append(Paragraph(sub, meta_style))
+                elements.append(Spacer(1, 40))
+                elements.append(Paragraph(
+                    _xml_escape(placeholder or MISSING_REDACTED_LINE), body_style,
+                ))
+                continue
+            slices = _slice_tall_image(source, usable_w, usable_h - 120)
+            try:
+                for candidate in slices:
+                    if candidate != source:
+                        temp_dirs.add(str(candidate.parent))
+            except Exception:
+                pass
+            total = len(slices)
+            for idx, part in enumerate(slices, start=1):
+                elements.append(PageBreak())
+                header = label if total <= 1 else f"{label} ({idx}/{total})"
+                elements.append(Paragraph(_xml_escape(header), head_style))
+                if sub:
+                    elements.append(Paragraph(sub, meta_style))
+                elements.append(_scaled_image(part, usable_w, usable_h - 120))
+            _ = position
+        doc.build(elements)
+    finally:
+        import shutil as _shutil
+
+        for tmp in temp_dirs:
+            try:
+                _shutil.rmtree(tmp, ignore_errors=True)
+            except Exception:
+                pass
     return str(output_path)
 
 
@@ -310,35 +375,82 @@ def _reading_dates(readings: Optional[Sequence[Mapping[str, Any]]]) -> Dict[str,
     return found
 
 
+def _repayment_ex_ids_sorted(confirmed: Mapping[str, Any]) -> List[str]:
+    roles = _roles_of(confirmed)
+    ids = [ex_id for ex_id, role in roles.items() if role == "repayment"]
+    return sorted(ids, key=ex_num)
+
+
+def _repayments_of(confirmed: Mapping[str, Any]) -> List[Dict[str, Any]]:
+    fields = _fields_of(confirmed)
+    repayments = fields.get("repayments", []) or []
+    if not isinstance(repayments, list):
+        return []
+    return [entry for entry in repayments if isinstance(entry, dict)]
+
+
+def _own_repayments(
+    record: EvidenceLike, confirmed: Mapping[str, Any]
+) -> List[Dict[str, Any]]:
+    """Repayments belonging to this evidence (K9: per-evidence only)."""
+    ex_id = str(_field(record, "ex_id", ""))
+    repayments = _repayments_of(confirmed)
+    ordered = _repayment_ex_ids_sorted(confirmed)
+    if ex_id not in ordered:
+        return []
+    # Single repayment evidence covers every repayment (mapping unknown).
+    if len(ordered) == 1:
+        return repayments
+    try:
+        position = ordered.index(ex_id)
+    except ValueError:
+        return []
+    if 0 <= position < len(repayments):
+        return [repayments[position]]
+    return []
+
+
+def evidence_display_name(
+    record: EvidenceLike,
+    confirmed: Mapping[str, Any],
+) -> str:
+    """증거 이름 cell by role/kind (K9; no filenames, no guessing)."""
+    roles = _roles_of(confirmed)
+    ex_id = str(_field(record, "ex_id", ""))
+    kind = str(_field(record, "kind", ""))
+    role = roles.get(ex_id, "other")
+    filename = str(_field(record, "filename", "")).lower()
+    if role in ("loan_transfer", "repayment"):
+        return "송금확인증"
+    if kind == "video":
+        return "대화 화면 녹화"
+    if kind == "pdf":
+        if "iou" in filename or "차용" in filename or "loan" in filename:
+            return "차용증"
+        return "문서 사본"
+    if "iou" in filename or "차용" in filename:
+        return "차용증"
+    return "대화 화면 캡처"
+
+
 def evidence_created_label(
     record: EvidenceLike,
     confirmed: Mapping[str, Any],
     readings: Optional[Sequence[Mapping[str, Any]]] = None,
 ) -> str:
-    """작성일 cell: confirmed dates by role, readings fallback, else '-'."""
+    """작성일 cell: confirmed dates only (K9, no estimation)."""
+    _ = readings
     fields = _fields_of(confirmed)
     roles = _roles_of(confirmed)
     ex_id = str(_field(record, "ex_id", ""))
-    kind = str(_field(record, "kind", ""))
     role = roles.get(ex_id, "other")
-    if kind == "video":
-        return "-"
     if role == "loan_transfer" and fields.get("loan_date"):
         return fmt_kr_date(fields["loan_date"])
     if role == "repayment":
-        repayments = fields.get("repayments", []) or []
-        if isinstance(repayments, list) and repayments and isinstance(repayments[0], dict):
-            first = repayments[0].get("date")
-            if first:
-                return fmt_kr_date(first)
+        own = _own_repayments(record, confirmed)
+        if own and own[0].get("date"):
+            return fmt_kr_date(own[0].get("date"))
         return "-"
-    filename = str(_field(record, "filename", "")).lower()
-    if kind == "pdf" or "iou" in filename or "차용" in filename:
-        if fields.get("loan_date"):
-            return fmt_kr_date(fields["loan_date"])
-    fallback = _reading_dates(readings).get(ex_id)
-    if fallback:
-        return fmt_kr_date(fallback)
     return "-"
 
 
@@ -346,7 +458,7 @@ def evidence_summary(
     record: EvidenceLike,
     confirmed: Mapping[str, Any],
 ) -> str:
-    """내용 cell: user-confirmed facts only, no legal evaluation."""
+    """내용 cell: confirmed facts for this evidence only (K9)."""
     fields = _fields_of(confirmed)
     roles = _roles_of(confirmed)
     ex_id = str(_field(record, "ex_id", ""))
@@ -355,41 +467,34 @@ def evidence_summary(
     creditor = str(fields.get("creditor_name", "") or "").strip()
     debtor = str(fields.get("debtor_name", "") or "").strip()
     parties = f"{creditor} → {debtor}" if creditor and debtor else ""
-    if kind == "video":
-        return VIDEO_PLACEHOLDER
+    legs = f"{debtor} → {creditor}" if creditor and debtor else ""
     if role == "loan_transfer":
         loan_date = fmt_kr_date(fields.get("loan_date", ""))
         amount = fmt_amount_won(fields.get("principal", ""))
         core = f"{loan_date} {amount} 이체 기록".strip()
         return f"{parties}, {core}" if parties else core
     if role == "repayment":
-        repayments = fields.get("repayments", []) or []
-        if isinstance(repayments, list) and len(repayments) == 1 and isinstance(repayments[0], dict):
-            when = fmt_kr_date(repayments[0].get("date", ""))
-            amount = fmt_amount_won(repayments[0].get("amount", ""))
-            legs = f"{debtor} → {creditor}" if creditor and debtor else ""
+        own = _own_repayments(record, confirmed)
+        if len(own) == 1:
+            when = fmt_kr_date(own[0].get("date", ""))
+            amount = fmt_amount_won(own[0].get("amount", ""))
             core = f"{when} {amount} 이체 기록".strip()
             return f"{legs}, {core}" if legs else core
-        if isinstance(repayments, list) and len(repayments) > 1:
-            parts = []
-            for entry in repayments:
-                if not isinstance(entry, dict):
-                    continue
-                parts.append(
-                    f"{fmt_kr_date(entry.get('date', ''))} "
-                    f"{fmt_amount_won(entry.get('amount', ''))}".strip()
-                )
+        if len(own) > 1:
+            parts = [
+                f"{fmt_kr_date(entry.get('date', ''))} "
+                f"{fmt_amount_won(entry.get('amount', ''))}".strip()
+                for entry in own
+            ]
             joined = "; ".join(part for part in parts if part)
-            return f"변제 이체 기록 {len(parts)}건({joined})" if joined else "변제 이체 기록"
+            core = f"변제 이체 기록 {len(parts)}건({joined})" if joined else "변제 이체 기록"
+            return f"{legs}, {core}" if legs else core
         return "변제 이체 기록"
+    if kind == "video":
+        return "대화 기록"
     filename = str(_field(record, "filename", "")).lower()
     if kind == "pdf" or "iou" in filename or "차용" in filename:
-        loan_date = fmt_kr_date(fields.get("loan_date", ""))
-        if loan_date and fields.get("loan_date"):
-            return f"{loan_date} 작성 차용증 사본"
         return "차용증 사본"
-    if ex_id in _highlight_ex_ids(confirmed):
-        return "대화 기록(사용자 지정 발화 포함)"
     return "대화 기록"
 
 
@@ -428,12 +533,12 @@ def build_evidence_list_pdf(
     ]]
     for record in ordered:
         label = _xml_escape(str(_field(record, "label", "")))
-        filename = _xml_escape(str(_field(record, "filename", "")))
+        ev_name = _xml_escape(evidence_display_name(record, confirmed))
         created = _xml_escape(evidence_created_label(record, confirmed, readings))
         summary = _xml_escape(evidence_summary(record, confirmed))
         rows.append([
             Paragraph(label, cell_style),
-            Paragraph(filename, cell_style),
+            Paragraph(ev_name, cell_style),
             Paragraph(created, cell_style),
             Paragraph(summary, cell_style),
         ])
@@ -451,12 +556,15 @@ def build_evidence_list_pdf(
 
 
 __all__ = [
+    "COVER_REMOVE_GUIDE",
+    "MISSING_REDACTED_LINE",
+    "PDF_PLACEHOLDER",
     "PRE_REDACTION_MARK",
     "VIDEO_PLACEHOLDER",
-    "PDF_PLACEHOLDER",
     "build_evidence_list_pdf",
     "build_exhibits_pdf",
     "evidence_created_label",
+    "evidence_display_name",
     "evidence_summary",
     "ex_num",
     "fmt_amount_won",

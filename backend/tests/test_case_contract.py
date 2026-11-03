@@ -336,7 +336,7 @@ def test_full_flow_to_checkpoint_2(case_env):
     package = res.json()
     assert_keys_subset(package, load_example("package.json"))
     assert "4,014,383원" in package["ecourt"]["claim_purpose"]
-    assert "[갑 제4호증]" in package["ecourt"]["claim_cause_payment_order"]
+    assert "(갑 제4호증)" in package["ecourt"]["claim_cause_payment_order"]  # M5-fix1 K8
 
     res = client.get(f"/api/cases/{case_id}/files/content_proof.pdf")
     assert res.status_code == 200

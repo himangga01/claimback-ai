@@ -60,7 +60,21 @@ def case_env(tmp_path, monkeypatch):
     return TestClient(app)
 
 
-def _run_to_package(client: TestClient):
+def _make_redacted_dummies(case_id: str) -> None:
+    """Create files/redacted_EXn.png dummies (K3: only these count)."""
+    target = case_state_mod.files_dir(case_id)
+    target.mkdir(parents=True, exist_ok=True)
+    state = coord.get_case(case_id)
+    for record in state.evidence:
+        if record.kind not in ("image", "pdf"):
+            continue
+        path = target / f"redacted_{record.ex_id}.png"
+        if not path.exists():
+            image = PILImage.new("RGB", (32, 32), (200, 200, 200))
+            image.save(path)
+
+
+def _run_to_package(client: TestClient, with_redacted: bool = False):
     res = client.post("/api/cases/sample", json={"set": "kr"})
     assert res.status_code == 200, res.text
     case_id = res.json()["case_id"]
@@ -78,6 +92,8 @@ def _run_to_package(client: TestClient):
         for s in drafts["sentences"]]}
     res = client.put(f"/api/cases/{case_id}/drafts", json=approvals)
     assert all(s["approved"] for s in res.json()["sentences"]), res.text
+    if with_redacted:
+        _make_redacted_dummies(case_id)
     res = client.post(f"/api/cases/{case_id}/run", json={})
     assert res.json()["state"] == "CHECKPOINT_2", res.text
     package = client.get(f"/api/cases/{case_id}/package").json()
@@ -148,8 +164,10 @@ def test_approval_sentences_use_kana_not_big_numbers():
 def test_package_texts_carry_allocation_sentence(case_env):
     _case_id, package, _state = _run_to_package(case_env)
     cause = package["ecourt"]["claim_cause_payment_order"]
-    assert "지연손해금 14,383원" in cause
+    # M5-fix1 K7: detailed wording with period/rate (same source as content proof).
+    assert "지연손해금(2026. 4. 11.~2026. 5. 1., 연 5%) 14,383원" in cause
     assert "985,617원" in cause and "4,014,383원" in cause
+    assert "채권자는 2026. 5. 1. 채무자로부터 받은 1,000,000원" in cause
     assert "그중 1,000,000원을 2026. 5. 1. 받았고 남은 원금은" not in cause
     assert re.search(r"^가\. ", cause, re.M) is not None
     assert re.search(r"^1\. 당사자 관계", cause, re.M) is not None
@@ -160,7 +178,8 @@ def test_package_texts_carry_allocation_sentence(case_env):
 
 
 def test_package_has_three_files_and_g1b_pass(case_env):
-    _case_id, package, _state = _run_to_package(case_env)
+    # M5-fix1 K3: pass requires redacted copies; without them G1b names the gaps.
+    _case_id, package, _state = _run_to_package(case_env, with_redacted=True)
     names = [entry["name"] for entry in package["files"]]
     assert names == ["content_proof.pdf", "exhibits.pdf", "evidence_list.pdf"]
     gates = {entry["gate"]: entry for entry in package["gate_results"]}
@@ -178,6 +197,7 @@ def test_exhibits_pages_cover_and_labels(case_env, tmp_path):
     cover = reader.pages[0].extract_text() or ""
     assert "갑 호 증" in cover
     assert NOTICE_KO in _norm(cover) and DISCLAIMER_KO in _norm(cover)
+    assert exhibit_bundle_mod.COVER_REMOVE_GUIDE in _norm(cover)
     for position, record in enumerate(
             sorted(state.evidence, key=lambda r: deps.ex_num(r.ex_id)), start=1):
         text = reader.pages[position].extract_text() or ""
@@ -189,7 +209,9 @@ def test_exhibits_pages_cover_and_labels(case_env, tmp_path):
         if record.kind == "video":
             assert "영상 증거, 파일 별도 제출" in text
         if record.kind in ("image", "pdf"):
-            assert exhibit_bundle_mod.PRE_REDACTION_MARK in text
+            # M5-fix1 K3: no originals; missing redacted copies show one line.
+            assert exhibit_bundle_mod.MISSING_REDACTED_LINE in _norm(text)
+            assert exhibit_bundle_mod.PRE_REDACTION_MARK not in text
 
 
 def test_evidence_list_columns_and_facts_only(case_env):
@@ -212,6 +234,7 @@ def _solid_png(path: Path, size: int, color: tuple) -> None:
 
 
 def test_redacted_copy_replaces_original_in_pdf(tmp_path):
+    # M5-fix1 K3: without a redacted copy no picture is embedded at all.
     evidence_dir = tmp_path / "evidence"
     evidence_dir.mkdir()
     original = evidence_dir / "EX1_shot.png"
@@ -231,14 +254,12 @@ def test_redacted_copy_replaces_original_in_pdf(tmp_path):
     exhibit_bundle_mod.build_exhibits_pdf([record], evidence_dir, out_orig)
     images_red = PdfReader(str(out_red)).pages[1].images
     images_orig = PdfReader(str(out_orig)).pages[1].images
-    assert len(images_red) == 1 and len(images_orig) == 1
-    hash_red = hashlib.sha256(bytes(images_red[0].data)).hexdigest()
-    hash_orig = hashlib.sha256(bytes(images_orig[0].data)).hexdigest()
-    assert hash_red != hash_orig
+    assert len(images_red) == 1 and len(images_orig) == 0
     text_red = PdfReader(str(out_red)).pages[1].extract_text() or ""
     text_orig = PdfReader(str(out_orig)).pages[1].extract_text() or ""
-    assert exhibit_bundle_mod.PRE_REDACTION_MARK not in text_red
-    assert exhibit_bundle_mod.PRE_REDACTION_MARK in text_orig
+    assert exhibit_bundle_mod.MISSING_REDACTED_LINE not in _norm(text_red)
+    assert exhibit_bundle_mod.MISSING_REDACTED_LINE in _norm(text_orig)
+    assert out_orig.read_bytes().count(original.read_bytes()) == 0
 
 
 def test_no_full_account_or_resident_numbers_in_pdfs(case_env):
@@ -319,7 +340,8 @@ def test_g1b_blocks_tampered_amount_date_name(case_env):
 def test_g1b_checks_allocation_sentence_numbers(case_env):
     _package, docs = _package_docs(case_env)
     amounts, dates, names = _expected()
-    tampered = {name: text.replace("지연손해금 14,383원", "지연손해금 14,388원")
+    # M5-fix1 K7: new wording carries the period/rate before the amount.
+    tampered = {name: text.replace("14,383원", "14,388원")
                 for name, text in docs.items()}
     gate = final_check_mod.check_g1b(amounts, dates, names, tampered)
     assert gate.status == "fail"
