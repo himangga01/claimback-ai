@@ -1,7 +1,7 @@
 # ClaimBack-AI
 
 > **Meta Global AI Developer Hackathon 2026 — Build for Your World**
-> A free self-help tool that organizes your own evidence for an unpaid personal loan and fills standard Korean court-document text with facts you confirm. Not legal advice.
+> A free self-help tool that organizes your own evidence for an unpaid personal loan and fills standard Korean court-document text with facts you confirm. See the notice below.
 
 2026-11-02 기준 코드(커밋 76d9cce까지)는 대회 기간에 저장소 소유자가 작성했고, 2026-11-03 M-1부터는 Muse Code(`muse-spark-1.3`)가 구현하고 Claude Code가 명세·지시·리뷰했다.
 
@@ -33,7 +33,7 @@ A rule-based coordinator runs role agents with two human checkpoints:
 | **Checkpoint 1** | you confirm or correct every value | you |
 | Calculation | interest allocation, remaining principal, statutory rates | deterministic code |
 | Drafting | writes fact sentences with **slots only** (`{{principal}}`, `{{quote:EX1:item10}}`) | `muse-spark-1.3` (prompt `drafter.v2`) |
-| Verification | G1a no literal numbers/names, G3 every fact cites evidence, DRAFT no computed values or invented speech, NAMING no lawyer terms | rules |
+| Verification | G1a no literal numbers/names, G3 every fact cites evidence, DRAFT no computed values or invented speech, NAMING no professional titles | rules |
 | **Draft approval** | you approve or edit each sentence | you |
 | Packaging | renders the documents from your confirmed values; G1b re-checks every PDF against them, per document | rules |
 
