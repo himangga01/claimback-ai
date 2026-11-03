@@ -1,6 +1,6 @@
 # M1-fix2 검사 규칙·서류 마무리 (수정 지시서)
 
-- 작성: 2026-11-03 13:32 KST, Claude
+- 작성: 2026-11-03 13:20 KST, Claude
 - 수행: Muse Code (`muse-spark-1.3`), git 작업 트리 `C:\2026_project\claimback-wt\m1-fix2`(브랜치 `m1-fix2`, M0-fix2·M1-fix1·M2b·M3-fix1이 병합된 `main`에서 시작). M2a·M2b-fix1과 동시에 진행합니다. **Meta 실호출 없음.**
 - 먼저 읽을 것: `AGENTS.md`, 이 지시서, `reports/M1-fix1-review.md`(H1~H14)
 

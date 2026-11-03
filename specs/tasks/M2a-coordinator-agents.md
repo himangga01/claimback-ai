@@ -1,7 +1,7 @@
 # M2a 코디네이터·담당·사건 API (백엔드, 작업 지시서)
 
 - 작성: 2026-11-03 12:35 KST, Claude / 2판 12:58 KST(교차 리뷰 반영: 단계 A/B 분리, 고정 입력, 어댑터, 실행 ID, 편철, 오류 형식)
-- 수행: Muse Code (`muse-spark-1.3`), git 작업 트리 `C:\2026_project\claimback-wt\m2a-backend`(브랜치 `m2a-backend`, **M0-fix2·M1-fix1·M3·M2b가 병합된 `main`**에서 시작).
+- 수행: Muse Code (`muse-spark-1.3`), git 작업 트리 `C:\2026_project\claimback-wt\m2a-backend`(브랜치 `m2a-backend`, **M0-fix2·M1-fix1·M3·M3-fix1이 병합된 `main`**에서 시작). M2b(화면·E2E)는 M2b-fix1과 함께 병합되므로 이 작업 트리에는 `e2e/`가 없을 수 있습니다. M0-fix3·M1-fix2·M2b-fix1이 동시에 돌고 있습니다(`backend/app/meta/`, `backend/app/services/`, `frontend/` 수정 중).
 - 먼저 읽을 것: `AGENTS.md`, 이 지시서, `specs/case-api-contract.md`(v2, 이 작업이 구현할 약속), `specs/case-api-examples/*.json`, `reports/M0-review.md`, `reports/M0-fix1-review.md`, `reports/M0-fix2.md`, `reports/M1.md`·`M1-fix1.md`, `reports/M3.md`·`M3-fix1.md`
 - 참조: 에이전트 설계 `specs/ClaimBack-AI_에이전트_설계.md` 1장, 2-1, 3-1, 3-4, 3-6, 3-7, 3-9, 4-1~4-4 / 계획서 4-6 코디네이터 케이스
 
@@ -39,7 +39,8 @@
     - 모든 호출의 `run_id` = `case_id`(사건 전체에 실행당 상한). 실행 중 원장은 환경 변수 `META_LEDGER_PATH`가 가리키는 한 곳(기록 실행 때 `C:\2026_project\claimback-ai-meta\reports\cost_ledger.jsonl`로 지정).
 11. **편철** `agents/packager.py`: 승인된 문장을 슬롯 치환·조사 맞춤한 뒤 `fact_sentences`로 내용증명 PDF와 전자소송 문구에 넣습니다. 계산값은 `calculate_kr`(확정값, `as_of`). `GeneratedClaimDraft`가 필요하면 `claim_amount_claimed = remaining_principal`. 패키지 문구 전체에 명칭 검사.
 12. **기록 실행**(단계 B 마지막에 한 번): `META_MODE=record`, `META_LEDGER_PATH` 지정, 샘플 사건을 고정 입력으로 `CHECKPOINT_2`까지. 끝나면 **바로 재생으로 같은 흐름을 다시 돌려** fixture 누락이 없는지 확인. 누락이 있으면 그 단계만 다시 기록. 서로 다른 `case_id` 두 개로 재생해 `Review`·`Drafts`가 같음을 테스트로 확인.
-13. **E2E 확인**: 재생 모드로 서버를 띄우고(`127.0.0.1`, 빈 포트) M2b의 `e2e/test_case_flow.py`를 `E2E_BASE_URL`로 이 서버에 돌려 통과시킵니다(실패하면 원인과 약속과의 차이를 리포트에).
+12a. **기록 실행 동시성(13:29 추가)**: Windows 잠금 결함(M0-fix3에서 수정 중)을 피하려고, 기록 실행 때는 환경 변수 `READER_CONCURRENCY=1`로 판독을 한 번에 하나씩 순서대로 돌립니다(재생과 단계 A 테스트는 병렬 유지). `READER_CONCURRENCY`(기본 4)를 코디네이터 설정으로 둡니다.
+13. **E2E 확인**: 작업 트리에 `e2e/`가 있으면(M2b가 먼저 병합된 경우) 재생 모드로 서버를 띄우고(`127.0.0.1`, 빈 포트) `e2e/test_case_flow.py`를 `E2E_BASE_URL`로 이 서버에 돌립니다. 없으면 건너뛰고 리포트에 적습니다(병합 뒤 Claude가 실행).
 14. 리포트 `reports/M2a.md`(AGENTS.md 형식, 끝까지 저장 확인): 단계 A·B 결과, 실호출 횟수·비용(원장 요약), 단계별 지연, 재생 E2E 결과, 약속과 다르게 만든 부분, 어댑터에서 맞춘 이름.
 
 ## 하지 않을 일

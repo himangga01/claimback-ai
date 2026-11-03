@@ -1,6 +1,6 @@
 # M2b-fix1 화면 다듬기·E2E 실제 백엔드 대응·통합 정리 (수정 지시서)
 
-- 작성: 2026-11-03 13:25 KST, Claude
+- 작성: 2026-11-03 13:17 KST, Claude
 - 수행: Muse Code (`muse-spark-1.3`), git 작업 트리 `C:\2026_project\claimback-wt\m2b-fix1`(브랜치 `m2b-fix1`, M0-fix2·M1-fix1·M2b·M3-fix1이 병합된 `main`에서 시작). M2a(백엔드)와 동시에 진행합니다. **Meta 실호출 없음.**
 - 먼저 읽을 것: `AGENTS.md`, 이 지시서, `reports/M2b-review.md`(U1~U20), `reports/M3-fix1-review.md`(README·테스트 항목), `specs/case-api-contract.md`(v2), `specs/case-api-examples/`
 
