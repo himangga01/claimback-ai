@@ -378,6 +378,9 @@ async def generated_file(case_id: str, name: str) -> Any:
         path = files_dir(case_id) / safe
         if not path.exists() or not path.is_file():
             return err(404, "not_found", "파일을 찾을 수 없습니다.")
+        if safe.endswith(".png"):
+            # L7: redacted copies and masks open inside the browser.
+            return FileResponse(str(path), media_type="image/png")
         media = "application/pdf" if safe.endswith(".pdf") else "application/octet-stream"
         return FileResponse(str(path), media_type=media, filename=safe)
     except Exception:

@@ -7,14 +7,14 @@
       "mask_box": {
         "x1": 211,
         "y1": 191,
-        "x2": 346,
+        "x2": 336,
         "y2": 241,
         "system": "pixel",
         "ref_w": 640,
         "ref_h": 640
       },
       "keep_box": {
-        "x1": 346,
+        "x1": 336,
         "y1": 198,
         "x2": 403,
         "y2": 234,
@@ -23,7 +23,12 @@
         "ref_h": 640
       },
       "reason": "계좌번호 끝 4자리 유지",
-      "needs_review": false
+      "needs_review": false,
+      "band_counts": {
+        "top": 0,
+        "bottom": 0,
+        "left": 0
+      }
     },
     {
       "ex_id": "EX4",
@@ -32,14 +37,14 @@
       "mask_box": {
         "x1": 211,
         "y1": 335,
-        "x2": 346,
+        "x2": 336,
         "y2": 385,
         "system": "pixel",
         "ref_w": 640,
         "ref_h": 640
       },
       "keep_box": {
-        "x1": 346,
+        "x1": 336,
         "y1": 342,
         "x2": 403,
         "y2": 378,
@@ -48,7 +53,12 @@
         "ref_h": 640
       },
       "reason": "계좌번호 끝 4자리 유지",
-      "needs_review": false
+      "needs_review": false,
+      "band_counts": {
+        "top": 0,
+        "bottom": 0,
+        "left": 0
+      }
     },
     {
       "ex_id": "EX5",
@@ -57,14 +67,14 @@
       "mask_box": {
         "x1": 211,
         "y1": 191,
-        "x2": 346,
+        "x2": 336,
         "y2": 241,
         "system": "pixel",
         "ref_w": 640,
         "ref_h": 640
       },
       "keep_box": {
-        "x1": 346,
+        "x1": 336,
         "y1": 198,
         "x2": 403,
         "y2": 234,
@@ -73,7 +83,12 @@
         "ref_h": 640
       },
       "reason": "계좌번호 끝 4자리 유지",
-      "needs_review": false
+      "needs_review": false,
+      "band_counts": {
+        "top": 0,
+        "bottom": 0,
+        "left": 0
+      }
     },
     {
       "ex_id": "EX5",
@@ -82,14 +97,14 @@
       "mask_box": {
         "x1": 211,
         "y1": 335,
-        "x2": 346,
+        "x2": 336,
         "y2": 385,
         "system": "pixel",
         "ref_w": 640,
         "ref_h": 640
       },
       "keep_box": {
-        "x1": 346,
+        "x1": 336,
         "y1": 342,
         "x2": 403,
         "y2": 378,
@@ -98,24 +113,33 @@
         "ref_h": 640
       },
       "reason": "계좌번호 끝 4자리 유지",
-      "needs_review": false
+      "needs_review": false,
+      "band_counts": {
+        "top": 0,
+        "bottom": 0,
+        "left": 0
+      }
     },
     {
       "ex_id": "EX6",
       "item_id": "item8",
       "kind": "phone",
       "mask_box": {
-        "x1": 489,
+        "x1": 530,
         "y1": 374,
-        "x2": 566,
+        "x2": 588,
         "y2": 429,
         "system": "pixel",
         "ref_w": 1240,
         "ref_h": 1754
       },
       "keep_box": null,
-      "reason": "전화번호 가운데 4자리 가림",
-      "needs_review": false
+      "reason": "전화번호 가운데 4자리 가림; 가림 상자 밖에 글자가 남아 있을 수 있음",
+      "needs_review": true,
+      "band_counts": {
+        "top": 20,
+        "bottom": 0
+      }
     },
     {
       "ex_id": "EX6",
@@ -131,8 +155,12 @@
         "ref_h": 1754
       },
       "keep_box": null,
-      "reason": "전화번호 가운데 4자리 가림",
-      "needs_review": false
+      "reason": "전화번호 가운데 4자리 가림; 가림 상자 밖에 글자가 남아 있을 수 있음",
+      "needs_review": true,
+      "band_counts": {
+        "top": 37,
+        "bottom": 0
+      }
     },
     {
       "ex_id": "EX6",
@@ -148,8 +176,13 @@
         "ref_h": 1754
       },
       "keep_box": null,
-      "reason": "주민번호 뒷 7자리 가림",
-      "needs_review": false
+      "reason": "주민번호 뒷 7자리 가림; 가림 상자 밖에 글자가 남아 있을 수 있음",
+      "needs_review": true,
+      "band_counts": {
+        "top": 84,
+        "bottom": 0,
+        "right": 9
+      }
     },
     {
       "ex_id": "EX1",
@@ -166,7 +199,13 @@
       },
       "keep_box": null,
       "reason": "얼굴 가림",
-      "needs_review": false
+      "needs_review": false,
+      "band_counts": {
+        "top": 0,
+        "bottom": 0,
+        "left": 0,
+        "right": 0
+      }
     },
     {
       "ex_id": "EX2",
@@ -183,34 +222,50 @@
       },
       "keep_box": null,
       "reason": "얼굴 가림",
-      "needs_review": false
+      "needs_review": false,
+      "band_counts": {
+        "top": 0,
+        "bottom": 0,
+        "left": 0,
+        "right": 0
+      }
     }
   ],
   "previews": [
     {
       "ex_id": "EX1",
-      "url": "/api/cases/case_3d6af1a15e6d/files/redacted_EX1.png",
+      "url": "/api/cases/case_596f57f81dc6/files/redacted_EX1.png",
+      "status": "redacted",
+      "reason": null,
       "needs_review": false
     },
     {
       "ex_id": "EX2",
-      "url": "/api/cases/case_3d6af1a15e6d/files/redacted_EX2.png",
+      "url": "/api/cases/case_596f57f81dc6/files/redacted_EX2.png",
+      "status": "redacted",
+      "reason": null,
       "needs_review": false
     },
     {
       "ex_id": "EX4",
-      "url": "/api/cases/case_3d6af1a15e6d/files/redacted_EX4.png",
+      "url": "/api/cases/case_596f57f81dc6/files/redacted_EX4.png",
+      "status": "redacted",
+      "reason": null,
       "needs_review": false
     },
     {
       "ex_id": "EX5",
-      "url": "/api/cases/case_3d6af1a15e6d/files/redacted_EX5.png",
+      "url": "/api/cases/case_596f57f81dc6/files/redacted_EX5.png",
+      "status": "redacted",
+      "reason": null,
       "needs_review": false
     },
     {
       "ex_id": "EX6",
-      "url": "/api/cases/case_3d6af1a15e6d/files/redacted_EX6.png",
-      "needs_review": false
+      "url": "/api/cases/case_596f57f81dc6/files/redacted_EX6.png",
+      "status": "redacted",
+      "reason": "가림 상자 밖에 글자가 남아 있을 수 있음",
+      "needs_review": true
     }
   ],
   "leak_check": {

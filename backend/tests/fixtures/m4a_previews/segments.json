@@ -16,7 +16,7 @@
           "ref_h": 960
         },
         "score": 1.0,
-        "mask_url": "/api/cases/case_3d6af1a15e6d/files/mask_EX1_chat_bubble_noun0.png"
+        "mask_url": "/api/cases/case_596f57f81dc6/files/mask_EX1_chat_bubble_noun0.png"
       },
       {
         "target": "chat_bubble",
@@ -31,7 +31,7 @@
           "ref_h": 960
         },
         "score": 1.0,
-        "mask_url": "/api/cases/case_3d6af1a15e6d/files/mask_EX1_chat_bubble_noun1.png"
+        "mask_url": "/api/cases/case_596f57f81dc6/files/mask_EX1_chat_bubble_noun1.png"
       },
       {
         "target": "chat_bubble",
@@ -46,7 +46,7 @@
           "ref_h": 960
         },
         "score": 1.0,
-        "mask_url": "/api/cases/case_3d6af1a15e6d/files/mask_EX1_chat_bubble_noun2.png"
+        "mask_url": "/api/cases/case_596f57f81dc6/files/mask_EX1_chat_bubble_noun2.png"
       },
       {
         "target": "chat_bubble",
@@ -61,7 +61,7 @@
           "ref_h": 960
         },
         "score": 1.0,
-        "mask_url": "/api/cases/case_3d6af1a15e6d/files/mask_EX1_chat_bubble_noun3.png"
+        "mask_url": "/api/cases/case_596f57f81dc6/files/mask_EX1_chat_bubble_noun3.png"
       },
       {
         "target": "chat_bubble",
@@ -76,7 +76,7 @@
           "ref_h": 960
         },
         "score": 1.0,
-        "mask_url": "/api/cases/case_3d6af1a15e6d/files/mask_EX1_chat_bubble_noun4.png"
+        "mask_url": "/api/cases/case_596f57f81dc6/files/mask_EX1_chat_bubble_noun4.png"
       },
       {
         "target": "face",
@@ -91,7 +91,7 @@
           "ref_h": 960
         },
         "score": 1.0,
-        "mask_url": "/api/cases/case_3d6af1a15e6d/files/mask_EX1_face_noun5.png"
+        "mask_url": "/api/cases/case_596f57f81dc6/files/mask_EX1_face_noun5.png"
       }
     ],
     "status": "ok"
@@ -113,7 +113,7 @@
           "ref_h": 2400
         },
         "score": 1.0,
-        "mask_url": "/api/cases/case_3d6af1a15e6d/files/mask_EX2_chat_bubble_noun0.png"
+        "mask_url": "/api/cases/case_596f57f81dc6/files/mask_EX2_chat_bubble_noun0.png"
       },
       {
         "target": "chat_bubble",
@@ -128,7 +128,7 @@
           "ref_h": 2400
         },
         "score": 1.0,
-        "mask_url": "/api/cases/case_3d6af1a15e6d/files/mask_EX2_chat_bubble_noun1.png"
+        "mask_url": "/api/cases/case_596f57f81dc6/files/mask_EX2_chat_bubble_noun1.png"
       },
       {
         "target": "chat_bubble",
@@ -143,7 +143,7 @@
           "ref_h": 2400
         },
         "score": 1.0,
-        "mask_url": "/api/cases/case_3d6af1a15e6d/files/mask_EX2_chat_bubble_noun2.png"
+        "mask_url": "/api/cases/case_596f57f81dc6/files/mask_EX2_chat_bubble_noun2.png"
       },
       {
         "target": "chat_bubble",
@@ -158,7 +158,7 @@
           "ref_h": 2400
         },
         "score": 1.0,
-        "mask_url": "/api/cases/case_3d6af1a15e6d/files/mask_EX2_chat_bubble_noun3.png"
+        "mask_url": "/api/cases/case_596f57f81dc6/files/mask_EX2_chat_bubble_noun3.png"
       },
       {
         "target": "chat_bubble",
@@ -173,7 +173,7 @@
           "ref_h": 2400
         },
         "score": 1.0,
-        "mask_url": "/api/cases/case_3d6af1a15e6d/files/mask_EX2_chat_bubble_noun4.png"
+        "mask_url": "/api/cases/case_596f57f81dc6/files/mask_EX2_chat_bubble_noun4.png"
       },
       {
         "target": "chat_bubble",
@@ -188,7 +188,7 @@
           "ref_h": 2400
         },
         "score": 1.0,
-        "mask_url": "/api/cases/case_3d6af1a15e6d/files/mask_EX2_chat_bubble_noun5.png"
+        "mask_url": "/api/cases/case_596f57f81dc6/files/mask_EX2_chat_bubble_noun5.png"
       },
       {
         "target": "chat_bubble",
@@ -203,7 +203,7 @@
           "ref_h": 2400
         },
         "score": 1.0,
-        "mask_url": "/api/cases/case_3d6af1a15e6d/files/mask_EX2_chat_bubble_noun6.png"
+        "mask_url": "/api/cases/case_596f57f81dc6/files/mask_EX2_chat_bubble_noun6.png"
       },
       {
         "target": "face",
@@ -218,7 +218,7 @@
           "ref_h": 2400
         },
         "score": 1.0,
-        "mask_url": "/api/cases/case_3d6af1a15e6d/files/mask_EX2_face_noun7.png"
+        "mask_url": "/api/cases/case_596f57f81dc6/files/mask_EX2_face_noun7.png"
       }
     ],
     "status": "ok"
@@ -258,12 +258,22 @@
           "ref_h": 1754
         },
         "score": 1.0,
-        "mask_url": "/api/cases/case_3d6af1a15e6d/files/mask_EX6_stamp_noun0.png"
+        "mask_url": "/api/cases/case_596f57f81dc6/files/mask_EX6_stamp_noun0.png"
       },
       {
         "target": "signature",
         "source": "box",
         "box": {
+          "x1": 467,
+          "y1": 1280,
+          "x2": 957,
+          "y2": 1424,
+          "system": "pixel",
+          "ref_w": 1240,
+          "ref_h": 1754
+        },
+        "score": 1.0,
+        "ink_box": {
           "x1": 518,
           "y1": 1327,
           "x2": 781,
@@ -272,13 +282,23 @@
           "ref_w": 1240,
           "ref_h": 1754
         },
-        "score": 1.0,
-        "mask_url": "/api/cases/case_3d6af1a15e6d/files/mask_EX6_signature_box1.png"
+        "ink_source": "pixel_rule",
+        "mask_url": "/api/cases/case_596f57f81dc6/files/mask_EX6_signature_box1.png"
       },
       {
         "target": "signature",
         "source": "box",
         "box": {
+          "x1": 437,
+          "y1": 1439,
+          "x2": 958,
+          "y2": 1627,
+          "system": "pixel",
+          "ref_w": 1240,
+          "ref_h": 1754
+        },
+        "score": 1.0,
+        "ink_box": {
           "x1": 515,
           "y1": 1535,
           "x2": 754,
@@ -287,8 +307,8 @@
           "ref_w": 1240,
           "ref_h": 1754
         },
-        "score": 1.0,
-        "mask_url": "/api/cases/case_3d6af1a15e6d/files/mask_EX6_signature_box2.png"
+        "ink_source": "pixel_rule",
+        "mask_url": "/api/cases/case_596f57f81dc6/files/mask_EX6_signature_box2.png"
       }
     ],
     "status": "ok"

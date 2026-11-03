@@ -475,6 +475,10 @@ def remove_case(case_id: str) -> None:
 def _resume_step_for_hold(state: CaseState) -> Optional[str]:
     if state.state != "HOLD" or not state.hold_reasons:
         return None
+    # L3: a privacy_leak HOLD re-executes from the redaction stage.
+    if all(r.step == "privacy" and r.code == "privacy_leak"
+           for r in state.hold_reasons):
+        return "privacy"
     if not all(r.code == "internal_error" for r in state.hold_reasons):
         return None
     steps = {r.step for r in state.hold_reasons}
@@ -557,17 +561,21 @@ def _vision_one(
             int(preview_size[0]), int(preview_size[1]),
             meta_mode, case_id, files_dir(case_id),
         )
-    except (deps.FixtureNotFound, deps.BudgetError) as exc:
+    except (deps.FixtureNotFound, deps.BudgetError,
+            vision_mod.VisionParseError) as exc:
+        partial = getattr(exc, "_vision_partial", None) or {}
         return {"ex_id": ex_id, "error": exc,
-                "latency_ms": int((time.perf_counter() - started) * 1000)}
-    except vision_mod.VisionParseError as exc:
-        return {"ex_id": ex_id, "error": exc,
-                "latency_ms": int((time.perf_counter() - started) * 1000)}
+                "latency_ms": int((time.perf_counter() - started) * 1000),
+                "cost": float(partial.get("cost_usd", 0.0) or 0.0),
+                "calls": int(partial.get("calls", 0) or 0)}
     except Exception as exc:
-        return {"ex_id": ex_id,
-                "error": vision_mod.VisionParseError(
-                    f"vision error: {type(exc).__name__}"),
-                "latency_ms": int((time.perf_counter() - started) * 1000)}
+        partial = getattr(exc, "_vision_partial", None) or {}
+        wrapped = vision_mod.VisionParseError(
+            f"vision error: {type(exc).__name__}")
+        return {"ex_id": ex_id, "error": wrapped,
+                "latency_ms": int((time.perf_counter() - started) * 1000),
+                "cost": float(partial.get("cost_usd", 0.0) or 0.0),
+                "calls": int(partial.get("calls", 0) or 0)}
     latency_ms = int((time.perf_counter() - started) * 1000)
     status = "ok" if objects else "not_found"
     return {"ex_id": ex_id, "objects": objects, "status": status,
@@ -604,6 +612,10 @@ def run_case(case_id: str) -> CaseState:
                 if resume == "package":
                     state.hold_reasons = []
                     return _run_package_flow(state)
+                if resume == "privacy":
+                    state.hold_reasons = []
+                    _reset_from(state, "privacy")
+                    return _run_privacy_flow(state)
             raise WrongState("wrong_state", f"지금 상태({state.state})에서는 실행할 수 없습니다.")
         except (CaseNotFound, WrongState, ConcurrentRun):
             raise
@@ -836,16 +848,23 @@ def _run_intake_flow(state: CaseState) -> CaseState:
                                             latency_ms=0))
             continue
         if "error" in _result:
+            _partial = float(_result.get("cost", 0.0) or 0.0)
             _segments.append({"ex_id": _ex_id, "model": vision_mod.MODEL,
                               "objects": [], "status": "hold",
                               "error": str(_result["error"])[:200]})
             _vision_substeps.append(SubStep(
                 ex_id=_ex_id, status="hold",
                 latency_ms=int(_result.get("latency_ms", 0) or 0)))
+            # L7: calls already spent stay on the step cost + audit log.
+            _vision_cost += _partial
+            _audit(state, "vision", _ex_id, vision_mod.MODEL,
+                   vision_mod.PROMPT_VERSION, _ex_id,
+                   int(_result.get("latency_ms", 0) or 0), 0, 0, _partial)
             continue
         _objects = list(_result.get("objects", []) or [])
         _cost = float(_result.get("cost", 0.0) or 0.0)
         _lat = int(_result.get("latency_ms", 0) or 0)
+        _retry_error: Optional[BaseException] = None
         _has_signature = any(str(o.get("target", "")) == "signature"
                              for o in _objects)
         if not _has_signature:
@@ -866,10 +885,26 @@ def _run_intake_flow(state: CaseState) -> CaseState:
                     _cost += float(_retry_info.get("cost_usd", 0.0) or 0.0)
                     _lat += int(_retry_info.get("latency_ms", 0) or 0)
                 except (deps.FixtureNotFound, deps.BudgetError,
-                        vision_mod.VisionParseError):
-                    pass
-                except Exception:
-                    pass
+                        vision_mod.VisionParseError) as exc:
+                    _retry_error = exc
+                    _spent = getattr(exc, "_vision_partial", None) or {}
+                    _cost += float(_spent.get("cost_usd", 0.0) or 0.0)
+                    _lat += int(_spent.get("latency_ms", 0) or 0)
+                except Exception as exc:
+                    _retry_error = vision_mod.VisionParseError(
+                        f"vision error: {type(exc).__name__}")
+        if _retry_error is not None:
+            # L7: a failed signature retry is a hold with its message,
+            # never a silent not_found; noun objects are still kept.
+            _segments.append({"ex_id": _ex_id, "model": vision_mod.MODEL,
+                              "objects": _objects, "status": "hold",
+                              "error": str(_retry_error)[:200]})
+            _vision_cost += _cost
+            _vision_substeps.append(SubStep(ex_id=_ex_id, status="hold",
+                                            latency_ms=_lat))
+            _audit(state, "vision", _ex_id, vision_mod.MODEL,
+                   vision_mod.PROMPT_VERSION, _ex_id, _lat, 0, 0, _cost)
+            continue
         _status = "ok" if _objects else "not_found"
         _segments.append({"ex_id": _ex_id, "model": vision_mod.MODEL,
                           "objects": _objects, "status": _status})
@@ -944,9 +979,18 @@ def _run_intake_flow(state: CaseState) -> CaseState:
            int(output.get("tokens_out", 0) or 0), cost)
     save_case(state)
 
-    # M4a privacy: redaction plan + pixel copies + leak check (rule).
+    return _run_privacy_flow(state)
+
+
+def _run_privacy_flow(state: CaseState) -> CaseState:
+    """M4a privacy: redaction plan + pixel copies + leak check (rule).
+
+    Also the resume target of a ``privacy_leak`` HOLD (L3): ``POST /run``
+    re-executes from the redaction stage with the saved readings/segments.
+    """
     from app.agents import privacy_guard as privacy_mod
 
+    state.meta_mode = deps.meta_mode()
     privacy_step = state.step("privacy")
     _mark_running(privacy_step)
     save_case(state)

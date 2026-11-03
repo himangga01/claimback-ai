@@ -3,16 +3,76 @@
 from __future__ import annotations
 
 import base64
+import threading
 import time
+from collections import OrderedDict
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from app.agents import deps
 from app.agents.spark import load_prompt
+from app.services.redaction import is_dark_pixel
 
 MODEL = "sam-3.1"
 PROMPT_VERSION = "sam_nouns.v1"
 PROMPT_FILE = "sam_nouns.v1.md"
+
+# L7: the SAM parser validates every mask during push() by decoding its full
+# raster (pure Python), then save_mask_png decoded it again. Decode once and
+# reuse: the validation decode populates this cache for the later save.
+_MASK_RASTER_CACHE: "OrderedDict[Tuple[Any, ...], bytes]" = OrderedDict()
+_MASK_RASTER_LOCK = threading.Lock()
+_MASK_RASTER_MAX = 512
+_MASK_DECODE_ORIGINAL: Any = None
+
+
+def _mask_cache_key(mask: Any) -> Tuple[Any, ...]:
+    return (getattr(mask, "encoding", None),
+            int(getattr(mask, "width", 0) or 0),
+            int(getattr(mask, "height", 0) or 0),
+            getattr(mask, "payload", None))
+
+
+def _cached_decode_mask(mask: Any) -> bytes:
+    """decode_mask_to_raster with a bounded memo (successes only)."""
+    global _MASK_DECODE_ORIGINAL
+    if _MASK_DECODE_ORIGINAL is None:  # pragma: no cover - installed below
+        from meta_sam_parser import decode_mask_to_raster as _impl
+
+        _MASK_DECODE_ORIGINAL = _impl
+    key = _mask_cache_key(mask)
+    with _MASK_RASTER_LOCK:
+        hit = _MASK_RASTER_CACHE.get(key)
+        if hit is not None:
+            _MASK_RASTER_CACHE.move_to_end(key)
+            return hit
+    raster = bytes(_MASK_DECODE_ORIGINAL(mask))
+    with _MASK_RASTER_LOCK:
+        _MASK_RASTER_CACHE[key] = raster
+        _MASK_RASTER_CACHE.move_to_end(key)
+        while len(_MASK_RASTER_CACHE) > _MASK_RASTER_MAX:
+            _MASK_RASTER_CACHE.popitem(last=False)
+    return raster
+
+
+def _install_mask_cache() -> None:
+    """Route the parser's validation decode through the shared cache."""
+    global _MASK_DECODE_ORIGINAL
+    if _MASK_DECODE_ORIGINAL is not None:
+        return
+    try:
+        from meta_sam_parser import decode_mask_to_raster as _impl
+        import meta_sam_parser._segmentation as _segmentation
+    except Exception:
+        return
+    _MASK_DECODE_ORIGINAL = _impl
+    try:
+        _segmentation.decode_mask_to_raster = _cached_decode_mask
+    except Exception:
+        pass
+
+
+_install_mask_cache()
 
 _IMAGE_MIME = {
     ".png": "image/png",
@@ -163,13 +223,15 @@ def parse_sam_output(
 
 
 def save_mask_png(mask: Any, path: Path) -> Path:
-    """Decode one SAM mask and save it as a PNG for display."""
-    from meta_sam_parser import decode_mask_to_raster
+    """Decode one SAM mask and save it as a PNG for display.
 
+    Reuses the parser's validation decode via the shared cache (L7) and
+    maps the 0/1 raster to black/white with a C-speed translate table.
+    """
     if mask is None:
         raise VisionParseError("마스크가 없습니다.")
     try:
-        raster = decode_mask_to_raster(mask)
+        raster = _cached_decode_mask(mask)
     except Exception as exc:
         raise VisionParseError(
             f"마스크 해석 실패: {type(exc).__name__}"
@@ -178,12 +240,13 @@ def save_mask_png(mask: Any, path: Path) -> Path:
     height = int(getattr(mask, "height", 0) or 0)
     if width <= 0 or height <= 0:
         raise VisionParseError("마스크 크기가 올바르지 않습니다.")
-    if len(bytes(raster)) != width * height:
+    raw = bytes(raster)
+    if len(raw) != width * height:
         raise VisionParseError("마스크 크기와 픽셀 수가 맞지 않습니다.")
     from PIL import Image
 
-    pixels = bytes(255 if b else 0 for b in bytes(raster))
-    image = Image.frombytes("L", (width, height), pixels)
+    table = bytes([0] + [255] * 255)
+    image = Image.frombytes("L", (width, height), raw.translate(table))
     path.parent.mkdir(parents=True, exist_ok=True)
     image.save(path)
     return path
@@ -294,25 +357,45 @@ def run_vision_nouns(
     total_cost = 0.0
     total_latency = 0
     calls = 0
-    for noun, target in nouns:
-        text, info = run_sam_call(
-            noun, bytes(image_bytes), filename, meta_mode, run_id)
-        total_cost += float(info.get("cost_usd", 0.0) or 0.0)
-        total_latency += int(info.get("latency_ms", 0) or 0)
-        calls += 1
-        parsed = parse_sam_output(text, target, "noun", ref_w, ref_h)
-        for position, entry in enumerate(parsed):
-            mask_name = _mask_filename(ex_id, target, "noun", len(objects))
-            mask_path = Path(files_dir) / mask_name
-            save_mask_png(entry.get("mask"), mask_path)
-            objects.append({
-                "target": entry["target"],
-                "source": "noun",
-                "box": entry["box"],
-                "score": entry["score"],
-                "mask_url": f"/api/cases/{case_id}/files/{mask_name}",
-            })
-            _ = position
+    try:
+        for noun, target in nouns:
+            text, info = run_sam_call(
+                noun, bytes(image_bytes), filename, meta_mode, run_id)
+            total_cost += float(info.get("cost_usd", 0.0) or 0.0)
+            total_latency += int(info.get("latency_ms", 0) or 0)
+            calls += 1
+            parsed = parse_sam_output(text, target, "noun", ref_w, ref_h)
+            for position, entry in enumerate(parsed):
+                mask_name = _mask_filename(
+                    ex_id, target, "noun", len(objects))
+                mask_path = Path(files_dir) / mask_name
+                save_mask_png(entry.get("mask"), mask_path)
+                stored: Dict[str, Any] = {
+                    "target": entry["target"],
+                    "source": "noun",
+                    "box": entry["box"],
+                    "score": entry["score"],
+                    "mask_url": f"/api/cases/{case_id}/files/{mask_name}",
+                }
+                if str(entry.get("target", "")) == "signature":
+                    stored["ink_box"] = refine_signature_ink_box(
+                        bytes(image_bytes), dict(entry.get("box") or {}),
+                        int(ref_w), int(ref_h))
+                    stored["ink_source"] = "pixel_rule"
+                objects.append(stored)
+                _ = position
+    except Exception as exc:
+        # L7: a mid-loop failure still spent the calls so far; carry the
+        # partial accounting on the exception for the step cost.
+        try:
+            exc._vision_partial = {  # type: ignore[attr-defined]
+                "cost_usd": round(total_cost, 6),
+                "latency_ms": total_latency,
+                "calls": calls,
+            }
+        except Exception:
+            pass
+        raise
     return objects, {
         "cost_usd": round(total_cost, 6),
         "latency_ms": total_latency,
@@ -333,7 +416,8 @@ def refine_signature_ink_box(
     ink strokes (frame IoU vs ink ~0.2). Within the frame, ink is dark
     (brightness <120) while the gray border (~126) and paper (255) are
     brighter, so the dark-pixel bbox is the ink (IoU 0.97+ on samples).
-    Falls back to the SAM box when no dark pixels are found.
+    Red stamp pixels are not ink (L6). Falls back to the SAM box when no
+    dark pixels are found.
     """
     from PIL import Image
     import io
@@ -366,7 +450,7 @@ def refine_signature_ink_box(
                 r, g, b = pixels[xx, yy][:3]
             except Exception:
                 continue
-            if (float(r) + float(g) + float(b)) / 3.0 < float(threshold):
+            if is_dark_pixel(r, g, b, float(threshold)):
                 if xx < minx:
                     minx = xx
                 if yy < miny:
@@ -408,13 +492,30 @@ def run_vision_signature_retry(
     files_dir: Path,
     start_index: int = 0,
 ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
-    """Vision-2: one box-prompt retry for a missing signature."""
+    """Vision-2: one box-prompt retry for a missing signature.
+
+    Honest shape (L6): ``box`` is the SAM cell box with the SAM ``score``,
+    ``ink_box`` is the pixel-rule ink box (``ink_source: "pixel_rule"``).
+    The mask PNG is the SAM cell mask, aligned with ``box``.
+    """
     prompt = build_signature_box_prompt(ref_w, ref_h, readings or [])
     if prompt is None:
         return [], {"cost_usd": 0.0, "latency_ms": 0, "calls": 0}
     text, info = run_sam_call(
         prompt, bytes(image_bytes), filename, meta_mode, run_id)
-    parsed = parse_sam_output(text, "signature", "box", ref_w, ref_h)
+    spent = {
+        "cost_usd": round(float(info.get("cost_usd", 0.0) or 0.0), 6),
+        "latency_ms": int(info.get("latency_ms", 0) or 0),
+        "calls": 1,
+    }
+    try:
+        parsed = parse_sam_output(text, "signature", "box", ref_w, ref_h)
+    except Exception as exc:
+        try:
+            exc._vision_partial = dict(spent)  # type: ignore[attr-defined]
+        except Exception:
+            pass
+        raise
     objects: List[Dict[str, Any]] = []
     for entry in parsed:
         mask_name = _mask_filename(
@@ -427,12 +528,10 @@ def run_vision_signature_retry(
         objects.append({
             "target": "signature",
             "source": "box",
-            "box": refined,
+            "box": dict(entry.get("box") or {}),
             "score": entry["score"],
+            "ink_box": refined,
+            "ink_source": "pixel_rule",
             "mask_url": f"/api/cases/{case_id}/files/{mask_name}",
         })
-    return objects, {
-        "cost_usd": round(float(info.get("cost_usd", 0.0) or 0.0), 6),
-        "latency_ms": int(info.get("latency_ms", 0) or 0),
-        "calls": 1,
-    }
+    return objects, spent
