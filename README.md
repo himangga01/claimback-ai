@@ -22,7 +22,7 @@ Code up to 2026-11-02 (through commit 76d9cce) was written by the repository own
 
 [![Watch the 2:59 demo video](assets/demo/demo-poster.jpg)](https://himangga01.github.io/claimback-ai/demo/claimback-demo.mp4)
 
-- 2:59, English narration and captions. It opens with a card showing the service name, a one-line description, the repo URL and a contact e-mail. The screen was recorded on live Meta Model API calls (34 calls, $0.1887 on the cost ledger) with synthetic English SAMPLE evidence (`submission/demo-evidence/`).
+- 2:59, English narration and captions. It opens with a card showing the service name, a one-line description, the repo URL, a contact e-mail, and one line on what was built during the hackathon and what existed before. The screen was recorded on live Meta Model API calls (34 calls, $0.1887 on the cost ledger) with synthetic English SAMPLE evidence (`submission/demo-evidence/`).
 - **Play in the browser:** https://himangga01.github.io/claimback-ai/demo/claimback-demo.mp4 (served by GitHub Pages from `docs/`).
 - File in this repo: [`docs/demo/claimback-demo.mp4`](docs/demo/claimback-demo.mp4) (1920×1080, 52 MB; GitHub's file view offers it as a download), captions [`docs/demo/claimback-demo.srt`](docs/demo/claimback-demo.srt).
 - How it was made (Remotion, a Voicebox narration voice, music and sound effects synthesized in code, no third-party audio): [`submission/demo-video-production.md`](submission/demo-video-production.md).
@@ -86,6 +86,36 @@ A rule-based coordinator runs role agents with two human checkpoints:
 
 Model choices were measured, not guessed: `muse-spark-1.2` and `1.3` both matched ≥95% of amounts and dates on the sample set, and 1.2 had the shorter p95 latency (8.8 s vs 33.2 s), so 1.2 reads and 1.3 organizes and drafts (`reports/M4b.md`).
 
+## Architecture
+
+**User flow.** Start screen → upload your evidence (or load the sample case) → the agents run while the agent board shows each step → **Checkpoint 1**: confirm or correct every value on the fact-check sheet → calculation → **draft approval**: approve or edit each sentence → filing package: the demand-letter PDF, the exhibit bundle and evidence list, and the payment-order text to paste into the e-court form.
+
+**Components.**
+
+| Part | What it is | Where it runs |
+|---|---|---|
+| Screen | Zero-build vanilla JS, Korean and English (`frontend/`) | Served by the backend at `http://localhost:8000`. A copy in `docs/` is on GitHub Pages; without a backend it shows an offline notice and the demo video link |
+| Backend | FastAPI (`backend/app/main.py`). Case API under `/api/cases` (contract: `specs/case-api-contract.md`). Cases are stored as files under `backend/data/cases/` (`CASES_DIR` overrides) | Your machine (uvicorn) |
+| Coordinator and agents | A rule-based coordinator runs the role agents (`backend/app/agents/`: `intake`, `reader`, `vision`, `fact_organizer`, `privacy_guard`, `drafter`, `packager`) | Backend |
+| Meta client | `backend/app/meta/client.py`: OpenAI Python SDK with base URL `https://api.meta.ai/v1`; `live`, `record` and `replay` modes; cost ledger and caps | Backend |
+| Rules and documents | Draft rules and gates, calculation, pixel redaction (Pillow), PDFs (reportlab, pypdf) and the final check (`backend/app/services/`) | Backend |
+
+**Where each Meta model runs.** All three run on the Meta Model API (Responses endpoint); nothing runs on our own compute. Muse Code was used to build the app and is not part of it at runtime.
+
+| Model ID | What it does in the flow | Code |
+|---|---|---|
+| `muse-spark-1.2` | Reads each evidence image with bounding boxes; tall screenshots in overlapping tiles | `backend/app/agents/reader.py` |
+| `sam-3.1` | Finds chat bubbles, profile pictures, stamps and signature boxes, used for redaction and the evidence views | `backend/app/agents/vision.py` |
+| `muse-spark-1.3` | Organizes facts with links to the readings; drafts fact sentences with slots only | `backend/app/agents/fact_organizer.py`, `backend/app/agents/drafter.py` |
+
+**Logs: matching the screen to real Meta calls.** The agent board shows each step with its model ID, latency and cost, and its header shows `Meta model calls: N · $X · live calls`. The case ID is shown on screen. Every call is also one line in the cost ledger (`META_LEDGER_PATH`, default `reports/cost_ledger.jsonl`) with `ts`, `run_id` (the case ID), `model`, `endpoint`, tokens, `latency_ms`, `cost_usd` and `status`. Count the lines with `"status": "completed"` (each call writes a `reserved` line first, which the app offsets); 37 early lines from the first spike have no `status` and also count as completed. The ledger does not store the provider's request ID.
+
+**Hosting.** No hosted backend. GitHub Pages serves `docs/` (the screen without a backend, and the demo video). Run the backend locally to use the app.
+
+**Keys.** The backend reads `MODEL_API_KEY` from its environment. The key never goes to the browser and is never committed: `.env` is git-ignored, and `tools/secret_scan.py` runs before every commit.
+
+**Pre-existing and third-party.** The screen's visual style (layout, colours, Paperlogy font, folder-tab motif) is adapted from the owner's own earlier personal project 경매노트 (auctionnote), which predates the event. About a quarter of `frontend/case.css` (mirrored in `docs/case.css`) is copied from that project's stylesheet: the colour tokens and the header, folder-tab and cabinet rules (108 of its 435 non-trivial lines match, measured 2026-11-04). Apart from those lines, the code in this repo was written during the event (first commit 2026-11-02). Third-party libraries: FastAPI, Pydantic, uvicorn, the OpenAI Python SDK, `meta-sam-parser`, pypdf, reportlab, Pillow, cryptography, httpx and python-multipart, plus pytest and Playwright for tests. Fonts: NanumGothic and Paperlogy (OFL). `backend/app/templates/ca_sc100_blank.pdf` is the California Judicial Council SC-100 form. Everything else was built during the hackathon (see "How it was built").
+
 ## Safety by design
 
 - No legal evaluation: no win predictions, no "you can claim" judgments, no legal labels on what people said.
@@ -93,19 +123,68 @@ Model choices were measured, not guessed: `muse-spark-1.2` and `1.3` both matche
 - Redaction is burned into image pixels before any PDF is built. If the checker cannot confirm a redaction, the image is flagged "확인 필요" and left out of the exhibit bundle until you confirm it.
 - Sample evidence is synthetic and marked "SAMPLE / 데모용".
 
-## Quick start (Windows, PowerShell)
+## Quick start (no key needed)
+
+Needs Python 3.11 or later (tested with 3.12.10). Replay mode runs the sample case from recorded Meta model responses, so no API key is needed.
+
+Windows (PowerShell):
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 cd backend
-$env:META_MODE = "replay"     # runs the sample case from recorded model responses, no API key needed
+$env:META_MODE = "replay"
 ..\.venv\Scripts\python.exe -m uvicorn app.main:app --port 8000
+```
+
+macOS or Linux:
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+cd backend
+export META_MODE=replay
+../.venv/bin/python -m uvicorn app.main:app --port 8000
 ```
 
 Open `http://localhost:8000` (or `http://localhost:8000/?lang=en` for the English screen; the **KO / EN** switch in the header changes it any time). Press **샘플 사건 불러오기** (**Load the sample case**); the case runs on its own, then follow the two checkpoints.
 
-To call the Meta Model API live, set `META_MODE=live`, put your key in `MODEL_API_KEY`, and point `META_LEDGER_PATH` at an absolute path for the cost ledger (`META_LEDGER_INIT=1` the first time). Every call's cost is recorded, and a run stops before it would exceed `META_RUN_CAP_USD` (default $2).
+## Run with your own Meta Model API key
+
+The app reads its settings from environment variables; it does not load a `.env` file. [`.env.example`](.env.example) lists them. Never commit your key. In PowerShell:
+
+```powershell
+cd backend
+$env:META_MODE = "live"
+$env:MODEL_API_KEY = "<your Meta Model API key>"                   # from dev.meta.ai
+$env:META_LEDGER_PATH = "$env:TEMP\claimback_cost_ledger.jsonl"    # absolute path to your own cost ledger
+$env:META_LEDGER_INIT = "1"                                        # first run only: creates that ledger
+..\.venv\Scripts\python.exe -m uvicorn app.main:app --port 8000
+```
+
+macOS or Linux:
+
+```bash
+cd backend
+export META_MODE=live
+export MODEL_API_KEY="<your Meta Model API key>"
+export META_LEDGER_PATH="${TMPDIR:-/tmp}/claimback_cost_ledger.jsonl"
+export META_LEDGER_INIT=1
+../.venv/bin/python -m uvicorn app.main:app --port 8000
+```
+
+- Models: `muse-spark-1.2` (reading), `muse-spark-1.3` (fact organizing, drafting) and `sam-3.1` (regions), all Standard tier.
+- Every call's cost goes into your ledger. A run stops before it would exceed `META_RUN_CAP_USD` (default $2), and the ledger total is capped by `META_TOTAL_CAP_USD` (default $100). Use your own ledger path as above, so your runs are not counted against the spend already recorded in this repo's `reports/cost_ledger.jsonl`.
+- Upload your own evidence on the start screen, or the English SAMPLE evidence used in the demo video: [`submission/demo-evidence/`](submission/demo-evidence/).
+
+## Recorded outputs and traces
+
+For what you cannot rerun without a key:
+
+- [`backend/tests/fixtures/meta/`](backend/tests/fixtures/meta/): 109 recorded Meta Model API responses. Replay mode (the default) serves them, so the Korean sample case and the tests run end to end with no key.
+- [`reports/cost_ledger.jsonl`](reports/cost_ledger.jsonl): every live call the app made during development, with model, tokens, latency and cost. As of 2026-11-04: 808 completed calls ($5.08), plus 37 lines from the first spike written before the ledger had a `status` field ($0.21), so $5.29 in all.
+- [`reports/M7-live-check.md`](reports/M7-live-check.md) (Korean): an end-to-end run of the sample case on the live API.
+- The demo video's take: 34 live calls for $0.1887, the ledger lines with `run_id` `case_e91e96da3a3c` (2026-11-03 16:42 UTC). The generated document pages are in `assets/screenshots/09-*.png`, and how it was recorded is in [`submission/demo-video-production.md`](submission/demo-video-production.md) (Korean).
 
 ## Tests
 
@@ -113,7 +192,9 @@ To call the Meta Model API live, set `META_MODE=live`, put your key in `MODEL_AP
 cd backend
 ..\.venv\Scripts\python.exe -m pytest -q          # offline, replay mode, no key
 cd ..
-..\.venv\Scripts\python.exe -m pytest -q e2e      # Playwright against the stub server
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+.\.venv\Scripts\python.exe -m playwright install chromium
+.\.venv\Scripts\python.exe -m pytest -q e2e       # Playwright against the stub server
 # against the real backend: start uvicorn as above, then set E2E_BASE_URL=http://127.0.0.1:8000
 ```
 

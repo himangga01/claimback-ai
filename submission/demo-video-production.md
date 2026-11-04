@@ -11,7 +11,8 @@
 
 | 파일 | 내용 |
 |---|---|
-| `out\claimback-demo.mp4` | 최종본(4차 렌더, 11-04 12:48 KST: 3차 렌더 앞에 시작 카드). 1920×1080, 30 fps, H.264 + AAC, 179.48초, 52 MB. 저장소 `docs/demo/`에도 같은 파일 |
+| `out\claimback-demo.mp4` | 최종본(6차 렌더, 11-04 19:10 KST: 시작 카드에 대회 전·대회 중 작업 한 줄. 맨 아래 절 참고). 1920×1080, 30 fps, H.264 + AAC, 179.48초, 52.6 MB. 저장소 `docs/demo/`에도 같은 파일 |
+| `out\claimback-demo_v4_card_no_disclosure.mp4`, `out\claimback-demo_v5_disclosure_first.mp4` | 4차 렌더(12:48, 시작 카드), 5차 렌더(18:26, 한 줄 첫 판) |
 | `out\claimback-demo_v3_no_intro.mp4` | 3차 렌더(02:58 KST 무렵, 시작 카드 없음). 177.88초, 53 MB |
 | `out\claimback-demo.srt` | 영어 자막(영상에도 박혀 있음) |
 | `out\claimback-demo_preview720.mp4` | 휴대폰용 720p 사본(약 7.5 MB) |
@@ -111,3 +112,13 @@ npx remotion render Demo out/claimback-demo.mp4 --props=public/timeline_intro.js
   - 화면: 카드 뒤 5,198프레임 전부를 이전 영상의 48프레임 앞과 비교했다. 23.6초부터는 같고, 그 전은 인코딩 잡음 수준이다(평균 차이 최대 0.34/255). 자막 43개는 모두 정확히 1.600초 뒤로 갔다. 카드 글자와 첫 자막 사이는 120 px 떨어져 있다.
   - 소리: 목소리 43줄과 효과음 43개가 모두 표본 단위로 1.600초 뒤에 있다(시작 휙 소리만 0초). 배경음은 목소리보다 −13.8~−14.2 dB, 1.6초 지점과 끝에 잡음이 없고, 음성과 영상 길이 차이는 10 ms다.
   - 남긴 작은 점: 첫 프레임이 빈 종이색이다(글자는 3프레임부터). 카드만 나오는 앞 2.4초는 배경음만이라 조용하다(배경음 20% 규칙대로). 설명 문구 "receipts and IOU"는 관사 없이 둔다.
+
+## 대회 전·대회 중 작업 한 줄 (2026-11-04 19시 KST, 5·6차 렌더)
+
+주최측 Discord 답변(18:17 KST, 사용자 전달): 영상은 "대회 전에 있던 것과 이번에 만든 것"을 말하는 한 줄로 시작해야 하고, YouTube·Loom 같은 호스팅 링크로 로그인 없이 재생돼야 한다(`docs/analysis/plan-review.md` 10장).
+
+- 시작 카드 Contact 줄 아래에 파란 상자 한 줄을 넣었다: "Built during the hackathon (Oct 27–Nov 4): the case flow, agents, Meta model calls and documents. Existed before: the screen's visual style, from the owner's earlier project." 근거는 README "How it was built"와 커밋 기록(첫 커밋 11-02), 경매노트 저장소의 첫 커밋(10-20).
+- 자리를 내려고 카드 위 여백을 150 → 112 px로 줄였다. 상자는 y 726–831, 첫 자막 상자(y 856)와 24 px 떨어진다.
+- 5차 렌더(18:26): 화면 리뷰어가 "확정"이라고 봤다. 카드 뒤 프레임 250부터 끝까지 4차와 차이 0, 소리는 표본 단위로 같음, 자막 파일 같음, −14.0 LUFS, −2.8 dBTP, 179.477초. 다만 상자가 온전히 보이는 시간이 4.4초뿐이라 읽기 빠듯하다고 지적했다. 내용 리뷰어는 문구는 정확하나 "only"는 빼라고 했다(배경음 합성 코드가 다른 개인 프로젝트에서 왔고 그 코드의 작성 시점을 증명할 수 없음).
+- 6차 렌더(19:10, 최종본): "only"를 빼고 문구를 줄였으며, 상자가 프레임 6부터 올라오게 해 약 5초 동안 온전히 보이게 했다. 179.477초, 52,634,653바이트. Claude가 5차와 비교했다: 카드 뒤 프레임 186–249는 인코딩 잡음(평균 차이 최대 0.19/255), 250부터 끝까지 차이 0, 소리 PCM 해시 같음. 1초 프레임에서 상자가 이미 보인다.
+- 백업: `out\claimback-demo_v4_card_no_disclosure.mp4`(4차), `out\claimback-demo_v5_disclosure_first.mp4`(5차).
