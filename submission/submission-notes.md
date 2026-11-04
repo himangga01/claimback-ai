@@ -18,6 +18,49 @@
 - 2026-11-03 M-1부터는 Muse Code(`muse-spark-1.3`)가 구현하고 Claude Code가 명세·지시·리뷰.
 - README에 같은 내용이 있음(M2b-fix1). 데모 영상에도 한 줄.
 
+## YouTube 설명란 (영어, 붙여넣기용, 2026-11-04 19:30 KST)
+
+사용자가 직접 올림(일부공개 또는 공개, "아동용 아님"). 장 시작 시각은 최종본(6차 렌더)의 장면 제목 시각에서 뽑았고, YouTube 규칙(0:00 시작, 장마다 10초 이상)에 맞춰 5·6장을 합쳤다. 설명란에는 꺾쇠괄호를 쓰지 않는다(YouTube가 거부). 면책 문구는 `DISCLAIMER_EN` 그대로.
+
+- 제목: `ClaimBack My Money – demo | Meta Global AI Developer Hackathon 2026`
+
+```text
+ClaimBack My Money – Your loan records, made clear.
+
+A free self-help agent for people who lent money to a friend and never got it back. It reads your own chat screenshots, transfer receipts and IOU with Meta models, has you confirm every fact, and fills Korean court-document drafts (a demand letter, the payment-order text and an exhibit bundle) that you file yourself. Every number comes from your confirmed facts and deterministic code, never from the AI.
+
+Built during the Meta Global AI Developer Hackathon 2026 (Oct 27–Nov 4): the case flow, agents, Meta model calls and documents. Existed before: the screen's visual style, from the owner's earlier personal project.
+
+The screen was recorded on live Meta Model API calls: 34 calls, $0.19 for the whole case (run case_e91e96da3a3c in the repo's cost ledger). Long model waits are sped up and marked on screen. All people, apps and banks are fictional SAMPLE data.
+
+Meta models (all on the Meta Model API)
+- muse-spark-1.2: reads each evidence image with bounding boxes
+- sam-3.1: finds chat bubbles, profile pictures, stamps and signature boxes for redaction
+- muse-spark-1.3: organizes the facts and drafts sentences with slots only
+Built with Muse Code and Claude Code.
+
+Chapters
+0:00 Intro and the problem
+0:18 1. Upload your own evidence
+0:30 2. Role agents on the Meta Model API
+1:00 3. You confirm every fact
+1:18 It asks instead of guessing
+1:31 4. Redaction burned into the pixels
+1:53 5. Code does the math, the AI writes slots
+2:27 6. Your filing package
+2:45 Final check and recap
+
+Links
+GitHub (code, setup, architecture): https://github.com/himangga01/claimback-ai
+Run it yourself, no key needed: https://github.com/himangga01/claimback-ai#quick-start-no-key-needed
+Architecture and where each model runs: https://github.com/himangga01/claimback-ai#architecture
+Run with your own Meta Model API key: https://github.com/himangga01/claimback-ai#run-with-your-own-meta-model-api-key
+Hackathon: https://cerebralvalley.ai/e/meta-ai-developer-hackathon
+Contact: himangga01@gmail.com
+
+ClaimBack-AI is a free self-help tool for organizing your own evidence and filling standard court forms. It does not provide legal advice. Every fact in the documents is confirmed by you. For help, contact your court's self-help center or a small claims advisor.
+```
+
 ## 제출 양식 답변 (영어, 붙여넣기용)
 
 2026-11-04 17:50 KST 갱신. 11-03 초안을 README·영상 기준으로 고쳐 양식 항목별로 정리했습니다. 양식 화면(Cerebral Valley "Submit Project")에서 확인한 항목은 팀 이름, 팀원, 트랙, 문제 주제, Most Viral용 X 게시물 링크입니다. 그 아래 항목은 로그인해야 보여서 아직 확인하지 못했고, 흔히 묻는 항목을 미리 준비했습니다. 팀 이름과 트랙은 사용자가 정합니다.
