@@ -1,3 +1,12 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo/claimback-logo-dark.svg">
+    <img src="assets/logo/claimback-logo.svg" alt="claimback my money." width="440">
+  </picture>
+</p>
+
+<p align="center"><b>Your loan records, made clear.</b> · 빌려준 돈의 기록을, 더 명확하게.</p>
+
 # ClaimBack My Money (클레임백 마이 머니)
 
 > **Meta Global AI Developer Hackathon 2026 — Build for Your World**
@@ -8,6 +17,44 @@
 Code up to 2026-11-02 (through commit 76d9cce) was written by the repository owner during the hackathon. From 2026-11-03 (milestone M-1) through INT-3b, Muse Code (`muse-spark-1.3`) implemented the changes while Claude Code wrote the specs and task briefs and reviewed each milestone. From INT-3c that evening (final fixes, the portal screen, the English screen), Claude Code implemented the changes directly at the owner's request, with two subagent reviewers cross-checking each one.
 
 ---
+
+## Demo video
+
+[![Watch the 2:58 demo video](assets/demo/demo-poster.jpg)](https://himangga01.github.io/claimback-ai/demo/claimback-demo.mp4)
+
+- 2:58, English narration and captions. The screen was recorded on live Meta Model API calls (34 calls, $0.1887 on the cost ledger) with synthetic English SAMPLE evidence (`submission/demo-evidence/`).
+- **Play in the browser:** https://himangga01.github.io/claimback-ai/demo/claimback-demo.mp4 (served by GitHub Pages from `docs/`).
+- File in this repo: [`docs/demo/claimback-demo.mp4`](docs/demo/claimback-demo.mp4) (1920×1080, 53 MB; GitHub's file view offers it as a download), captions [`docs/demo/claimback-demo.srt`](docs/demo/claimback-demo.srt).
+- How it was made (Remotion, a Voicebox narration voice, music and sound effects synthesized in code, no third-party audio): [`submission/demo-video-production.md`](submission/demo-video-production.md).
+
+## Screenshots
+
+The screen in English (`?lang=en`) running the Korean sample case in replay mode. Case content and the court documents stay Korean because they are filed in Korean courts. All people, apps and banks are fictional (SAMPLE).
+
+![Start screen](assets/screenshots/01-start.png)
+**Start.** Upload your evidence or load the sample case.
+
+| | |
+|---|---|
+| <img src="assets/screenshots/08-mobile.png" width="300" alt="Agent board on a phone"><br>**Agent board** (phone width). Role agents work through the files; model calls and cost are shown as they happen. | ![Fact check](assets/screenshots/03-fact-check.png)<br>**Checkpoint 1: fact check.** Reading boxes (Spark) and found areas (SAM) on the original; each value read from the evidence shows the exhibits it came from. |
+| ![Calculation](assets/screenshots/04-calculation.png)<br>**Calculation.** How the repayment was split between interest and principal, by deterministic code. | ![Draft approval](assets/screenshots/05-draft.png)<br>**Draft approval.** Fact sentences written with slots and evidence tags; you approve each one. |
+| ![Filing package](assets/screenshots/06-package.png)<br>**Filing package.** Three PDFs, the payment-order text to paste, and the final check (G1b) against your confirmed values. | <img src="assets/screenshots/02-reading.png" width="180" alt="Exhibit 1 reading and redacted copy"><br>**Exhibit 1.** The original with reading boxes, then the redacted copy (profile picture masked). |
+
+Generated documents from the English demo case in the video (a second SAMPLE case):
+
+| | |
+|---|---|
+| ![Demand letter, page 1](assets/screenshots/09-document-demand-letter.png)<br>**내용증명 (demand letter)**, page 1. | ![Exhibit page with burned-in redaction](assets/screenshots/09-document-exhibit-redacted.png)<br>**갑 제5호증 (exhibit), the IOU.** The middle digits of both phone numbers and the back half of the ID number are burned out of the image pixels before the PDF is built. |
+
+<details>
+<summary>The Korean screen</summary>
+
+![Korean start screen](assets/screenshots/07-start-ko.png)
+**Korean screen** (the default for Korean browsers).
+
+</details>
+
+Screenshots 01–08: `tools/readme_screenshots.py` against the backend in replay mode (no key). The two document pages are PDF renders from the live demo take, copied in with its `--doc` option. Logo: `assets/logo/` (`make_logo.py`). Video poster: `assets/demo/make_poster.py`.
 
 ## What it does
 
@@ -99,4 +146,6 @@ ClaimBack-AI is a free self-help tool for organizing your own evidence and filli
 - Source code and generated sample files: MIT (see `LICENSE`).
 - Bundled fonts (`backend/app/templates/fonts/NanumGothic-*.ttf`): SIL Open Font License 1.1 (see `backend/app/templates/fonts/OFL.txt`).
 - Screen fonts (`frontend/fonts/Paperlogy-*.woff2`, mirrored in `docs/fonts/`): SIL Open Font License 1.1 (see `frontend/fonts/OFL-Paperlogy.txt` and `frontend/fonts/README.md`).
+- Logo (`assets/logo/`): made for this project from the site header; its letters are outlines of Paperlogy (OFL 1.1), which the OFL allows in logos and images.
+- Demo video (`docs/demo/`): made for this project; its music and sound effects are synthesized in code, with no third-party audio.
 - `backend/app/templates/ca_sc100_blank.pdf`: a California Judicial Council Form SC-100 file included unmodified for form-filling; it is not covered by the MIT license above.

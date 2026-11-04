@@ -7,7 +7,7 @@
 
 ## 결과물
 
-영상 파일은 크기 때문에 저장소에 넣지 않았다. 제작 폴더는 `C:\2026_project\claimback-demo-video\`(git 저장소 아님)이다.
+영상 파일은 크기 때문에 저장소에 넣지 않았다(11-04 낮에 바뀜: 맨 아래 "업데이트" 참고, 최종본과 자막은 `docs/demo/`에 있음). 제작 폴더는 `C:\2026_project\claimback-demo-video\`(git 저장소 아님)이다.
 
 | 파일 | 내용 |
 |---|---|
@@ -82,3 +82,9 @@ python edit\check_video.py out\claimback-demo.mp4
 - 영상을 올리기(YouTube 비공개 링크 등).
 - 링크를 제출 양식과 `submission/submission-notes.md`에 적기.
 - `frontend/index.html`·`docs/index.html`의 "데모 영상 보기" 링크에 넣기(주소를 주면 Claude가 넣음).
+
+## 업데이트 (2026-11-04 낮)
+
+- 최종본과 자막을 저장소 `docs/demo/`에 넣었다(사용자 요청). GitHub 파일 화면은 mp4를 재생하지 않고 내려받게 하므로(다른 공개 저장소로 확인), 브라우저에서 바로 보는 주소는 GitHub Pages의 `https://himangga01.github.io/claimback-ai/demo/claimback-demo.mp4`로 정했다. README 썸네일(`assets/demo/demo-poster.jpg`)과 사이트의 "데모 영상 보기" 링크가 이 주소를 가리킨다.
+- Pages는 사용자가 켰다(Settings → Pages → Deploy from a branch → `main` / `/docs`; Claude가 쓸 수 있는 브라우저에는 GitHub 로그인이 없었음). `docs/.nojekyll`을 넣어 Jekyll 처리를 끔(Jekyll이 `docs/analysis/plan-review.md`의 `{{quote:EX1:item3}}`를 조용히 지워 렌더링하고 있었음. 이제 `docs/`의 파일이 그대로 나감).
+- 위 "남은 일"의 "데모 영상 보기" 링크는 이때 넣었다. 영상 업로드와 제출 양식은 사용자 일로 남는다(양식이 YouTube만 받으면 따로 올림).

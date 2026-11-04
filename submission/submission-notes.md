@@ -8,7 +8,7 @@
 
 - [ ] 공개 GitHub 저장소: https://github.com/himangga01/claimback-ai (공개 확인 11-03)
 - [x] 3분 데모 영상(대회 기간에 만든 기능만) — 2026-11-04 제작 완료, 2:58 영어. 파일 `C:\2026_project\claimback-demo-video\out\claimback-demo.mp4`, 기록 `submission/demo-video-production.md`. 배경음·효과음은 소유자 자체 합성 코드라 외부 음원 없음
-- [ ] 영상 올리고 링크 적기(제출 양식, 이 파일, "데모 영상 보기" 링크)
+- [ ] 영상 올리고 링크 적기(제출 양식, 이 파일, "데모 영상 보기" 링크) — 11-04: 영상을 저장소 `docs/demo/claimback-demo.mp4`에 넣고 README·사이트 링크를 `https://himangga01.github.io/claimback-ai/demo/claimback-demo.mp4`로 연결. 이 주소는 GitHub Pages(`main` `/docs`, 11-04 사용자가 켬)로 열림. 제출 양식이 YouTube만 받으면 따로 올리기
 - [ ] 제출 양식(질문이 많음, 일찍 작성)
 - [ ] 참여자 명단
 

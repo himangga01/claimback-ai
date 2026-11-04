@@ -42,6 +42,7 @@ verbatim in the disclaimers (`DISCLAIMER_KO`, `DISCLAIMER_EN`). The screen follo
 | `reports/redaction-confirm.md` | Per-exhibit confirmation of flagged redacted copies on the fact-check sheet (`redaction_confirmed` ex_id list, contract 6d), honest leak-check status (`review`) and privacy step note (2026-11-04) |
 | `reports/portal-review.md` | Portal redesign and English screen (2026-11-03): what changed, how the KO/EN switch works, tests, cross-review |
 | `submission/demo-video-plan.md`, `submission/demo-video-production.md`, `submission/demo-evidence/` | English demo video (2026-11-04): plan (scenes, narration, captions), how it was produced (Remotion, Voicebox Ryan, synthesized music and effects, live take), and the English SAMPLE evidence with its generator |
+| `docs/demo/`, `assets/` | The final demo video and its captions, served by GitHub Pages at `https://himangga01.github.io/claimback-ai/demo/claimback-demo.mp4` (Pages from `main` `/docs`, `docs/.nojekyll`); README logo (`assets/logo/`, `make_logo.py`), screenshots (`assets/screenshots/`, `tools/readme_screenshots.py`), video poster (`assets/demo/make_poster.py`) (2026-11-04) |
 | `submission/` | Demo script (`demo-script.md`), recording runbook (`runbook.md`), submission notes and form drafts (`submission-notes.md`) |
 
 Workflow:
