@@ -6,11 +6,11 @@
 
 ## 필수
 
-- [ ] 공개 GitHub 저장소: https://github.com/himangga01/claimback-ai (공개 확인 11-03)
-- [x] 3분 데모 영상(대회 기간에 만든 기능만) — 2026-11-04 제작 완료, 2:59 영어(12:48 시작 카드 추가: 서비스 이름·설명·깃 주소·연락 메일). 파일 `C:\2026_project\claimback-demo-video\out\claimback-demo.mp4`, 기록 `submission/demo-video-production.md`. 배경음·효과음은 소유자 자체 합성 코드라 외부 음원 없음
-- [ ] 영상 올리고 링크 적기(제출 양식, 이 파일, "데모 영상 보기" 링크) — 11-04: 영상을 저장소 `docs/demo/claimback-demo.mp4`에 넣고 README·사이트 링크를 `https://himangga01.github.io/claimback-ai/demo/claimback-demo.mp4`로 연결. 이 주소는 GitHub Pages(`main` `/docs`, 11-04 사용자가 켬)로 열림. 제출 양식이 YouTube만 받으면 따로 올리기
-- [ ] 제출 양식(질문이 많음, 일찍 작성) — 11-04 17:50 KST: 아래 "제출 양식 답변"에 붙여넣기용 답변 준비. PC의 Chrome 두 대(Windows, Mac) 모두 Cerebral Valley에 로그인되어 있지 않아 Claude가 양식을 열지 못함(로그인은 Google 또는 이메일, 사용자만 가능)
-- [ ] 참여자 명단
+- [x] 공개 GitHub 저장소: https://github.com/himangga01/claimback-ai (공개·MIT 11-04 확인, 첫 커밋 11-02)
+- [x] 3분 데모 영상(대회 기간에 만든 기능만) — 2026-11-04 제작 완료, 2:59 영어. 시작 카드에 서비스 이름·설명·깃 주소·연락 메일(12:48)과 대회 전·대회 중 작업 한 줄(18:37, 주최측 요구). 파일 `C:\2026_project\claimback-demo-video\out\claimback-demo.mp4`, 기록 `submission/demo-video-production.md`. 배경음·효과음은 소유자 자체 합성 코드라 외부 음원 없음
+- [x] 영상 올리고 링크 적기 — 사용자가 YouTube에 올림: https://www.youtube.com/watch?v=n8cqk2ZI_Xw (18:48 KST 쿠키 없이 재생 상태 OK, 공개). 제출 양식, README, 사이트 "데모 영상 보기" 링크에 넣음. GitHub Pages의 같은 파일(`docs/demo/claimback-demo.mp4`)은 예비 주소로 남김
+- [x] 제출 양식 — **2026-11-04 18:49 KST 제출 완료**("Project Submitted"). 사용자 계정(로그인은 사용자가 함)으로 Claude가 채움. 사용자가 내용 리뷰를 요청해 Claude가 한 번 검토(대회 전 작업 표시 추가, 과장 문장 두 곳 수정), 공개 동의는 사용자가 승인. 제출 뒤 보기 화면에서 모든 항목이 저장된 것을 확인. 마감(11-05 11:00 KST) 전까지 "Update Project"로 고칠 수 있음. 제출한 설문 답(Claude가 근거를 두고 고르고 사용자에게 보여 줌, 이의 없음): Very likely, Somewhat favorable, 추천 4점(API)·4점(Muse Code), 가장 큰 어려움 Slow responses, 다른 모델과 비교 못 함, 가장 중요한 것 품질, 바꾸기 어려운 이유 모델·프롬프트에 맞춰져 있음, 실서비스 걸림돌 사용자 데이터 저장·사용
+- [x] 참여자 명단 — 양식의 팀원 칸에 제출 계정 한 명(개인 참가, Indie 트랙)
 
 ## 대회 기간 작업 표시 (실격 방지)
 
@@ -18,7 +18,7 @@
 - 2026-11-03 M-1부터는 Muse Code(`muse-spark-1.3`)가 구현하고 Claude Code가 명세·지시·리뷰.
 - README에 같은 내용이 있음(M2b-fix1). 데모 영상에도 한 줄.
 
-## YouTube 설명란 (영어, 붙여넣기용, 2026-11-04 19:30 KST)
+## YouTube 설명란 (영어, 붙여넣기용, 2026-11-04 18:45 KST)
 
 사용자가 직접 올림(일부공개 또는 공개, "아동용 아님"). 장 시작 시각은 최종본(6차 렌더)의 장면 제목 시각에서 뽑았고, YouTube 규칙(0:00 시작, 장마다 10초 이상)에 맞춰 5·6장을 합쳤다. 설명란에는 꺾쇠괄호를 쓰지 않는다(YouTube가 거부). 면책 문구는 `DISCLAIMER_EN` 그대로.
 
@@ -62,6 +62,8 @@ ClaimBack-AI is a free self-help tool for organizing your own evidence and filli
 ```
 
 ## 제출 양식 답변 (영어, 붙여넣기용)
+
+> 실제 제출본(11-04 18:49 KST)은 아래 초안을 양식 항목에 맞춰 나눈 것이고, 검토에서 세 곳을 고쳤다. (1) "Built during the hackathon"에 "during the hackathon"과 화면 스타일이 소유자의 이전 프로젝트에서 왔다는 문장을 넣음 (2) "Muse Spark 1.3 follows a strict slot-only drafting contract"를 "handles … well, and a rule-based verifier sends back any draft that slips"로 (3) "stopped by a per-run cap"을 "a per-run cost cap stops runaway loops"로. 영상 칸은 YouTube 주소, 파트너 기술 칸은 "We did not use Fireworks, Modal or Baseten for this project; everything runs on the Meta Model API."
 
 2026-11-04 17:50 KST 갱신. 11-03 초안을 README·영상 기준으로 고쳐 양식 항목별로 정리했습니다. 양식 화면(Cerebral Valley "Submit Project")에서 확인한 항목은 팀 이름, 팀원, 트랙, 문제 주제, Most Viral용 X 게시물 링크입니다. 그 아래 항목은 로그인해야 보여서 아직 확인하지 못했고, 흔히 묻는 항목을 미리 준비했습니다. 팀 이름과 트랙은 사용자가 정합니다.
 
