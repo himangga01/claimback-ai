@@ -127,3 +127,10 @@ ClaimBack-AI is a free self-help tool for organizing your own evidence and filli
 - README·데모 대본·녹화 런북(`submission/runbook.md`) 갱신.
 - 19:06 INT-3c(Claude 직접 구현, Meta 크레딧 0)로 차용증 쪽 잘림, G1b 실패 시 내려받기 차단, 당사자 블록 표시, 인용문 줄바꿈, 문안 규칙 후속을 고쳐 main에 병합(09090d7, `reports/INT-3c-review.md`). Meta 결제 화면은 18:08부터 계정 오류로 열리지 않음(API는 정상, 지원 티켓 문안 전달).
 - 사용자: 영상 녹화(런북), 영상 링크를 이 파일과 제출 양식에, 제출.
+
+## 제출 뒤 정리 (2026-11-04 20:40 KST)
+
+- 저장소 공개 다시 확인: 로그인 없이 GitHub API로 조회해 `private: false`, `visibility: public`.
+- 사용자 요청으로 Meta Model API 키 정리. 앱과 테스트에 쓴 키("meta hackerthon", 11-03 생성)를 Claude가 API Keys 화면에서 삭제. 이 PC의 `MODEL_API_KEY`(사용자·프로세스 환경변수)가 이 키였음을 값을 출력하지 않고 앞자리만 비교해 확인. 이제 이 PC에서 live·record 모드 호출은 거절됨.
+- "Playground" 키(11-02 생성)는 남김. 사이트가 "At least one API key is required."라며 마지막 키 삭제를 막고, 사용자가 그대로 두라고 함. 앱은 이 키를 쓰지 않음.
+- 심사에는 영향 없음: 기본 replay 모드는 키가 필요 없고, live 모드는 심사자가 자기 키를 넣음(README "Run with your own Meta Model API key").
