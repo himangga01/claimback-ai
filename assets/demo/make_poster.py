@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[2]
 VIDEO = ROOT / "docs" / "demo" / "claimback-demo.mp4"
 FONTS = ROOT / "frontend" / "fonts"
 OUT = ROOT / "assets" / "demo" / "demo-poster.jpg"
-FRAME_AT = "9"  # seconds: the five SAMPLE evidence cards over the start screen
+FRAME_AT = "10.6"  # seconds: the five SAMPLE evidence cards over the start screen (9 s + the 1.6 s opening card)
 
 HTML = """<!doctype html><html><head><meta charset="utf-8"><style>
 @font-face {{ font-family: Paperlogy; font-weight: 400; src: url(data:font/woff2;base64,{f4}); }}
@@ -40,7 +40,7 @@ html, body {{ margin: 0; width: 1280px; height: 720px; overflow: hidden; }}
 </style></head><body>
 <div class="frame"></div><div class="shade"></div><div class="play"></div>
 <div class="band"><div><strong>Watch the demo</strong>
-<span>ClaimBack My Money &middot; live Meta Model API calls &middot; English captions</span></div><em>2:58</em></div>
+<span>ClaimBack My Money &middot; live Meta Model API calls &middot; English captions</span></div><em>2:59</em></div>
 </body></html>"""
 
 

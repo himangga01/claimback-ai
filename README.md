@@ -20,11 +20,11 @@ Code up to 2026-11-02 (through commit 76d9cce) was written by the repository own
 
 ## Demo video
 
-[![Watch the 2:58 demo video](assets/demo/demo-poster.jpg)](https://himangga01.github.io/claimback-ai/demo/claimback-demo.mp4)
+[![Watch the 2:59 demo video](assets/demo/demo-poster.jpg)](https://himangga01.github.io/claimback-ai/demo/claimback-demo.mp4)
 
-- 2:58, English narration and captions. The screen was recorded on live Meta Model API calls (34 calls, $0.1887 on the cost ledger) with synthetic English SAMPLE evidence (`submission/demo-evidence/`).
+- 2:59, English narration and captions. It opens with a card showing the service name, a one-line description, the repo URL and a contact e-mail. The screen was recorded on live Meta Model API calls (34 calls, $0.1887 on the cost ledger) with synthetic English SAMPLE evidence (`submission/demo-evidence/`).
 - **Play in the browser:** https://himangga01.github.io/claimback-ai/demo/claimback-demo.mp4 (served by GitHub Pages from `docs/`).
-- File in this repo: [`docs/demo/claimback-demo.mp4`](docs/demo/claimback-demo.mp4) (1920×1080, 53 MB; GitHub's file view offers it as a download), captions [`docs/demo/claimback-demo.srt`](docs/demo/claimback-demo.srt).
+- File in this repo: [`docs/demo/claimback-demo.mp4`](docs/demo/claimback-demo.mp4) (1920×1080, 52 MB; GitHub's file view offers it as a download), captions [`docs/demo/claimback-demo.srt`](docs/demo/claimback-demo.srt).
 - How it was made (Remotion, a Voicebox narration voice, music and sound effects synthesized in code, no third-party audio): [`submission/demo-video-production.md`](submission/demo-video-production.md).
 
 ## Screenshots

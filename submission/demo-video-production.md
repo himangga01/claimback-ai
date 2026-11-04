@@ -1,4 +1,4 @@
-# 데모 영상 제작 기록 (영어, 2:58)
+# 데모 영상 제작 기록 (영어, 2:59)
 
 - 작성: 2026-11-04 02:45 KST, Claude Code (서브에이전트 병렬 작업을 Claude가 조율·검토)
 - 기준: main 08171ee (가림 확인 기능까지 병합). 녹화한 실제 호출은 main aa8af2d(잘못된 줄 가림 수정 병합 뒤) 코드.
@@ -11,7 +11,8 @@
 
 | 파일 | 내용 |
 |---|---|
-| `out\claimback-demo.mp4` | 최종본(3차 렌더, 02:58 KST 무렵). 1920×1080, 30 fps, H.264 + AAC, 177.88초, 53 MB |
+| `out\claimback-demo.mp4` | 최종본(4차 렌더, 11-04 12:48 KST: 3차 렌더 앞에 시작 카드). 1920×1080, 30 fps, H.264 + AAC, 179.48초, 52 MB. 저장소 `docs/demo/`에도 같은 파일 |
+| `out\claimback-demo_v3_no_intro.mp4` | 3차 렌더(02:58 KST 무렵, 시작 카드 없음). 177.88초, 53 MB |
 | `out\claimback-demo.srt` | 영어 자막(영상에도 박혀 있음) |
 | `out\claimback-demo_preview720.mp4` | 휴대폰용 720p 사본(약 7.5 MB) |
 | `out\claimback-demo_v1_before_review.mp4`, `out\claimback-demo_v2.mp4` | 1차 렌더(리뷰 전), 2차 렌더 |
@@ -39,7 +40,7 @@
 
 ## 측정값 (최종본)
 
-- 길이 177.88초(3분 이하)
+- 길이 177.88초(3분 이하). 시작 카드를 넣은 4차 렌더는 179.48초(아래 "시작 카드" 참고)
 - 통합 음량 −14.0 LUFS, 실제 피크 −2.8 dBTP
 - 배경음은 목소리보다 13.6~13.9 dB 낮음
 - 받아쓰기 오류율 약 2%(첫 렌더 기준). "won"은 "Korean won"으로, "confirmed"는 다시 녹음해 고침
@@ -88,3 +89,25 @@ python edit\check_video.py out\claimback-demo.mp4
 - 최종본과 자막을 저장소 `docs/demo/`에 넣었다(사용자 요청). GitHub 파일 화면은 mp4를 재생하지 않고 내려받게 하므로(다른 공개 저장소로 확인), 브라우저에서 바로 보는 주소는 GitHub Pages의 `https://himangga01.github.io/claimback-ai/demo/claimback-demo.mp4`로 정했다. README 썸네일(`assets/demo/demo-poster.jpg`)과 사이트의 "데모 영상 보기" 링크가 이 주소를 가리킨다.
 - Pages는 사용자가 켰다(Settings → Pages → Deploy from a branch → `main` / `/docs`; Claude가 쓸 수 있는 브라우저에는 GitHub 로그인이 없었음). `docs/.nojekyll`을 넣어 Jekyll 처리를 끔(Jekyll이 `docs/analysis/plan-review.md`의 `{{quote:EX1:item3}}`를 조용히 지워 렌더링하고 있었음. 이제 `docs/`의 파일이 그대로 나감).
 - 위 "남은 일"의 "데모 영상 보기" 링크는 이때 넣었다. 영상 업로드와 제출 양식은 사용자 일로 남는다(양식이 YouTube만 받으면 따로 올림).
+
+## 시작 카드 (2026-11-04 12:48 KST, 4차 렌더)
+
+사용자 요청: 영상 맨 앞에 서비스 이름과 간단한 설명, 깃 주소, 사용자 메일 주소(himangga01@gmail.com)를 넣는다.
+
+- 카드 내용: "META GLOBAL AI DEVELOPER HACKATHON 2026", 로고 `claimback my money.`, "Your loan records, made clear.", 한 줄 설명(무료 셀프 도구, 직접 제출할 한국 법원 서류 초안), GitHub `github.com/himangga01/claimback-ai`, Contact `himangga01@gmail.com`.
+- 3분 안에 넣는 방법: 카드만 나오는 1.6초(배경음만)를 앞에 붙이고, 카드는 첫 내레이션 줄 동안에도 남아 있다가 편집 시각 4.2초부터 0.4초 동안 시작 화면으로 사라진다(증거 카드가 날아 들어오는 5.0초 전). 첫 줄 동안 뒤 화면은 움직임 없는 시작 화면이라 가려도 잃는 것이 없다. 길이는 177.87 + 1.6 = 179.47초.
+- 만드는 법: `edit\add_intro.py`가 기존 편집(`public\timeline.json`)은 그대로 두고 `public\timeline_intro.json`(intro 블록), 1.6초 뒤로 민 믹스 목록(`edit\mix_timeline_intro.json`, 시작 휙 소리만 0초 유지), 다시 섞은 배경(`public\mix\bed_intro.wav`), 1.6초 민 자막(`out\claimback-demo.srt`)을 만든다. Remotion은 `src\components\IntroCard.tsx`와 `src\Demo.tsx`(편집·자막을 `<Sequence from>`으로 1.6초 늦춤)로 그린다.
+
+```powershell
+cd C:\2026_project\claimback-demo-video
+python edit\add_intro.py
+npx remotion render Demo out/claimback-demo.mp4 --props=public/timeline_intro.json
+```
+
+- 측정: 179.48초, −14.0 LUFS, 실제 피크 −2.8 dBTP, 배경음은 목소리보다 13.9 dB 낮음(mix.py 보고서). `check_video.py`는 1.6초 이동을 몰라서 싱크·음악 구간 수치는 이 파일에 맞지 않는다. 그래서 자막 전환을 프레임으로 확인했다(7.29초에 둘째 줄로 바뀜).
+- 파일 크기 52,327,967바이트(49.9 MiB)라 GitHub 50 MB 경고 아래.
+- README 썸네일은 같은 장면(10.6초)으로 다시 만들고 길이 표시를 2:59로 바꿨다.
+- 리뷰(화면·소리 리뷰어 2명, 둘 다 "확정"):
+  - 화면: 카드 뒤 5,198프레임 전부를 이전 영상의 48프레임 앞과 비교했다. 23.6초부터는 같고, 그 전은 인코딩 잡음 수준이다(평균 차이 최대 0.34/255). 자막 43개는 모두 정확히 1.600초 뒤로 갔다. 카드 글자와 첫 자막 사이는 120 px 떨어져 있다.
+  - 소리: 목소리 43줄과 효과음 43개가 모두 표본 단위로 1.600초 뒤에 있다(시작 휙 소리만 0초). 배경음은 목소리보다 −13.8~−14.2 dB, 1.6초 지점과 끝에 잡음이 없고, 음성과 영상 길이 차이는 10 ms다.
+  - 남긴 작은 점: 첫 프레임이 빈 종이색이다(글자는 3프레임부터). 카드만 나오는 앞 2.4초는 배경음만이라 조용하다(배경음 20% 규칙대로). 설명 문구 "receipts and IOU"는 관사 없이 둔다.

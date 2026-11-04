@@ -1,203 +1,203 @@
 1
-00:00:00,800 --> 00:00:05,623
+00:00:02,400 --> 00:00:07,223
 You lent a friend 5 million won;
 1 million came back.
 
 2
-00:00:05,690 --> 00:00:08,513
+00:00:07,290 --> 00:00:10,113
 Hiring help can cost more
 than what's left,
 
 3
-00:00:08,580 --> 00:00:13,393
+00:00:10,180 --> 00:00:14,993
 and your records are scattered:
 chats, receipts, an IOU.
 
 4
-00:00:13,460 --> 00:00:16,370
+00:00:15,060 --> 00:00:17,970
 ClaimBack My Money helps you
 organize them yourself.
 
 5
-00:00:17,120 --> 00:00:21,143
+00:00:18,720 --> 00:00:22,743
 Upload what you already have:
 two chat screenshots,
 
 6
-00:00:21,210 --> 00:00:23,953
+00:00:22,810 --> 00:00:25,553
 two transfer receipts and the IOU.
 
 7
-00:00:24,020 --> 00:00:28,050
+00:00:25,620 --> 00:00:29,650
 Each file gets a SHA-256 fingerprint
 on arrival.
 
 8
-00:00:28,800 --> 00:00:32,413
+00:00:30,400 --> 00:00:34,013
 A rule-based coordinator runs
 the role agents,
 
 9
-00:00:32,480 --> 00:00:35,213
+00:00:34,080 --> 00:00:36,813
 and three Meta models
 do the AI work.
 
 10
-00:00:35,280 --> 00:00:40,030
+00:00:36,880 --> 00:00:41,630
 Muse Spark 1.2 reads each image
 and returns text with its position;
 
 11
-00:00:40,400 --> 00:00:43,863
+00:00:42,000 --> 00:00:45,463
 tall screenshots are read
 in overlapping tiles.
 
 12
-00:00:43,930 --> 00:00:49,393
+00:00:45,530 --> 00:00:50,993
 SAM 3.1 finds visual regions:
 chat bubbles, profile pictures,
 
 13
-00:00:49,460 --> 00:00:51,873
+00:00:51,060 --> 00:00:53,473
 the signature box, the red seal.
 
 14
-00:00:51,940 --> 00:00:55,633
+00:00:53,540 --> 00:00:57,233
 Then Muse Spark 1.3 organizes the facts.
 
 15
-00:00:55,700 --> 00:00:58,300
+00:00:57,300 --> 00:00:59,900
 Calls and costs are counted live.
 
 16
-00:00:58,950 --> 00:01:02,430
+00:01:00,550 --> 00:01:04,030
 Nothing goes into a document
 until you confirm it.
 
 17
-00:01:02,550 --> 00:01:05,700
+00:01:04,150 --> 00:01:07,300
 Each value links back to the spot
 it was read from:
 
 18
-00:01:06,950 --> 00:01:10,500
+00:01:08,550 --> 00:01:12,100
 click a source, and that box
 on the evidence flashes.
 
 19
-00:01:10,950 --> 00:01:15,870
+00:01:12,550 --> 00:01:17,470
 You check the principal, the dates
 and the repayment against the original.
 
 20
-00:01:16,520 --> 00:01:22,010
+00:01:18,120 --> 00:01:23,610
 The IOU spells the borrower Alex J. Kim;
 the chats say Alex Kim.
 
 21
-00:01:22,120 --> 00:01:24,983
+00:01:23,720 --> 00:01:26,583
 The tool doesn't guess. It asks.
 
 22
-00:01:25,050 --> 00:01:29,010
+00:01:26,650 --> 00:01:30,610
 You choose the spelling, and you pick
 which statements to highlight.
 
 23
-00:01:29,860 --> 00:01:35,073
+00:01:31,460 --> 00:01:36,673
 Account, ID and phone numbers are masked
 in the image pixels
 
 24
-00:01:35,140 --> 00:01:40,123
+00:01:36,740 --> 00:01:41,723
 before anything is packaged,
 not hidden under a PDF layer.
 
 25
-00:01:40,190 --> 00:01:45,350
+00:01:41,790 --> 00:01:46,950
 A pixel check confirms each mask;
 anything it cannot confirm is flagged.
 
 26
-00:01:46,000 --> 00:01:50,333
+00:01:47,600 --> 00:01:51,933
 Confirm, and the calculation is done
 by code, not AI:
 
 27
-00:01:50,400 --> 00:01:54,583
+00:01:52,000 --> 00:01:56,183
 the repayment goes to late-payment
 interest first, then principal,
 
 28
-00:01:54,650 --> 00:01:58,850
+00:01:56,250 --> 00:02:00,450
 and what's left is computed
 down to the won.
 
 29
-00:01:59,600 --> 00:02:04,253
+00:02:01,200 --> 00:02:05,853
 Next, Muse Spark 1.3
 drafts the fact sentences,
 
 30
-00:02:04,320 --> 00:02:06,253
+00:02:05,920 --> 00:02:07,853
 each citing its evidence.
 
 31
-00:02:06,320 --> 00:02:11,703
+00:02:07,920 --> 00:02:13,303
 It never writes a number or a name,
 only slots,
 
 32
-00:02:11,770 --> 00:02:13,793
+00:02:13,370 --> 00:02:15,393
 filled from the facts you confirmed.
 
 33
-00:02:13,860 --> 00:02:16,533
+00:02:15,460 --> 00:02:18,133
 Even a number typed by hand is caught:
 
 34
-00:02:16,600 --> 00:02:20,630
+00:02:18,200 --> 00:02:22,230
 re-check, and gate G1a
 blocks the sentence.
 
 35
-00:02:21,900 --> 00:02:23,930
+00:02:23,500 --> 00:02:25,530
 Put the slot back, and approve.
 
 36
-00:02:25,380 --> 00:02:29,660
+00:02:26,980 --> 00:02:31,260
 Then your Korean drafts are ready
 to review, send and file yourself:
 
 37
-00:02:30,180 --> 00:02:34,913
+00:02:31,780 --> 00:02:36,513
 a certified demand letter,
 an exhibit bundle with redacted copies,
 
 38
-00:02:34,980 --> 00:02:39,313
+00:02:36,580 --> 00:02:40,913
 an evidence list, and the payment-order
 text to paste into Korean e-Court.
 
 39
-00:02:39,380 --> 00:02:43,650
+00:02:40,980 --> 00:02:45,250
 Every PDF is checked again
 against the facts you confirmed.
 
 40
-00:02:44,400 --> 00:02:45,933
+00:02:46,000 --> 00:02:47,533
 ClaimBack My Money.
 
 41
-00:02:46,000 --> 00:02:49,943
+00:02:47,600 --> 00:02:51,543
 You confirm every fact;
 code does the math.
 
 42
-00:02:50,010 --> 00:02:52,993
+00:02:51,610 --> 00:02:54,593
 Built during this hackathon
 with Meta's models.
 
 43
-00:02:53,060 --> 00:02:56,620
+00:02:54,660 --> 00:02:58,220
 Self-help draft. Not legal advice.
